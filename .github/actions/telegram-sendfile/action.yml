@@ -1,0 +1,213 @@
+name: 'Telegram File Upload'
+description: 'Upload files to Telegram with caption or send message only'
+inputs:
+  files:
+    description: 'File pattern to upload'
+    required: false
+    default: ''
+  caption:
+    description: 'File caption or message text'
+    required: false
+    default: ''
+  bot_server_ip:
+    description: 'Telegram Bot Server IP'
+    required: true
+    default: ''
+  bot_server_port:
+    description: 'Telegram Bot Server Port'
+    required: true
+    default: '8081'
+  bot_token:
+    description: 'Telegram Bot Token'
+    required: true
+  chat_id:
+    description: 'Telegram Chat ID'
+    required: true
+  chat_thread_id:
+    description: 'Telegram Chat Thread ID (for groups)'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Check Telegram secrets
+      id: check_telegram
+      run: |
+        if [ -n "$BOT_TOKEN" ] && [ -n "$CHAT_ID" ]; then
+          echo "has_telegram=true" >> $GITHUB_OUTPUT
+        else
+          echo "has_telegram=false" >> $GITHUB_OUTPUT
+        fi
+      shell: bash
+      env:
+        BOT_TOKEN: ${{ inputs.bot_token }}
+        CHAT_ID: ${{ inputs.chat_id }}
+
+    - name: Debug file paths
+      if: steps.check_telegram.outputs.has_telegram == 'true'
+      run: |
+        echo "Files input: '$FILES'"
+        echo "Current directory: $(pwd)"
+        echo "Directory contents:"
+        ls -la
+        if [ -n "$FILES" ] && [ "$FILES" != "" ]; then
+          echo "Looking for files matching pattern..."
+          found_files=$(find . -name "$FILES" -type f 2>/dev/null || true)
+          if [ -n "$found_files" ]; then
+            echo "Found files:"
+            echo "$found_files"
+          else
+            echo "No files found with pattern: $FILES"
+          fi
+        fi
+      shell: bash
+      env:
+        FILES: ${{ inputs.files }}
+
+    - name: Send message or files to Telegram
+      if: steps.check_telegram.outputs.has_telegram == 'true'
+      run: |
+        # If no files provided, send message only
+        if [ -z "$FILES" ] || [ "$FILES" = "" ]; then
+          echo "Sending message only..."
+          curl -s -X POST "http://${{inputs.bot_server_ip}}:${{inputs.bot_server_port}}/bot$BOT_TOKEN/sendMessage" \
+            -d chat_id="$CHAT_ID" \
+            -d message_thread_id="$CHAT_THREAD_ID" \
+            --data-urlencode "text=$CAPTION" \
+            -d parse_mode="HTML" \
+            -d disable_web_page_preview=true
+          exit 0
+        fi
+        
+        # Find files
+        echo "Looking for files matching: $FILES"
+        valid_files=()
+        
+        # Use find to get files
+        while IFS= read -r -d '' file; do
+          if [ -f "$file" ]; then
+            valid_files+=("$file")
+            echo "Found valid file: $file"
+          fi
+        done < <(find . -name "$FILES" -type f -print0 2>/dev/null || true)
+        
+        # Alternative approach if find doesn't work
+        if [ ${#valid_files[@]} -eq 0 ]; then
+          echo "Trying alternative file discovery method..."
+          shopt -s nullglob
+          for file in $FILES; do
+            if [ -f "$file" ]; then
+              valid_files+=("$file")
+              echo "Found valid file (alternative): $file"
+            fi
+          done
+          shopt -u nullglob
+        fi
+        
+        echo "Total valid files found: ${#valid_files[@]}"
+        
+        if [ ${#valid_files[@]} -eq 0 ]; then
+          echo "No valid files found to upload, sending message instead..."
+          curl -s -X POST "http://${{inputs.bot_server_ip}}:${{inputs.bot_server_port}}/bot$BOT_TOKEN/sendMessage" \
+            -d chat_id="$CHAT_ID" \
+            -d message_thread_id="$CHAT_THREAD_ID" \
+            --data-urlencode "text=$CAPTION" \
+            -d parse_mode="HTML" \
+            -d disable_web_page_preview=true
+          exit 0
+        fi
+        
+        # If only one file, use sendDocument with caption
+        if [ ${#valid_files[@]} -eq 1 ]; then
+          echo "Uploading single file with caption..."
+          curl -s -X POST "http://${{inputs.bot_server_ip}}:${{inputs.bot_server_port}}/bot$BOT_TOKEN/sendDocument" \
+            -F "chat_id=$CHAT_ID" \
+            -F "message_thread_id=$CHAT_THREAD_ID" \
+            -F "document=@${valid_files[0]}" \
+            -F "caption=$CAPTION" \
+            -F "parse_mode=HTML"
+        
+        # If multiple files, use sendMediaGroup with caption on first file
+        else
+          echo "Uploading ${#valid_files[@]} files in one message..."
+          
+          # Create a temporary file for the media JSON
+          media_file=$(mktemp)
+          
+          # Build media JSON array
+          echo '[' > "$media_file"
+          first=true
+          
+          for file in "${valid_files[@]}"; do
+            filename=$(basename "$file")
+            # Escape special characters in filename for JSON
+            filename_escaped=$(printf '%s' "$filename" | jq -R . | sed 's/^"//;s/"$//')
+            
+            if [ "$first" = true ]; then
+              # First file gets the caption
+              echo "{\"type\": \"document\", \"media\": \"attach://$filename_escaped\", \"caption\": \"$CAPTION\", \"parse_mode\": \"HTML\"}" >> "$media_file"
+              first=false
+            else
+              echo ",{\"type\": \"document\", \"media\": \"attach://$filename_escaped\"}" >> "$media_file"
+            fi
+          done
+          
+          echo ']' >> "$media_file"
+          
+          echo "Media JSON prepared and saved to temporary file"
+          
+          # Build the curl command
+          curl_cmd="curl -s -X POST \"http://${{inputs.bot_server_ip}}:${{inputs.bot_server_port}}/bot$BOT_TOKEN/sendMediaGroup\" \
+            -F \"chat_id=$CHAT_ID\" \
+            -F \"message_thread_id=$CHAT_THREAD_ID\" \
+            -F \"media=<$media_file\""
+          
+          # Add each file as attachment
+          for file in "${valid_files[@]}"; do
+            filename=$(basename "$file")
+            curl_cmd+=" -F \"$filename=@$file\""
+          done
+          
+          echo "Executing curl command..."
+          # Execute the command
+          eval $curl_cmd
+          curl_exit_code=$?
+          
+          # Clean up temporary file
+          rm -f "$media_file"
+          
+          if [ $curl_exit_code -eq 0 ]; then
+            echo "Files uploaded successfully!"
+          else
+            echo "Error uploading files as media group. Trying fallback to individual uploads..."
+            # Upload files individually
+            for i in "${!valid_files[@]}"; do
+              file="${valid_files[$i]}"
+              echo "Uploading $file individually..."
+              if [ $i -eq 0 ]; then
+                # First file gets caption
+                curl -s -X POST "http://${{inputs.bot_server_ip}}:${{inputs.bot_server_port}}/bot$BOT_TOKEN/sendDocument" \
+                  -F "chat_id=$CHAT_ID" \
+                  -F "message_thread_id=$CHAT_THREAD_ID" \
+                  -F "document=@$file" \
+                  -F "caption=$CAPTION" \
+                  -F "parse_mode=HTML"
+              else
+                # Subsequent files without caption
+                curl -s -X POST "http://${{inputs.bot_server_ip}}:${{inputs.bot_server_port}}/bot$BOT_TOKEN/sendDocument" \
+                  -F "chat_id=$CHAT_ID" \
+                  -F "message_thread_id=$CHAT_THREAD_ID" \
+                  -F "document=@$file"
+              fi
+              sleep 1
+            done
+          fi
+        fi
+      shell: bash
+      env:
+        BOT_TOKEN: ${{ inputs.bot_token }}
+        CHAT_ID: ${{ inputs.chat_id }}
+        CHAT_THREAD_ID: ${{ inputs.chat_thread_id }}
+        FILES: ${{ inputs.files }}
+        CAPTION: ${{ inputs.caption }}

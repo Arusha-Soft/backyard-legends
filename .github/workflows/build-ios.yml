@@ -1,0 +1,194 @@
+name: Build iOS
+on:
+  push:
+    branches:
+      - 'Build/ios/**'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build from'
+        required: true
+        default: 'Build/ios/test'
+        type: choice
+        options:
+          - Build/ios/test
+          - Build/ios/release
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    env:
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+
+    steps:
+    - name: Start time
+      run: echo "START_TIME=$(date +%s)" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Checkout with LFS
+      uses: actions/checkout@v4
+      with:
+        lfs: true
+        ref: ${{ github.event.inputs.branch || github.ref }}
+
+    - name: Parse project settings
+      uses: ./.github/actions/parse-project-settings
+      id: project_settings
+
+    - name: Determine build flavor
+      run: |
+        CURRENT_REF="${{ github.event.inputs.branch || github.ref }}"
+        if [[ "$CURRENT_REF" == *"/test" ]]; then
+          echo "FLAVOR=dev" >> $GITHUB_ENV
+          echo "DEVELOPMENT=true" >> $GITHUB_ENV
+          echo "EXPORT_METHOD=development" >> $GITHUB_ENV
+        else
+          echo "FLAVOR=release" >> $GITHUB_ENV
+          echo "DEVELOPMENT=false" >> $GITHUB_ENV
+          echo "EXPORT_METHOD=app-store" >> $GITHUB_ENV
+        fi
+      shell: bash
+
+    - name: Send build start notification
+      uses: ./.github/actions/telegram-notify
+      with:
+        status: start
+        platform: iOS
+        flavor: ${{ env.FLAVOR }}
+
+    - name: Cache Library
+      uses: actions/cache@v3
+      with:
+        path: Library
+        key: unity-${{ steps.project_settings.outputs.unity_version }}-ios-${{ hashFiles('Packages/manifest.json', 'Packages/packages-lock.json') }}
+        restore-keys: |
+          unity-${{ steps.project_settings.outputs.unity_version }}-ios-
+
+    - name: Build iOS Xcode project
+      uses: game-ci/unity-builder@v4
+      id: unity-builder
+      with:
+        unityVersion: ${{ steps.project_settings.outputs.unity_version }}
+        targetPlatform: iOS
+        buildMethod: BuildScript.BuildiOS
+        customParameters: -development ${{ env.DEVELOPMENT }}
+        customImage: ''
+        sshAgent: ''
+        gitPrivateToken: ''
+        chownFilesTo: ''
+        allowDirtyBuild: true
+      env:
+        UNITY_LICENSE: ${{ env.UNITY_LICENSE }}
+
+    - name: Create ExportOptions.plist
+      run: |
+        cat > ExportOptions.plist << EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>method</key>
+            <string>${{ env.EXPORT_METHOD }}</string>
+            <key>teamID</key>
+            <string>${{ secrets.IOS_TEAM_ID }}</string>
+        </dict>
+        </plist>
+        EOF
+      shell: bash
+
+    - name: Archive Xcode project
+      run: |
+        cd build/iOS
+        xcodebuild archive \
+          -project "Unity-iPhone.xcodeproj" \
+          -scheme "Unity-iPhone" \
+          -archivePath "build.xcarchive" \
+          -allowProvisioningUpdates
+      shell: bash
+
+    - name: Export IPA
+      run: |
+        cd build/iOS
+        xcodebuild -exportArchive \
+          -archivePath "build.xcarchive" \
+          -exportOptionsPlist "../../ExportOptions.plist" \
+          -exportPath "." \
+          -allowProvisioningUpdates
+      shell: bash
+
+    - name: Prepare iOS artifact
+      run: |
+        cd build/iOS
+        BASE_NAME="${{ steps.project_settings.outputs.base_filename }}"
+        IPA_FILE=$(ls *.ipa)
+        mv "$IPA_FILE" "${BASE_NAME}.ipa"
+        echo "ARTIFACT_NAME=${BASE_NAME}_iOS" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Upload iOS artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.ARTIFACT_NAME }}
+        path: build/iOS/${{ steps.project_settings.outputs.base_filename }}.ipa
+        retention-days: 1
+
+    - name: Calculate duration
+      if: always()
+      run: |
+        END_TIME=$(date +%s)
+        DURATION=$((END_TIME - ${{ env.START_TIME }}))
+        echo "DURATION=$(printf '%02d:%02d' $(($DURATION/60)) $(($DURATION%60)))" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Send build end notification
+      if: always()
+      uses: ./.github/actions/telegram-notify
+      with:
+        status: end
+        result: ${{ job.status }}
+        duration: ${{ env.DURATION }}
+        artifact_name: ${{ env.ARTIFACT_NAME }}
+        platform: iOS
+        flavor: ${{ env.FLAVOR }}
+
+  on-failure:
+    runs-on: macos-latest
+    needs: build-ios
+    if: failure()
+
+    steps:
+    - name: Checkout with LFS
+      uses: actions/checkout@v4
+      with:
+        lfs: true
+
+    - name: Create failure log
+      run: |
+        LOG_FILE="build_fail_log.txt"
+        echo "Build failed at: $(date)" > $LOG_FILE
+        echo "Branch: ${{ github.ref }}" >> $LOG_FILE
+        echo "Commit: ${GITHUB_SHA:0:7}" >> $LOG_FILE
+        echo "Platform: iOS" >> $LOG_FILE
+        echo "Flavor: ${{ needs.build-ios.outputs.FLAVOR }}" >> $LOG_FILE
+        echo "" >> $LOG_FILE
+        echo "=== Last 1000 lines of Unity Editor.log ===" >> $LOG_FILE
+        tail -1000 ~/Library/Logs/Unity/Editor.log >> $LOG_FILE 2>/dev/null || echo "Unity Editor log not found" >> $LOG_FILE
+        echo "FAILURE_LOG=$LOG_FILE" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Upload failure log
+      uses: actions/upload-artifact@v4
+      with:
+        name: build_failure_log
+        path: ${{ env.FAILURE_LOG }}
+        retention-days: 1
+
+    - name: Send failure log to Telegram
+      uses: ./.github/actions/telegram-sendfile
+      with:
+        files: ${{ env.FAILURE_LOG }}
+        caption: "❌ iOS build failed"
