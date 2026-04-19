@@ -102,6 +102,38 @@ namespace BackyardLegends.Runtime
             public float Delay { get; }
         }
 
+        private readonly struct CardVisualState
+        {
+            public CardVisualState(
+                Sprite panelSprite,
+                Image.Type panelType,
+                Color panelColor,
+                Sprite artSprite,
+                Color artColor,
+                bool artVisible,
+                Color rankColor,
+                Color suitColor)
+            {
+                PanelSprite = panelSprite;
+                PanelType = panelType;
+                PanelColor = panelColor;
+                ArtSprite = artSprite;
+                ArtColor = artColor;
+                ArtVisible = artVisible;
+                RankColor = rankColor;
+                SuitColor = suitColor;
+            }
+
+            public Sprite PanelSprite { get; }
+            public Image.Type PanelType { get; }
+            public Color PanelColor { get; }
+            public Sprite ArtSprite { get; }
+            public Color ArtColor { get; }
+            public bool ArtVisible { get; }
+            public Color RankColor { get; }
+            public Color SuitColor { get; }
+        }
+
         private void Awake()
         {
             Screen.orientation = ScreenOrientation.Portrait;
@@ -133,6 +165,7 @@ namespace BackyardLegends.Runtime
             }
 
             CacheViewRefs();
+            EnsureRuntimeCardArtTargets();
             ConfigureFeedbackAudio();
             ConfigureUiCallbacks();
             ApplyTheme();
@@ -353,6 +386,171 @@ namespace BackyardLegends.Runtime
                     }
                 }
             }
+        }
+
+        private void EnsureRuntimeCardArtTargets()
+        {
+            foreach (var slot in trickSlots.Values)
+            {
+                EnsureTrickFaceImage(slot);
+            }
+        }
+
+        private Image EnsureCardFaceImage(CardButtonView view)
+        {
+            if (view == null)
+            {
+                return null;
+            }
+
+            if (view.FaceImage != null)
+            {
+                return view.FaceImage;
+            }
+
+            var art = new GameObject("Face Art Runtime", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            art.transform.SetParent(view.transform, false);
+            art.transform.SetSiblingIndex(0);
+            var rect = art.GetComponent<RectTransform>();
+            SetAnchors(rect, new Vector2(0.08f, 0.07f), new Vector2(0.92f, 0.93f));
+            var image = art.GetComponent<Image>();
+            image.raycastTarget = false;
+            image.preserveAspect = true;
+            image.type = Image.Type.Simple;
+            image.color = Color.clear;
+            image.enabled = false;
+            view.FaceImage = image;
+            return image;
+        }
+
+        private Image EnsureTrickFaceImage(TrickSlotView view)
+        {
+            if (view == null)
+            {
+                return null;
+            }
+
+            if (view.FaceImage != null)
+            {
+                return view.FaceImage;
+            }
+
+            var art = new GameObject("Face Art Runtime", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            art.transform.SetParent(view.transform, false);
+            art.transform.SetSiblingIndex(0);
+            var rect = art.GetComponent<RectTransform>();
+            SetAnchors(rect, new Vector2(0.08f, 0.06f), new Vector2(0.92f, 0.94f));
+            var image = art.GetComponent<Image>();
+            image.raycastTarget = false;
+            image.preserveAspect = true;
+            image.type = Image.Type.Simple;
+            image.color = Color.clear;
+            image.enabled = false;
+            view.FaceImage = image;
+            return image;
+        }
+
+        private static void HideFaceImage(Image image)
+        {
+            if (image == null)
+            {
+                return;
+            }
+
+            image.sprite = null;
+            image.color = Color.clear;
+            image.enabled = false;
+        }
+
+        private static void SetGraphicAlpha(Graphic graphic, float alpha)
+        {
+            if (graphic == null)
+            {
+                return;
+            }
+
+            var color = graphic.color;
+            color.a = alpha;
+            graphic.color = color;
+        }
+
+        private CardVisualState CaptureCardFaceState(CardButtonView view)
+        {
+            var artImage = EnsureCardFaceImage(view);
+            var artVisible = artImage != null && artImage.enabled && artImage.sprite != null;
+            return new CardVisualState(
+                view.Panel.sprite,
+                view.Panel.type,
+                view.Panel.color,
+                artVisible ? artImage.sprite : null,
+                artImage != null ? artImage.color : Color.clear,
+                artVisible,
+                view.RankText.color,
+                view.SuitText.color);
+        }
+
+        private void ApplyCardFaceVisual(CardButtonView view, CardVisualState state)
+        {
+            view.Panel.sprite = state.PanelSprite;
+            view.Panel.type = state.PanelType;
+            view.Panel.color = state.PanelColor;
+            if (state.ArtVisible && state.ArtSprite != null)
+            {
+                var artImage = EnsureCardFaceImage(view);
+                artImage.sprite = state.ArtSprite;
+                artImage.color = state.ArtColor;
+                artImage.enabled = true;
+            }
+            else
+            {
+                HideFaceImage(view.FaceImage);
+            }
+
+            view.RankText.color = state.RankColor;
+            view.SuitText.color = state.SuitColor;
+        }
+
+        private Color ResolveCardArtTint(bool isLegal)
+        {
+            return controller != null &&
+                   controller.State.Phase == MatchPhase.TrickPlay &&
+                   !isLegal
+                ? new Color(1f, 1f, 1f, 0.62f)
+                : Color.white;
+        }
+
+        private bool TryApplyImportedCardFace(CardButtonView view, Card card, bool isLegal)
+        {
+            var artImage = EnsureCardFaceImage(view);
+            if (artImage == null || !BackyardLegendsCardArtCatalog.TryGetFaceSprite(card, out var sprite))
+            {
+                HideFaceImage(artImage);
+                return false;
+            }
+
+            artImage.sprite = sprite;
+            artImage.color = ResolveCardArtTint(isLegal);
+            artImage.enabled = true;
+            SetGraphicAlpha(view.RankText, 0f);
+            SetGraphicAlpha(view.SuitText, 0f);
+            return true;
+        }
+
+        private bool TryApplyImportedTrickFace(TrickSlotView view, Card card)
+        {
+            var artImage = EnsureTrickFaceImage(view);
+            if (artImage == null || !BackyardLegendsCardArtCatalog.TryGetFaceSprite(card, out var sprite))
+            {
+                HideFaceImage(artImage);
+                return false;
+            }
+
+            artImage.sprite = sprite;
+            artImage.color = Color.white;
+            artImage.enabled = true;
+            SetGraphicAlpha(view.RankText, 0f);
+            SetGraphicAlpha(view.SuitText, 0f);
+            return true;
         }
 
         private void ConfigureUiCallbacks()
@@ -750,10 +948,14 @@ namespace BackyardLegends.Runtime
             foreach (var seat in trickSlots.Keys)
             {
                 var slot = trickSlots[seat];
+                EnsureTrickFaceImage(slot);
+                HideFaceImage(slot.FaceImage);
                 slot.RankText.text = "--";
                 slot.SuitText.text = seat == SeatId.Bottom ? "YOU" :
                     seat == SeatId.Top ? "PARTNER" :
                     seat == SeatId.Left ? "LEFT" : "RIGHT";
+                SetGraphicAlpha(slot.RankText, 1f);
+                SetGraphicAlpha(slot.SuitText, 1f);
                 slot.SuitText.color = theme.mutedText;
                 slot.Panel.color = new Color(1f, 1f, 1f, 0.28f);
             }
@@ -766,6 +968,12 @@ namespace BackyardLegends.Runtime
                 }
 
                 var slot = trickSlots[pair.Key];
+                if (TryApplyImportedTrickFace(slot, pair.Value))
+                {
+                    slot.Panel.color = new Color(1f, 1f, 1f, 0.18f);
+                    continue;
+                }
+
                 slot.RankText.text = pair.Value.RankLabel;
                 slot.SuitText.text = pair.Value.SuitIcon;
                 slot.SuitText.color = pair.Value.IsRed ? theme.red : theme.primaryText;
@@ -854,6 +1062,7 @@ namespace BackyardLegends.Runtime
                     view.CanvasGroup = view.gameObject.AddComponent<CanvasGroup>();
                 }
 
+                EnsureCardFaceImage(view);
                 view.gameObject.SetActive(false);
                 handPool.Add(view);
             }
@@ -862,16 +1071,21 @@ namespace BackyardLegends.Runtime
         private void ConfigureCardView(CardButtonView view, Card card, bool isLegal, bool isSelected)
         {
             StopHandAnimation(view);
+            EnsureCardFaceImage(view);
             view.gameObject.name = card.ShortLabel;
             view.RankText.font = theme.ResolveFont();
             view.SuitText.font = theme.ResolveFont();
             view.RankText.text = card.RankLabel;
             view.SuitText.text = card.SuitIcon;
-            view.RankText.color = new Color(0.08f, 0.08f, 0.08f, 1f);
-            view.SuitText.color = card.IsRed ? theme.red : new Color(0.07f, 0.07f, 0.08f, 1f);
             view.Panel.sprite = ResolveCardSprite(isSelected, isLegal);
             view.Panel.type = Image.Type.Sliced;
             view.Panel.color = Color.white;
+            if (!TryApplyImportedCardFace(view, card, isLegal))
+            {
+                HideFaceImage(view.FaceImage);
+                view.RankText.color = new Color(0.08f, 0.08f, 0.08f, 1f);
+                view.SuitText.color = card.IsRed ? theme.red : new Color(0.07f, 0.07f, 0.08f, 1f);
+            }
             view.CanvasGroup.alpha = 1f;
             view.Button.onClick.RemoveAllListeners();
             view.Button.interactable = controller.State.Phase == MatchPhase.TrickPlay;
@@ -883,21 +1097,9 @@ namespace BackyardLegends.Runtime
             view.Panel.sprite = ResolveCardBackSprite();
             view.Panel.type = Image.Type.Sliced;
             view.Panel.color = Color.white;
-            var rankColor = view.RankText.color;
-            rankColor.a = 0f;
-            view.RankText.color = rankColor;
-            var suitColor = view.SuitText.color;
-            suitColor.a = 0f;
-            view.SuitText.color = suitColor;
-        }
-
-        private void ApplyCardFaceVisual(CardButtonView view, Sprite faceSprite, Image.Type faceType, Color rankColor, Color suitColor)
-        {
-            view.Panel.sprite = faceSprite;
-            view.Panel.type = faceType;
-            view.Panel.color = Color.white;
-            view.RankText.color = rankColor;
-            view.SuitText.color = suitColor;
+            HideFaceImage(view.FaceImage);
+            SetGraphicAlpha(view.RankText, 0f);
+            SetGraphicAlpha(view.SuitText, 0f);
         }
 
         private void StartHandLayoutAnimation(CardButtonView view, Vector2 targetPosition, Quaternion targetRotation, float targetScale)
@@ -913,6 +1115,7 @@ namespace BackyardLegends.Runtime
 
             StopHandAnimation(view);
             view.CanvasGroup.alpha = 1f;
+            var faceState = CaptureCardFaceState(view);
             handAnimations[view] = StartCoroutine(CardTransformRoutine(
                 view,
                 targetPosition,
@@ -922,19 +1125,13 @@ namespace BackyardLegends.Runtime
                 1f,
                 1f,
                 false,
-                null,
-                Image.Type.Sliced,
-                default,
-                default));
+                faceState));
         }
 
         private void StartCardEntryAnimation(CardButtonView view, Vector2 targetPosition, Quaternion targetRotation, float targetScale)
         {
             StopHandAnimation(view);
-            var faceSprite = view.Panel.sprite;
-            var faceType = view.Panel.type;
-            var rankColor = view.RankText.color;
-            var suitColor = view.SuitText.color;
+            var faceState = CaptureCardFaceState(view);
             ApplyCardBackVisual(view);
             view.CanvasGroup.alpha = 0f;
             view.Root.anchoredPosition = GetDealEntryPosition() + new Vector2(Random.Range(-18f, 18f), Random.Range(-8f, 14f));
@@ -949,10 +1146,7 @@ namespace BackyardLegends.Runtime
                 0f,
                 1f,
                 true,
-                faceSprite,
-                faceType,
-                rankColor,
-                suitColor));
+                faceState));
         }
 
         private IEnumerator CardTransformRoutine(
@@ -964,10 +1158,7 @@ namespace BackyardLegends.Runtime
             float startAlpha,
             float endAlpha,
             bool flipReveal,
-            Sprite faceSprite,
-            Image.Type faceType,
-            Color rankColor,
-            Color suitColor)
+            CardVisualState faceState)
         {
             var elapsed = 0f;
             var startPosition = view.Root.anchoredPosition;
@@ -985,7 +1176,7 @@ namespace BackyardLegends.Runtime
                 view.Root.localRotation = Quaternion.Slerp(startRotation, targetRotation, eased);
                 if (flipReveal && !revealedFace && t >= 0.55f)
                 {
-                    ApplyCardFaceVisual(view, faceSprite, faceType, rankColor, suitColor);
+                    ApplyCardFaceVisual(view, faceState);
                     revealedFace = true;
                 }
 
@@ -1005,7 +1196,7 @@ namespace BackyardLegends.Runtime
             view.CanvasGroup.alpha = endAlpha;
             if (flipReveal)
             {
-                ApplyCardFaceVisual(view, faceSprite, faceType, rankColor, suitColor);
+                ApplyCardFaceVisual(view, faceState);
             }
             ApplyFanLayout(view, targetPosition, targetRotation, targetScale);
             handAnimations.Remove(view);
@@ -1425,10 +1616,7 @@ namespace BackyardLegends.Runtime
 
         private IEnumerator AnimateFloatingCard(CardButtonView ghost, CardMotionSnapshot motion, float duration, bool fadeOutNearEnd, bool revealFromBack)
         {
-            var faceSprite = ghost.Panel.sprite;
-            var faceType = ghost.Panel.type;
-            var rankColor = ghost.RankText.color;
-            var suitColor = ghost.SuitText.color;
+            var faceState = CaptureCardFaceState(ghost);
             var revealedFace = !revealFromBack;
             if (revealFromBack)
             {
@@ -1442,7 +1630,7 @@ namespace BackyardLegends.Runtime
                 var t = Mathf.Clamp01(elapsed / duration);
                 if (revealFromBack && !revealedFace && t >= 0.48f)
                 {
-                    ApplyCardFaceVisual(ghost, faceSprite, faceType, rankColor, suitColor);
+                    ApplyCardFaceVisual(ghost, faceState);
                     revealedFace = true;
                 }
 
@@ -1452,7 +1640,7 @@ namespace BackyardLegends.Runtime
 
             if (revealFromBack)
             {
-                ApplyCardFaceVisual(ghost, faceSprite, faceType, rankColor, suitColor);
+                ApplyCardFaceVisual(ghost, faceState);
             }
 
             ApplyFloatingCardPose(ghost, motion, 1f, fadeOutNearEnd, false);
@@ -1589,15 +1777,20 @@ namespace BackyardLegends.Runtime
 
         private void ConfigureFloatingCardView(CardButtonView view, Card card)
         {
+            EnsureCardFaceImage(view);
             view.RankText.font = theme.ResolveFont();
             view.SuitText.font = theme.ResolveFont();
             view.RankText.text = card.RankLabel;
             view.SuitText.text = card.SuitIcon;
-            view.RankText.color = new Color(0.08f, 0.08f, 0.08f, 1f);
-            view.SuitText.color = card.IsRed ? theme.red : new Color(0.07f, 0.07f, 0.08f, 1f);
             view.Panel.sprite = theme.cardFaceDefaultSprite != null ? theme.cardFaceDefaultSprite : ResolveCardSprite(false, true);
             view.Panel.type = Image.Type.Sliced;
             view.Panel.color = Color.white;
+            if (!TryApplyImportedCardFace(view, card, true))
+            {
+                HideFaceImage(view.FaceImage);
+                view.RankText.color = new Color(0.08f, 0.08f, 0.08f, 1f);
+                view.SuitText.color = card.IsRed ? theme.red : new Color(0.07f, 0.07f, 0.08f, 1f);
+            }
         }
 
         private void CleanupFloatingCard(CardButtonView ghost)
