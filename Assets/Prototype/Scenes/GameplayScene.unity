@@ -9144,6 +9144,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   sceneRefs: {fileID: 1675496610}
   themeOverride: {fileID: 0}
+  selectClipAsset: {fileID: 8300000, guid: 9b8c3485a4843ff429b03b8e96c00d77, type: 3}
+  bidClipAsset: {fileID: 8300000, guid: ea4abcc8b33d49846a985cc9f8ad5824, type: 3}
+  playClipAsset: {fileID: 8300000, guid: 4683845b3a6625941af78891ae09512d, type: 3}
+  collectClipAsset: {fileID: 8300000, guid: 30fddba69a8bcbf45b0034896a9a8d71, type: 3}
+  bannerClipAsset: {fileID: 8300000, guid: 9080d3ad371999e43bda5ab49690d047, type: 3}
+  dealClipAsset: {fileID: 8300000, guid: 1998a82d9ac19624fb69ae286855fd42, type: 3}
+  invalidClipAsset: {fileID: 8300000, guid: e3d281454be7a494e9a0e63807f6eb4f, type: 3}
+  roundScoreClipAsset: {fileID: 8300000, guid: 0ecc983340d3d754eaa469d39d448973, type: 3}
+  matchEndClipAsset: {fileID: 8300000, guid: 89617ad407dbf7341a1e7276be68e8c6, type: 3}
 --- !u!225 &1675496612
 CanvasGroup:
   m_ObjectHideFlags: 0

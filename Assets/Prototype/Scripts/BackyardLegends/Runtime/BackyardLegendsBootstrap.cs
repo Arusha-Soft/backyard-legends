@@ -14,6 +14,16 @@ namespace BackyardLegends.Runtime
 
         [SerializeField] private BackyardLegendsSceneRefs sceneRefs;
         [SerializeField] private ThemeConfig themeOverride;
+        [Header("Audio Overrides")]
+        [SerializeField] private AudioClip selectClipAsset;
+        [SerializeField] private AudioClip bidClipAsset;
+        [SerializeField] private AudioClip playClipAsset;
+        [SerializeField] private AudioClip collectClipAsset;
+        [SerializeField] private AudioClip bannerClipAsset;
+        [SerializeField] private AudioClip dealClipAsset;
+        [SerializeField] private AudioClip invalidClipAsset;
+        [SerializeField] private AudioClip roundScoreClipAsset;
+        [SerializeField] private AudioClip matchEndClipAsset;
 
         private readonly Dictionary<SeatId, SeatPanelView> seatViews = new();
         private readonly Dictionary<SeatId, TrickSlotView> trickSlots = new();
@@ -603,15 +613,15 @@ namespace BackyardLegends.Runtime
             feedbackAudioSource.spatialBlend = 0f;
             feedbackAudioSource.volume = 0.18f;
 
-            bidClip = CreateToneClip("Bid Cue", 680f, 920f, 0.09f, 0.16f);
-            selectClip = CreateToneClip("Select Cue", 520f, 760f, 0.05f, 0.13f);
-            playClip = CreateToneClip("Play Cue", 430f, 700f, 0.07f, 0.17f);
-            collectClip = CreateToneClip("Collect Cue", 360f, 580f, 0.13f, 0.2f);
-            bannerClip = CreateToneClip("Banner Cue", 720f, 1080f, 0.16f, 0.14f);
-            dealClip = CreateToneClip("Deal Cue", 250f, 410f, 0.18f, 0.2f);
-            invalidClip = CreateToneClip("Invalid Cue", 240f, 160f, 0.1f, 0.16f);
-            roundScoreClip = CreateToneClip("Round Score Cue", 560f, 820f, 0.2f, 0.18f);
-            matchEndClip = CreateToneClip("Match End Cue", 460f, 920f, 0.28f, 0.22f);
+            bidClip = bidClipAsset != null ? bidClipAsset : CreateToneClip("Bid Cue", 680f, 920f, 0.09f, 0.16f);
+            selectClip = selectClipAsset != null ? selectClipAsset : CreateToneClip("Select Cue", 520f, 760f, 0.05f, 0.13f);
+            playClip = playClipAsset != null ? playClipAsset : CreateToneClip("Play Cue", 430f, 700f, 0.07f, 0.17f);
+            collectClip = collectClipAsset != null ? collectClipAsset : CreateToneClip("Collect Cue", 360f, 580f, 0.13f, 0.2f);
+            bannerClip = bannerClipAsset != null ? bannerClipAsset : CreateToneClip("Banner Cue", 720f, 1080f, 0.16f, 0.14f);
+            dealClip = dealClipAsset != null ? dealClipAsset : CreateToneClip("Deal Cue", 250f, 410f, 0.18f, 0.2f);
+            invalidClip = invalidClipAsset != null ? invalidClipAsset : CreateToneClip("Invalid Cue", 240f, 160f, 0.1f, 0.16f);
+            roundScoreClip = roundScoreClipAsset != null ? roundScoreClipAsset : CreateToneClip("Round Score Cue", 560f, 820f, 0.2f, 0.18f);
+            matchEndClip = matchEndClipAsset != null ? matchEndClipAsset : CreateToneClip("Match End Cue", 460f, 920f, 0.28f, 0.22f);
         }
 
         private static AudioClip CreateToneClip(string clipName, float frequencyA, float frequencyB, float duration, float volume)
