@@ -250,7 +250,7 @@ namespace BackyardLegends.Runtime
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.Escape))
+            if (WasBackPressedThisFrame())
             {
                 if (exitPromptOpen)
                 {
@@ -296,6 +296,35 @@ namespace BackyardLegends.Runtime
                     : 1f;
                 pair.Value.Root.localScale = Vector3.Lerp(pair.Value.Root.localScale, Vector3.one * scale, Time.unscaledDeltaTime * 8f);
             }
+        }
+
+        private static bool WasBackPressedThisFrame()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var keyboardType = System.Type.GetType("UnityEngine.InputSystem.Keyboard, Unity.InputSystem");
+            if (keyboardType != null)
+            {
+                var currentKeyboard = keyboardType.GetProperty("current", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                    ?.GetValue(null, null);
+                if (currentKeyboard != null)
+                {
+                    var escapeKey = keyboardType.GetProperty("escapeKey", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+                        ?.GetValue(currentKeyboard, null);
+                    if (escapeKey != null)
+                    {
+                        var wasPressed = escapeKey.GetType().GetProperty("wasPressedThisFrame", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                        if (wasPressed != null)
+                        {
+                            return (bool)wasPressed.GetValue(escapeKey, null);
+                        }
+                    }
+                }
+            }
+
+            return false;
+#else
+            return Input.GetKeyDown(KeyCode.Escape);
+#endif
         }
 
         private void CacheViewRefs()

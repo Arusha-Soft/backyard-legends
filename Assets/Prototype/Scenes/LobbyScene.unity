@@ -130,6 +130,7 @@ GameObject:
   - component: {fileID: 35879245}
   - component: {fileID: 35879247}
   - component: {fileID: 35879246}
+  - component: {fileID: 35879248}
   m_Layer: 0
   m_Name: Backyard Legends Lobby
   m_TagString: Untagged
@@ -200,6 +201,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   sceneRefs: {fileID: 35879246}
   themeOverride: {fileID: 0}
+--- !u!225 &35879248
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 35879244}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &213726231
 GameObject:
   m_ObjectHideFlags: 0
@@ -212,6 +225,7 @@ GameObject:
   - component: {fileID: 213726235}
   - component: {fileID: 213726234}
   - component: {fileID: 213726233}
+  - component: {fileID: 213726236}
   m_Layer: 0
   m_Name: Score 500
   m_TagString: Untagged
@@ -321,6 +335,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 213726231}
   m_CullTransparentMesh: 1
+--- !u!225 &213726236
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 213726231}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &262473035
 GameObject:
   m_ObjectHideFlags: 0
@@ -412,6 +438,7 @@ GameObject:
   - component: {fileID: 270378949}
   - component: {fileID: 270378948}
   - component: {fileID: 270378947}
+  - component: {fileID: 270378951}
   m_Layer: 0
   m_Name: Backyard Legends Lobby Canvas
   m_TagString: Untagged
@@ -503,6 +530,1560 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 0}
+--- !u!114 &270378951
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 270378946}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ba4816e9229d8d74695f8812d1cab5ce, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  autoPlayOnEnable: 1
+  stagger: 0.01
+  includeInactiveChildren: 1
+  autoRandomizeOnPlay: 0
+  strength: 1
+  durationMin: 0.35
+  durationMax: 0.6
+  preset: 8
+  deactivateGameObjectAfterPlayOut: 0
+  destroyGameObjectAfterPlayOut: 0
+  allowPreviewInEditMode: 1
+  allowAutoPlayInEditMode: 0
+  autoApplyPresetInEditMode: 0
+  enabledSound: 0
+  onAnimationStart:
+    m_PersistentCalls:
+      m_Calls: []
+  onAnimationFinish:
+    m_PersistentCalls:
+      m_Calls: []
+  elements:
+  - ignore: 0
+    target: {fileID: 1653516581}
+    animatePosition: 1
+    positionOffset: {x: 14.575745, y: 119.891685}
+    useCurvePath: 1
+    curveAmplitude: 31.221365
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: 1.5377156}
+    animateScale: 1
+    scaleFrom: {x: 0.8954751, y: 0.8954751, z: 0.8954751}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.6
+    delay: 0.016783245
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 0, y: 0}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1197257266}
+    animatePosition: 1
+    positionOffset: {x: 78.360954, y: 103.171135}
+    useCurvePath: 1
+    curveAmplitude: 38.80355
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: -58.643673}
+    animateScale: 1
+    scaleFrom: {x: 0.8820421, y: 0.8820421, z: 0.8820421}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.5403008
+    delay: 0.038353868
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 0, y: 0}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 35879245}
+    animatePosition: 1
+    positionOffset: {x: -58.556595, y: 103.01656}
+    useCurvePath: 1
+    curveAmplitude: 30.344034
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: -13.018684}
+    animateScale: 1
+    scaleFrom: {x: 0.799319, y: 0.799319, z: 0.799319}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.5346218
+    delay: 0.0748511
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 0, y: 0}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1132557856}
+    animatePosition: 1
+    positionOffset: {x: 67.58659, y: 61.47305}
+    useCurvePath: 1
+    curveAmplitude: 27.37046
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: 17.226236}
+    animateScale: 1
+    scaleFrom: {x: 0.7152444, y: 0.7152444, z: 0.7152444}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.5459674
+    delay: 0.04162993
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 0, y: 0}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 0.15, g: 0.16, b: 0.18, a: 0.98}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1172612408}
+    animatePosition: 1
+    positionOffset: {x: 61.262707, y: 97.60562}
+    useCurvePath: 1
+    curveAmplitude: 27.936892
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: 31.639595}
+    animateScale: 1
+    scaleFrom: {x: 0.84511346, y: 0.84511346, z: 0.84511346}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.6
+    delay: 0.03218658
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 2
+        outSlope: 2
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 0, y: -30}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 0.95, g: 0.95, b: 0.95, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1325517912}
+    animatePosition: 1
+    positionOffset: {x: -21.43586, y: 101.49289}
+    useCurvePath: 1
+    curveAmplitude: 36.197136
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: -38.960526}
+    animateScale: 1
+    scaleFrom: {x: 0.7358783, y: 0.7358783, z: 0.7358783}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.6
+    delay: 0.028006824
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 0, y: 0}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 0.22}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 306744404}
+    animatePosition: 1
+    positionOffset: {x: 9.694314, y: 76.09698}
+    useCurvePath: 1
+    curveAmplitude: 30.542566
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: -24.986155}
+    animateScale: 1
+    scaleFrom: {x: 0.82759905, y: 0.82759905, z: 0.82759905}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.6
+    delay: 0.03678718
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: -0.78900146, y: -0.9980011}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 0.6818, y: 0.6818, z: 0.6818}
+    initialAlpha: 1
+    initialColor: {r: 0.1981132, g: 0, b: 0, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1190795028}
+    animatePosition: 1
+    positionOffset: {x: 42.402195, y: 117.17878}
+    useCurvePath: 1
+    curveAmplitude: 42.006252
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: -57.308735}
+    animateScale: 1
+    scaleFrom: {x: 0.7046722, y: 0.7046722, z: 0.7046722}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.5129623
+    delay: 0.09472016
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 1.1380005, y: -2.6410065}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 0.6818, y: 0.6818, z: 0.6818}
+    initialAlpha: 1
+    initialColor: {r: 0.1981132, g: 0, b: 0, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 2034991020}
+    animatePosition: 1
+    positionOffset: {x: -32.178665, y: 52.037792}
+    useCurvePath: 1
+    curveAmplitude: 33.971073
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: -34.307125}
+    animateScale: 1
+    scaleFrom: {x: 0.82386625, y: 0.82386625, z: 0.82386625}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.42500252
+    delay: 0.053880766
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 4
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 0, y: 0}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 0.66, g: 0.67, b: 0.7, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1163224366}
+    animatePosition: 1
+    positionOffset: {x: 21.554731, y: 67.27633}
+    useCurvePath: 1
+    curveAmplitude: 39.59029
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: -30.53105}
+    animateScale: 1
+    scaleFrom: {x: 0.8070539, y: 0.8070539, z: 0.8070539}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.46643645
+    delay: 0.009944485
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.2
+        value: 0.02
+        inSlope: 0.2
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.4
+        value: 0.08
+        inSlope: 0.4
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.6
+        value: 0.2
+        inSlope: 0.6
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.8
+        value: 0.4
+        inSlope: 0.8
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 0, y: 0}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 934058690}
+    animatePosition: 1
+    positionOffset: {x: -29.752565, y: 74.08323}
+    useCurvePath: 1
+    curveAmplitude: 36.640743
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: 49.992542}
+    animateScale: 1
+    scaleFrom: {x: 0.6816522, y: 0.6816522, z: 0.6816522}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.5368482
+    delay: 0.055952266
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 181.79297, y: -64.50377}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1.1149, y: 1.1149, z: 1.1149}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 843164153}
+    animatePosition: 1
+    positionOffset: {x: 26.862688, y: 88.35294}
+    useCurvePath: 1
+    curveAmplitude: 44.725254
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: 1.6804168}
+    animateScale: 1
+    scaleFrom: {x: 0.7537993, y: 0.7537993, z: 0.7537993}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.52441466
+    delay: 0.08645017
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 11, y: 0}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 0.07, g: 0.08, b: 0.09, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 394453771}
+    animatePosition: 1
+    positionOffset: {x: 35.184063, y: 90.5549}
+    useCurvePath: 1
+    curveAmplitude: 26.57747
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: 54.79585}
+    animateScale: 1
+    scaleFrom: {x: 0.82836044, y: 0.82836044, z: 0.82836044}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.57049507
+    delay: 0.07492624
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.2
+        value: 0.02
+        inSlope: 0.2
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.4
+        value: 0.08
+        inSlope: 0.4
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.6
+        value: 0.2
+        inSlope: 0.6
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.8
+        value: 0.4
+        inSlope: 0.8
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 345.9999, y: -9.00001}
+    initialRotation: {x: -0, y: -0, z: -0, w: 1}
+    initialScale: {x: 0.5736298, y: 0.5736298, z: 0.5736298}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 715313181}
+    animatePosition: 1
+    positionOffset: {x: 20.928196, y: 110.12357}
+    useCurvePath: 1
+    curveAmplitude: 30.458498
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: -1.742014}
+    animateScale: 1
+    scaleFrom: {x: 0.76490045, y: 0.76490045, z: 0.76490045}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.594723
+    delay: 0.008868959
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.1
+        value: 0.01
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.2
+        value: 0.04
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.3
+        value: 0.11
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.4
+        value: 0.25
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.44
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.6
+        value: 0.64
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.7
+        value: 0.81
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.8
+        value: 0.93
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.9
+        value: 0.99
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 615.2788, y: -64.50377}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1.1149, y: 1.1149, z: 1.1149}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 333200124}
+    animatePosition: 1
+    positionOffset: {x: 67.674904, y: 131.85458}
+    useCurvePath: 1
+    curveAmplitude: 27.759445
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: 20.189375}
+    animateScale: 1
+    scaleFrom: {x: 0.8430816, y: 0.8430816, z: 0.8430816}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.5422503
+    delay: 0.03982265
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 11, y: 0}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 0.07, g: 0.08, b: 0.09, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1446060543}
+    animatePosition: 1
+    positionOffset: {x: -85.74664, y: 72.06818}
+    useCurvePath: 1
+    curveAmplitude: 27.53123
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: 49.691593}
+    animateScale: 1
+    scaleFrom: {x: 0.7975202, y: 0.7975202, z: 0.7975202}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.5079608
+    delay: 0.010592418
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 359.00012, y: -8.99999}
+    initialRotation: {x: -0, y: -0, z: -0, w: 1}
+    initialScale: {x: 0.57362974, y: 0.57362974, z: 0.57362974}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 746925501}
+    animatePosition: 1
+    positionOffset: {x: 86.27076, y: 72.73499}
+    useCurvePath: 1
+    curveAmplitude: 35.245594
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: 30.170967}
+    animateScale: 1
+    scaleFrom: {x: 0.8377789, y: 0.8377789, z: 0.8377789}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.56325084
+    delay: 0.033950128
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 0, y: 0}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 763805624}
+    animatePosition: 1
+    positionOffset: {x: -82.74266, y: 43.98418}
+    useCurvePath: 1
+    curveAmplitude: 37.59717
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: -57.17207}
+    animateScale: 1
+    scaleFrom: {x: 0.6936848, y: 0.6936848, z: 0.6936848}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.6
+    delay: 0.060042992
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 141.88855, y: -64.503784}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1224619828}
+    animatePosition: 1
+    positionOffset: {x: -85.48718, y: 67.29717}
+    useCurvePath: 1
+    curveAmplitude: 32.00329
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: 34.58726}
+    animateScale: 1
+    scaleFrom: {x: 0.7297261, y: 0.7297261, z: 0.7297261}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.4547051
+    delay: 0.029481279
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 7.9999976, y: 8.000044}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 0.07, g: 0.08, b: 0.09, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 604204196}
+    animatePosition: 1
+    positionOffset: {x: -48.314854, y: 84.30551}
+    useCurvePath: 1
+    curveAmplitude: 27.6931
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: 54.315746}
+    animateScale: 1
+    scaleFrom: {x: 0.81845784, y: 0.81845784, z: 0.81845784}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.58275634
+    delay: 0.009005071
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 408.53558, y: -64.503784}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 2117072319}
+    animatePosition: 1
+    positionOffset: {x: -81.87593, y: 43.062965}
+    useCurvePath: 1
+    curveAmplitude: 36.003563
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: -55.139626}
+    animateScale: 1
+    scaleFrom: {x: 0.8445429, y: 0.8445429, z: 0.8445429}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.54199153
+    delay: 0.051421247
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 7.9999967, y: 7.9999933}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 0.07, g: 0.08, b: 0.09, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 213726232}
+    animatePosition: 1
+    positionOffset: {x: 86.6237, y: 124.23242}
+    useCurvePath: 1
+    curveAmplitude: 23.689627
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: 46.19425}
+    animateScale: 1
+    scaleFrom: {x: 0.74553376, y: 0.74553376, z: 0.74553376}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.5055583
+    delay: 0.004275309
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 675.18274, y: -64.50379}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1910750815}
+    animatePosition: 1
+    positionOffset: {x: 84.62198, y: 120.09003}
+    useCurvePath: 1
+    curveAmplitude: 28.144125
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: -42.858425}
+    animateScale: 1
+    scaleFrom: {x: 0.8962903, y: 0.8962903, z: 0.8962903}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.54055655
+    delay: 0.09616988
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 7.9999957, y: 8.000038}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 0.07, g: 0.08, b: 0.09, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1131622569}
+    animatePosition: 1
+    positionOffset: {x: 47.128807, y: 38.75562}
+    useCurvePath: 1
+    curveAmplitude: 48.125553
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: -33.623856}
+    animateScale: 1
+    scaleFrom: {x: 0.8857178, y: 0.8857178, z: 0.8857178}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.5171249
+    delay: 0.096290134
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 311.20013, y: 40.619972}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 0.69948, y: 0.69948, z: 0.69948}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1893744655}
+    animatePosition: 1
+    positionOffset: {x: -91.45111, y: 91.59186}
+    useCurvePath: 1
+    curveAmplitude: 25.93007
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 1
+    rotationOffset: {x: 0, y: 0, z: -42.487057}
+    animateScale: 1
+    scaleFrom: {x: 0.75155157, y: 0.75155157, z: 0.75155157}
+    animateFade: 1
+    fadeFrom: 0
+    animateColor: 0
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1, g: 1, b: 1, a: 1}
+    duration: 0.49337995
+    delay: 0.08936384
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.2
+        value: 0.02
+        inSlope: 0.1
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.4
+        value: 0.12
+        inSlope: 0.3
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.5
+        outSlope: 0.5
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.6
+        value: 0.88
+        inSlope: 0
+        outSlope: 0.3
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.8
+        value: 0.98
+        inSlope: 0
+        outSlope: 0.1
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 0, y: 5}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 0.8396226, g: 0.8396226, b: 0.8396226, a: 1}
+    hasInitialState: 1
+  presetCacheValid: 0
+  cachedPreset: 0
+  cachedStrength: 0
+  cachedDurationMin: 0
+  cachedDurationMax: 0
 --- !u!1 &306744403
 GameObject:
   m_ObjectHideFlags: 0
@@ -514,6 +2095,7 @@ GameObject:
   - component: {fileID: 306744404}
   - component: {fileID: 306744406}
   - component: {fileID: 306744405}
+  - component: {fileID: 306744407}
   m_Layer: 0
   m_Name: Flavor
   m_TagString: Untagged
@@ -535,10 +2117,10 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 1325517912}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.390569, y: 0.55300003}
+  m_AnchorMin: {x: 0.390569, y: 0.596}
   m_AnchorMax: {x: 0.9256725, y: 0.80200005}
-  m_AnchoredPosition: {x: -0.78900146, y: -0.7140045}
-  m_SizeDelta: {x: 198.734, y: 55.239}
+  m_AnchoredPosition: {x: -0.78900146, y: -0.9980011}
+  m_SizeDelta: {x: 198.734, y: 46.27}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &306744405
 MonoBehaviour:
@@ -583,6 +2165,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 306744403}
   m_CullTransparentMesh: 1
+--- !u!225 &306744407
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 306744403}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &333200123
 GameObject:
   m_ObjectHideFlags: 0
@@ -594,6 +2188,7 @@ GameObject:
   - component: {fileID: 333200124}
   - component: {fileID: 333200126}
   - component: {fileID: 333200125}
+  - component: {fileID: 333200127}
   m_Layer: 0
   m_Name: Label
   m_TagString: Untagged
@@ -617,7 +2212,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 11.000005, y: 0}
+  m_AnchoredPosition: {x: 11, y: 0}
   m_SizeDelta: {x: -26.545, y: -16}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &333200125
@@ -662,6 +2257,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 333200123}
   m_CullTransparentMesh: 1
+--- !u!225 &333200127
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 333200123}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &374727914
 GameObject:
   m_ObjectHideFlags: 0
@@ -673,6 +2280,7 @@ GameObject:
   - component: {fileID: 374727917}
   - component: {fileID: 374727916}
   - component: {fileID: 374727915}
+  - component: {fileID: 374727918}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -754,6 +2362,50 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &374727918
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 374727914}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a79441f348de89743a2939f4d699eac1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_RenderShadows: 1
+  m_RequiresDepthTextureOption: 2
+  m_RequiresOpaqueTextureOption: 2
+  m_CameraType: 0
+  m_Cameras: []
+  m_RendererIndex: -1
+  m_VolumeLayerMask:
+    serializedVersion: 2
+    m_Bits: 1
+  m_VolumeTrigger: {fileID: 0}
+  m_VolumeFrameworkUpdateModeOption: 2
+  m_RenderPostProcessing: 0
+  m_Antialiasing: 0
+  m_AntialiasingQuality: 2
+  m_StopNaN: 0
+  m_Dithering: 0
+  m_ClearDepth: 1
+  m_AllowXRRendering: 1
+  m_AllowHDROutput: 1
+  m_UseScreenCoordOverride: 0
+  m_ScreenSizeOverride: {x: 0, y: 0, z: 0, w: 0}
+  m_ScreenCoordScaleBias: {x: 0, y: 0, z: 0, w: 0}
+  m_RequiresDepthTexture: 0
+  m_RequiresColorTexture: 0
+  m_Version: 2
+  m_TaaSettings:
+    m_Quality: 3
+    m_FrameInfluence: 0.1
+    m_JitterScale: 1
+    m_MipBias: 0
+    m_VarianceClampScale: 0.9
+    m_ContrastAdaptiveSharpening: 0
 --- !u!1 &394453770
 GameObject:
   m_ObjectHideFlags: 0
@@ -766,6 +2418,7 @@ GameObject:
   - component: {fileID: 394453774}
   - component: {fileID: 394453773}
   - component: {fileID: 394453772}
+  - component: {fileID: 394453775}
   m_Layer: 0
   m_Name: Selected1
   m_TagString: Untagged
@@ -789,7 +2442,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 346, y: -9.000015}
+  m_AnchoredPosition: {x: 345.9999, y: -9.000009}
   m_SizeDelta: {x: 238, y: 257}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &394453772
@@ -850,6 +2503,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 394453770}
   m_CullTransparentMesh: 1
+--- !u!225 &394453775
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 394453770}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &604204195
 GameObject:
   m_ObjectHideFlags: 0
@@ -862,6 +2527,7 @@ GameObject:
   - component: {fileID: 604204199}
   - component: {fileID: 604204198}
   - component: {fileID: 604204197}
+  - component: {fileID: 604204200}
   m_Layer: 0
   m_Name: Score 200
   m_TagString: Untagged
@@ -971,6 +2637,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 604204195}
   m_CullTransparentMesh: 1
+--- !u!225 &604204200
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 604204195}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &671302716
 GameObject:
   m_ObjectHideFlags: 0
@@ -1030,6 +2708,7 @@ GameObject:
   - component: {fileID: 715313184}
   - component: {fileID: 715313183}
   - component: {fileID: 715313182}
+  - component: {fileID: 715313185}
   m_Layer: 0
   m_Name: Street Mode
   m_TagString: Untagged
@@ -1140,6 +2819,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 715313180}
   m_CullTransparentMesh: 1
+--- !u!225 &715313185
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 715313180}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &746925500
 GameObject:
   m_ObjectHideFlags: 0
@@ -1150,6 +2841,7 @@ GameObject:
   m_Component:
   - component: {fileID: 746925501}
   - component: {fileID: 746925502}
+  - component: {fileID: 746925503}
   m_Layer: 0
   m_Name: Score Row
   m_TagString: Untagged
@@ -1205,6 +2897,18 @@ MonoBehaviour:
   m_ChildScaleWidth: 0
   m_ChildScaleHeight: 0
   m_ReverseArrangement: 0
+--- !u!225 &746925503
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 746925500}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &763805623
 GameObject:
   m_ObjectHideFlags: 0
@@ -1217,6 +2921,7 @@ GameObject:
   - component: {fileID: 763805627}
   - component: {fileID: 763805626}
   - component: {fileID: 763805625}
+  - component: {fileID: 763805628}
   m_Layer: 0
   m_Name: Score 100
   m_TagString: Untagged
@@ -1326,6 +3031,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 763805623}
   m_CullTransparentMesh: 1
+--- !u!225 &763805628
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 763805623}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &843164152
 GameObject:
   m_ObjectHideFlags: 0
@@ -1337,6 +3054,7 @@ GameObject:
   - component: {fileID: 843164153}
   - component: {fileID: 843164155}
   - component: {fileID: 843164154}
+  - component: {fileID: 843164156}
   m_Layer: 0
   m_Name: Label
   m_TagString: Untagged
@@ -1405,6 +3123,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 843164152}
   m_CullTransparentMesh: 1
+--- !u!225 &843164156
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 843164152}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &934058689
 GameObject:
   m_ObjectHideFlags: 0
@@ -1417,6 +3147,7 @@ GameObject:
   - component: {fileID: 934058693}
   - component: {fileID: 934058692}
   - component: {fileID: 934058691}
+  - component: {fileID: 934058694}
   m_Layer: 0
   m_Name: Classic Mode
   m_TagString: Untagged
@@ -1527,6 +3258,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 934058689}
   m_CullTransparentMesh: 1
+--- !u!225 &934058694
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 934058689}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &1131622568
 GameObject:
   m_ObjectHideFlags: 0
@@ -1539,6 +3282,7 @@ GameObject:
   - component: {fileID: 1131622572}
   - component: {fileID: 1131622571}
   - component: {fileID: 1131622570}
+  - component: {fileID: 1131622573}
   m_Layer: 0
   m_Name: Start Match
   m_TagString: Untagged
@@ -1563,7 +3307,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.18, y: 0.03}
   m_AnchorMax: {x: 0.18, y: 0.03}
-  m_AnchoredPosition: {x: 311.2, y: 40.62}
+  m_AnchoredPosition: {x: 311.20013, y: 40.619976}
   m_SizeDelta: {x: 864, y: 178}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1131622570
@@ -1648,6 +3392,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1131622568}
   m_CullTransparentMesh: 1
+--- !u!225 &1131622573
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1131622568}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &1132557855
 GameObject:
   m_ObjectHideFlags: 0
@@ -1659,6 +3415,7 @@ GameObject:
   - component: {fileID: 1132557856}
   - component: {fileID: 1132557858}
   - component: {fileID: 1132557857}
+  - component: {fileID: 1132557859}
   m_Layer: 0
   m_Name: Lobby Sheet
   m_TagString: Untagged
@@ -1729,6 +3486,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1132557855}
   m_CullTransparentMesh: 1
+--- !u!225 &1132557859
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1132557855}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &1163224365
 GameObject:
   m_ObjectHideFlags: 0
@@ -1739,6 +3508,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1163224366}
   - component: {fileID: 1163224367}
+  - component: {fileID: 1163224368}
   m_Layer: 0
   m_Name: Mode Row
   m_TagString: Untagged
@@ -1793,6 +3563,18 @@ MonoBehaviour:
   m_ChildScaleWidth: 0
   m_ChildScaleHeight: 0
   m_ReverseArrangement: 0
+--- !u!225 &1163224368
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1163224365}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &1172612407
 GameObject:
   m_ObjectHideFlags: 0
@@ -1804,6 +3586,7 @@ GameObject:
   - component: {fileID: 1172612408}
   - component: {fileID: 1172612410}
   - component: {fileID: 1172612409}
+  - component: {fileID: 1172612411}
   m_Layer: 0
   m_Name: Subtitle
   m_TagString: Untagged
@@ -1873,6 +3656,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1172612407}
   m_CullTransparentMesh: 1
+--- !u!225 &1172612411
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1172612407}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &1190795027
 GameObject:
   m_ObjectHideFlags: 0
@@ -1884,6 +3679,7 @@ GameObject:
   - component: {fileID: 1190795028}
   - component: {fileID: 1190795030}
   - component: {fileID: 1190795029}
+  - component: {fileID: 1190795031}
   m_Layer: 0
   m_Name: Rule Summary
   m_TagString: Untagged
@@ -1905,10 +3701,10 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 1325517912}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.390569, y: 0.12033015}
-  m_AnchorMax: {x: 0.9256725, y: 0.5}
-  m_AnchoredPosition: {x: -0.78900146, y: -2.1869965}
-  m_SizeDelta: {x: 198.734, y: 83.013}
+  m_AnchorMin: {x: 0.390569, y: 0.21100001}
+  m_AnchorMax: {x: 0.9073432, y: 0.545}
+  m_AnchoredPosition: {x: 1.1380005, y: -2.6410065}
+  m_SizeDelta: {x: 197.388, y: 80.493}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1190795029
 MonoBehaviour:
@@ -1953,6 +3749,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1190795027}
   m_CullTransparentMesh: 1
+--- !u!225 &1190795031
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1190795027}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &1197257265
 GameObject:
   m_ObjectHideFlags: 0
@@ -1963,6 +3771,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1197257266}
   - component: {fileID: 1197257267}
+  - component: {fileID: 1197257268}
   m_Layer: 0
   m_Name: Safe Area
   m_TagString: Untagged
@@ -2002,6 +3811,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e8bdb3d7647a9cb4eb82f424076e525d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!225 &1197257268
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1197257265}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &1224619827
 GameObject:
   m_ObjectHideFlags: 0
@@ -2013,6 +3834,7 @@ GameObject:
   - component: {fileID: 1224619828}
   - component: {fileID: 1224619830}
   - component: {fileID: 1224619829}
+  - component: {fileID: 1224619831}
   m_Layer: 0
   m_Name: Label
   m_TagString: Untagged
@@ -2036,7 +3858,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 8.00004, y: 8.00004}
+  m_AnchoredPosition: {x: 7.9999957, y: 8.000042}
   m_SizeDelta: {x: -16, y: -16}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1224619829
@@ -2081,6 +3903,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1224619827}
   m_CullTransparentMesh: 1
+--- !u!225 &1224619831
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1224619827}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &1325517911
 GameObject:
   m_ObjectHideFlags: 0
@@ -2092,6 +3926,7 @@ GameObject:
   - component: {fileID: 1325517912}
   - component: {fileID: 1325517914}
   - component: {fileID: 1325517913}
+  - component: {fileID: 1325517915}
   m_Layer: 0
   m_Name: Preview Panel
   m_TagString: Untagged
@@ -2158,6 +3993,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1325517911}
   m_CullTransparentMesh: 1
+--- !u!225 &1325517915
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1325517911}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &1446060542
 GameObject:
   m_ObjectHideFlags: 0
@@ -2170,6 +4017,7 @@ GameObject:
   - component: {fileID: 1446060546}
   - component: {fileID: 1446060545}
   - component: {fileID: 1446060544}
+  - component: {fileID: 1446060547}
   m_Layer: 0
   m_Name: Selected2
   m_TagString: Untagged
@@ -2193,7 +4041,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 359, y: -9}
+  m_AnchoredPosition: {x: 359.00012, y: -8.999992}
   m_SizeDelta: {x: 238, y: 257}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1446060544
@@ -2254,6 +4102,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1446060542}
   m_CullTransparentMesh: 1
+--- !u!225 &1446060547
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1446060542}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &1653516578
 GameObject:
   m_ObjectHideFlags: 0
@@ -2265,6 +4125,7 @@ GameObject:
   - component: {fileID: 1653516581}
   - component: {fileID: 1653516580}
   - component: {fileID: 1653516579}
+  - component: {fileID: 1653516582}
   m_Layer: 0
   m_Name: Background
   m_TagString: Untagged
@@ -2329,6 +4190,18 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!225 &1653516582
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1653516578}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &1893744654
 GameObject:
   m_ObjectHideFlags: 0
@@ -2340,6 +4213,7 @@ GameObject:
   - component: {fileID: 1893744655}
   - component: {fileID: 1893744657}
   - component: {fileID: 1893744656}
+  - component: {fileID: 1893744658}
   m_Layer: 0
   m_Name: Label
   m_TagString: Untagged
@@ -2408,6 +4282,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1893744654}
   m_CullTransparentMesh: 1
+--- !u!225 &1893744658
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1893744654}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &1910750814
 GameObject:
   m_ObjectHideFlags: 0
@@ -2419,6 +4305,7 @@ GameObject:
   - component: {fileID: 1910750815}
   - component: {fileID: 1910750817}
   - component: {fileID: 1910750816}
+  - component: {fileID: 1910750818}
   m_Layer: 0
   m_Name: Label
   m_TagString: Untagged
@@ -2442,7 +4329,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 8.00004, y: 8.00004}
+  m_AnchoredPosition: {x: 8, y: 8.000038}
   m_SizeDelta: {x: -16, y: -16}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1910750816
@@ -2487,6 +4374,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1910750814}
   m_CullTransparentMesh: 1
+--- !u!225 &1910750818
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1910750814}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &2034991019
 GameObject:
   m_ObjectHideFlags: 0
@@ -2498,6 +4397,7 @@ GameObject:
   - component: {fileID: 2034991020}
   - component: {fileID: 2034991022}
   - component: {fileID: 2034991021}
+  - component: {fileID: 2034991023}
   m_Layer: 0
   m_Name: Selection Summary
   m_TagString: Untagged
@@ -2566,6 +4466,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2034991019}
   m_CullTransparentMesh: 1
+--- !u!225 &2034991023
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2034991019}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &2117072318
 GameObject:
   m_ObjectHideFlags: 0
@@ -2577,6 +4489,7 @@ GameObject:
   - component: {fileID: 2117072319}
   - component: {fileID: 2117072321}
   - component: {fileID: 2117072320}
+  - component: {fileID: 2117072322}
   m_Layer: 0
   m_Name: Label
   m_TagString: Untagged
@@ -2600,7 +4513,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 8, y: 8}
+  m_AnchoredPosition: {x: 7.999995, y: 7.9999905}
   m_SizeDelta: {x: -16, y: -16}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &2117072320
@@ -2645,6 +4558,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2117072318}
   m_CullTransparentMesh: 1
+--- !u!225 &2117072322
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2117072318}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

@@ -6,6 +6,7 @@ namespace BackyardLegends.Runtime
     public sealed class TrickSlotView : MonoBehaviour
     {
         public Image Panel;
+        public Image FaceImage;
         public Text RankText;
         public Text SuitText;
 

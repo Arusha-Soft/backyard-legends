@@ -6,6 +6,7 @@ namespace BackyardLegends.Runtime
     public sealed class CardButtonView : MonoBehaviour
     {
         public Image Panel;
+        public Image FaceImage;
         public Button Button;
         public Text RankText;
         public Text SuitText;
