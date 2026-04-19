@@ -43,6 +43,7 @@ namespace BackyardLegends.Runtime
         private Coroutine flashLoop;
         private Coroutine homeDeltaLoop;
         private Coroutine awayDeltaLoop;
+        private Coroutine dealButtonFadeLoop;
         private SpadesMatchController controller;
         private IRuleEngine ruleEngine;
         private BackyardLegendsSession session;
@@ -53,12 +54,17 @@ namespace BackyardLegends.Runtime
         private AudioClip playClip;
         private AudioClip collectClip;
         private AudioClip bannerClip;
+        private AudioClip dealClip;
+        private AudioClip invalidClip;
+        private AudioClip roundScoreClip;
+        private AudioClip matchEndClip;
         private bool pendingRoundSheetOpen;
         private bool pendingEndSheetOpen;
         private bool openingDealPending;
         private bool openingDealRunning;
         private bool openingStackIntroRunning;
         private bool suppressNextHandEntryAnimation;
+        private bool dealButtonDismissRunning;
         private bool exitPromptOpen;
 
         private RectTransform AnimationRoot => (RectTransform)transform;
@@ -70,7 +76,11 @@ namespace BackyardLegends.Runtime
             Bid,
             Play,
             Collect,
-            Banner
+            Banner,
+            Deal,
+            Invalid,
+            RoundScore,
+            MatchEnd
         }
 
         private readonly struct CardMotionSnapshot
@@ -85,6 +95,7 @@ namespace BackyardLegends.Runtime
                 Quaternion startRotation,
                 Quaternion endRotation,
                 float arcHeight,
+                Vector2 burstOffset,
                 float delay = 0f)
             {
                 Card = card;
@@ -96,6 +107,7 @@ namespace BackyardLegends.Runtime
                 StartRotation = startRotation;
                 EndRotation = endRotation;
                 ArcHeight = arcHeight;
+                BurstOffset = burstOffset;
                 Delay = delay;
             }
 
@@ -108,6 +120,7 @@ namespace BackyardLegends.Runtime
             public Quaternion StartRotation { get; }
             public Quaternion EndRotation { get; }
             public float ArcHeight { get; }
+            public Vector2 BurstOffset { get; }
             public float Delay { get; }
         }
 
@@ -199,10 +212,6 @@ namespace BackyardLegends.Runtime
                 sceneRefs.OpeningStackText = CreateRuntimeText("Opening Stack Label Runtime", sceneRefs.OpeningStackImage.transform, "52\nCARDS", 24, FontStyle.Bold, theme.gold, TextAnchor.MiddleCenter, new Vector2(0.18f, 0.18f), new Vector2(0.82f, 0.82f));
             }
 
-            if (sceneRefs.DealButton == null)
-            {
-                sceneRefs.DealButton = CreateRuntimeButton("Deal Button Runtime", sceneRefs.TablePanel.transform, "DEAL", theme.green, new Vector2(0.34f, 0.25f), new Vector2(0.66f, 0.34f));
-            }
         }
 
         private void EnsureRuntimeBackNavigationWidgets()
@@ -210,11 +219,6 @@ namespace BackyardLegends.Runtime
             if (sceneRefs.HudPanel == null)
             {
                 return;
-            }
-
-            if (sceneRefs.BackButton == null)
-            {
-                sceneRefs.BackButton = CreateRuntimeButton("Back Button Runtime", sceneRefs.HudPanel.transform, "BACK", theme.panelStroke, new Vector2(0.04f, 0.60f), new Vector2(0.18f, 0.92f));
             }
 
             var titleTransform = sceneRefs.HudPanel.transform.Find("Title") as RectTransform;
@@ -628,6 +632,10 @@ namespace BackyardLegends.Runtime
             playClip = CreateToneClip("Play Cue", 430f, 700f, 0.07f, 0.17f);
             collectClip = CreateToneClip("Collect Cue", 360f, 580f, 0.13f, 0.2f);
             bannerClip = CreateToneClip("Banner Cue", 720f, 1080f, 0.16f, 0.14f);
+            dealClip = CreateToneClip("Deal Cue", 250f, 410f, 0.18f, 0.2f);
+            invalidClip = CreateToneClip("Invalid Cue", 240f, 160f, 0.1f, 0.16f);
+            roundScoreClip = CreateToneClip("Round Score Cue", 560f, 820f, 0.2f, 0.18f);
+            matchEndClip = CreateToneClip("Match End Cue", 460f, 920f, 0.28f, 0.22f);
         }
 
         private static AudioClip CreateToneClip(string clipName, float frequencyA, float frequencyB, float duration, float volume)
@@ -663,6 +671,10 @@ namespace BackyardLegends.Runtime
                 FeedbackCue.Play => playClip,
                 FeedbackCue.Collect => collectClip,
                 FeedbackCue.Banner => bannerClip,
+                FeedbackCue.Deal => dealClip,
+                FeedbackCue.Invalid => invalidClip,
+                FeedbackCue.RoundScore => roundScoreClip,
+                FeedbackCue.MatchEnd => matchEndClip,
                 _ => null
             };
 
@@ -792,7 +804,15 @@ namespace BackyardLegends.Runtime
             openingDealPending = true;
             openingDealRunning = false;
             suppressNextHandEntryAnimation = false;
+            dealButtonDismissRunning = false;
             exitPromptOpen = false;
+            if (dealButtonFadeLoop != null)
+            {
+                StopCoroutine(dealButtonFadeLoop);
+                dealButtonFadeLoop = null;
+            }
+
+            ResetDealButtonVisualState();
             selectedRule = session != null ? session.SelectedRule : RuleSetConfig.CreateClassic(100);
             ruleEngine = new SpadesRuleEngine();
             controller = new SpadesMatchController(
@@ -849,6 +869,7 @@ namespace BackyardLegends.Runtime
                 case RoundScoredEvent:
                     sceneRefs.RoundSummaryText.text = BuildRoundSummaryText();
                     AddFeedMessage("Round scored and wrapped.");
+                    PlayFeedback(FeedbackCue.RoundScore, 0.2f);
                     if (HasVisualMotionPending)
                     {
                         pendingRoundSheetOpen = true;
@@ -863,6 +884,7 @@ namespace BackyardLegends.Runtime
                 case MatchEndedEvent ended:
                     sceneRefs.EndSummaryText.text = BuildMatchSummaryText(ended.WinningTeam);
                     AddFeedMessage(ended.WinningTeam == TeamId.Home ? "Home team closed the match." : "Rivals closed the match.");
+                    PlayFeedback(FeedbackCue.MatchEnd, 0.24f);
                     pendingRoundSheetOpen = false;
                     if (HasVisualMotionPending)
                     {
@@ -922,13 +944,36 @@ namespace BackyardLegends.Runtime
             if (sceneRefs.DealButton != null)
             {
                 var canDeal = openingDealPending && !openingDealRunning && !openingStackIntroRunning;
-                sceneRefs.DealButton.gameObject.SetActive(canDeal);
-                sceneRefs.DealButton.interactable = canDeal;
+                var dealButtonGroup = ResolveCanvasGroup(sceneRefs.DealButton.gameObject);
+                if (canDeal)
+                {
+                    if (dealButtonFadeLoop != null)
+                    {
+                        StopCoroutine(dealButtonFadeLoop);
+                        dealButtonFadeLoop = null;
+                    }
+
+                    dealButtonDismissRunning = false;
+                    sceneRefs.DealButton.gameObject.SetActive(true);
+                    sceneRefs.DealButton.interactable = true;
+                    dealButtonGroup.alpha = 1f;
+                }
+                else if (dealButtonDismissRunning)
+                {
+                    sceneRefs.DealButton.gameObject.SetActive(true);
+                    sceneRefs.DealButton.interactable = false;
+                }
+                else
+                {
+                    sceneRefs.DealButton.interactable = false;
+                    sceneRefs.DealButton.gameObject.SetActive(false);
+                    dealButtonGroup.alpha = 1f;
+                }
             }
 
             if (sceneRefs.OpeningStackImage != null)
             {
-                var openingStackVisible = openingDealPending || openingDealRunning;
+                var openingStackVisible = openingDealPending && !openingDealRunning;
                 sceneRefs.OpeningStackImage.gameObject.SetActive(openingStackVisible);
                 sceneRefs.OpeningStackImage.color = new Color(1f, 1f, 1f,
                     openingDealPending && !openingDealRunning && (openingStackIntroRunning || openingStackPreviewCards.Count > 0)
@@ -938,7 +983,7 @@ namespace BackyardLegends.Runtime
 
             if (sceneRefs.OpeningStackText != null)
             {
-                sceneRefs.OpeningStackText.gameObject.SetActive(openingDealPending && !openingStackIntroRunning && openingStackPreviewCards.Count == 0);
+                sceneRefs.OpeningStackText.gameObject.SetActive(openingDealPending && !openingDealRunning && !openingStackIntroRunning && openingStackPreviewCards.Count == 0);
             }
 
             if (openingDealPending || openingDealRunning)
@@ -948,7 +993,7 @@ namespace BackyardLegends.Runtime
 
             if (openingStackEffectImage != null)
             {
-                openingStackEffectImage.gameObject.SetActive((openingDealPending || openingDealRunning) && openingStackEffectImage.sprite != null);
+                openingStackEffectImage.gameObject.SetActive(openingDealPending && !openingDealRunning && openingStackEffectImage.sprite != null);
             }
 
             sceneRefs.LastTrickText.text = $"Last hand: {controller.DescribeLastTrick()}";
@@ -1333,9 +1378,9 @@ namespace BackyardLegends.Runtime
             }
 
             openingDealRunning = true;
-            ClearOpeningStackPreviewCards();
+            StartDealButtonDismiss();
             HideAllBidBubbles(true);
-            PlayFeedback(FeedbackCue.Banner, 0.16f);
+            PlayFeedback(FeedbackCue.Deal, 0.2f);
             SpawnImpactBurst(GetOpeningStackPosition(), theme.gold, 38f, 5);
             RenderAll();
             StartCoroutine(OpeningDealSequence());
@@ -1345,7 +1390,7 @@ namespace BackyardLegends.Runtime
         {
             if (sceneRefs.OpeningStackImage != null)
             {
-                yield return PulseRect(sceneRefs.OpeningStackImage.rectTransform, 1.08f, Mathf.Max(0.14f, theme.pulseDuration));
+                StartCoroutine(PulseRect(sceneRefs.OpeningStackImage.rectTransform, 1.08f, Mathf.Max(0.14f, theme.pulseDuration)));
             }
 
             ShowSeatCallout(SeatId.Top, "HEY PARTNER !", 1.6f, new Color(theme.green.r, theme.green.g, theme.green.b, 0.95f), theme.backgroundColor);
@@ -1353,6 +1398,9 @@ namespace BackyardLegends.Runtime
 
             var handsBySeat = SpadesSeatUtility.TurnOrder.ToDictionary(seat => seat, seat => controller.GetHand(seat).ToList());
             var perSeatIndex = SpadesSeatUtility.TurnOrder.ToDictionary(seat => seat, _ => 0);
+            var previewSources = openingStackPreviewCards.ToList();
+            var dealMotions = new List<CardMotionSnapshot>(52);
+            var revealToHandFlags = new List<bool>(52);
             var ghosts = new List<CardButtonView>(52);
             var delayStep = 0.018f;
             var travelDuration = Mathf.Max(0.22f, theme.modalDuration * 1.15f);
@@ -1363,14 +1411,24 @@ namespace BackyardLegends.Runtime
                 var cardIndex = perSeatIndex[recipient];
                 perSeatIndex[recipient] = cardIndex + 1;
                 var card = handsBySeat[recipient][cardIndex];
-                var motion = BuildOpeningDealMotion(recipient, card, cardIndex, handsBySeat[recipient].Count);
-                var ghost = CreateFloatingCard(motion);
-                ghosts.Add(ghost);
-                StartCoroutine(AnimateOpeningDealGhost(ghost, motion, delayStep * launchIndex, recipient == SeatId.Bottom, travelDuration, launchIndex == 0));
+                var previewSource = launchIndex < previewSources.Count ? previewSources[launchIndex] : null;
+                var motion = BuildOpeningDealMotion(recipient, card, cardIndex, handsBySeat[recipient].Count, previewSource);
+                dealMotions.Add(motion);
+                revealToHandFlags.Add(recipient == SeatId.Bottom);
                 launchIndex++;
             }
 
-            yield return new WaitForSecondsRealtime(delayStep * launchIndex + travelDuration + 0.2f);
+            ClearOpeningStackPreviewCards();
+
+            for (var i = 0; i < dealMotions.Count; i++)
+            {
+                var motion = dealMotions[i];
+                var ghost = CreateFloatingCard(motion);
+                ghosts.Add(ghost);
+                StartCoroutine(AnimateOpeningDealGhost(ghost, motion, delayStep * i, revealToHandFlags[i], travelDuration, i == 0));
+            }
+
+            yield return new WaitForSecondsRealtime(delayStep * dealMotions.Count + travelDuration + 0.2f);
 
             suppressNextHandEntryAnimation = true;
             openingDealPending = false;
@@ -1388,6 +1446,76 @@ namespace BackyardLegends.Runtime
             ScheduleAiLoop();
         }
 
+        private void StartDealButtonDismiss()
+        {
+            if (sceneRefs.DealButton == null)
+            {
+                return;
+            }
+
+            if (dealButtonFadeLoop != null)
+            {
+                StopCoroutine(dealButtonFadeLoop);
+            }
+
+            dealButtonDismissRunning = true;
+            sceneRefs.DealButton.gameObject.SetActive(true);
+            sceneRefs.DealButton.interactable = false;
+            dealButtonFadeLoop = StartCoroutine(FadeDealButtonOut());
+        }
+
+        private IEnumerator FadeDealButtonOut()
+        {
+            if (sceneRefs.DealButton == null)
+            {
+                dealButtonDismissRunning = false;
+                dealButtonFadeLoop = null;
+                yield break;
+            }
+
+            var canvasGroup = ResolveCanvasGroup(sceneRefs.DealButton.gameObject);
+            var startAlpha = canvasGroup.alpha;
+            var duration = Mathf.Max(0.08f, theme.modalDuration * 0.6f);
+            var elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(elapsed / duration);
+                canvasGroup.alpha = Mathf.Lerp(startAlpha, 0f, Mathf.SmoothStep(0f, 1f, t));
+                yield return null;
+            }
+
+            canvasGroup.alpha = 0f;
+            sceneRefs.DealButton.gameObject.SetActive(false);
+            canvasGroup.alpha = 1f;
+            dealButtonDismissRunning = false;
+            dealButtonFadeLoop = null;
+        }
+
+        private void ResetDealButtonVisualState()
+        {
+            if (sceneRefs.DealButton == null)
+            {
+                return;
+            }
+
+            var canvasGroup = ResolveCanvasGroup(sceneRefs.DealButton.gameObject);
+            canvasGroup.alpha = 1f;
+            sceneRefs.DealButton.gameObject.SetActive(true);
+            sceneRefs.DealButton.interactable = true;
+        }
+
+        private static CanvasGroup ResolveCanvasGroup(GameObject target)
+        {
+            var canvasGroup = target.GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+            {
+                canvasGroup = target.AddComponent<CanvasGroup>();
+            }
+
+            return canvasGroup;
+        }
+
         private IEnumerator AnimateOpeningDealGhost(CardButtonView ghost, CardMotionSnapshot motion, float delay, bool revealToHand, float duration, bool playLaunchSound)
         {
             if (ghost == null)
@@ -1395,9 +1523,55 @@ namespace BackyardLegends.Runtime
                 yield break;
             }
 
+            ApplyOpeningStackPreviewVisual(ghost);
+
+            var motionSeed = Mathf.Abs(ghost.gameObject.name.GetHashCode());
+            var burstDuration = Mathf.Lerp(0.08f, 0.13f, GetOpeningStackPreviewRandom01(motionSeed));
+            var burstTarget = motion.StartPosition + motion.BurstOffset;
+            var burstRotation = motion.StartRotation * Quaternion.Euler(0f, 0f, Mathf.Sign(motion.BurstOffset.x == 0f ? Random.Range(-1f, 1f) : motion.BurstOffset.x) * Mathf.Lerp(4f, 12f, GetOpeningStackPreviewRandom01(motionSeed + 11)));
+            var burstSize = motion.StartSize * 1.04f;
+            var burstElapsed = 0f;
+            while (burstElapsed < burstDuration)
+            {
+                burstElapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(burstElapsed / burstDuration);
+                var eased = 1f - Mathf.Pow(1f - t, 2f);
+                ghost.Root.anchoredPosition = Vector2.Lerp(motion.StartPosition, burstTarget, eased);
+                ghost.Root.localRotation = Quaternion.Slerp(motion.StartRotation, burstRotation, eased);
+                ghost.Root.sizeDelta = Vector2.Lerp(motion.StartSize, burstSize, eased);
+                ghost.CanvasGroup.alpha = Mathf.Lerp(0.92f, 1f, eased);
+                yield return null;
+            }
+
+            ghost.Root.anchoredPosition = burstTarget;
+            ghost.Root.localRotation = burstRotation;
+            ghost.Root.sizeDelta = burstSize;
+
             if (delay > 0f)
             {
-                yield return new WaitForSecondsRealtime(delay);
+                var hoverElapsed = 0f;
+                var hoverAmplitude = new Vector2(
+                    Mathf.Lerp(2.4f, 6.2f, GetOpeningStackPreviewRandom01(motionSeed + 23)),
+                    Mathf.Lerp(1.8f, 4.8f, GetOpeningStackPreviewRandom01(motionSeed + 37)));
+                var hoverRotationAmplitude = Mathf.Lerp(1.2f, 3.4f, GetOpeningStackPreviewRandom01(motionSeed + 41));
+                var hoverSpeed = Mathf.Lerp(2.1f, 3.6f, GetOpeningStackPreviewRandom01(motionSeed + 53));
+                var hoverScalePulse = Mathf.Lerp(0.004f, 0.011f, GetOpeningStackPreviewRandom01(motionSeed + 67));
+                while (hoverElapsed < delay)
+                {
+                    hoverElapsed += Time.unscaledDeltaTime;
+                    var hoverT = Mathf.Clamp01(hoverElapsed / delay);
+                    var hoverFalloff = Mathf.Lerp(1f, 0.35f, hoverT);
+                    var phase = motionSeed * 0.001f + hoverElapsed * hoverSpeed;
+                    var drift = new Vector2(
+                        Mathf.Sin(phase) * hoverAmplitude.x,
+                        Mathf.Cos(phase * 1.27f) * hoverAmplitude.y) * hoverFalloff;
+                    var rotationOffset = Mathf.Sin(phase * 0.91f) * hoverRotationAmplitude * hoverFalloff;
+                    var scaleOffset = 1f + Mathf.Sin(phase * 1.43f) * hoverScalePulse * hoverFalloff;
+                    ghost.Root.anchoredPosition = burstTarget + drift;
+                    ghost.Root.localRotation = burstRotation * Quaternion.Euler(0f, 0f, rotationOffset);
+                    ghost.Root.sizeDelta = burstSize * scaleOffset;
+                    yield return null;
+                }
             }
 
             if (!revealToHand)
@@ -1407,10 +1581,22 @@ namespace BackyardLegends.Runtime
 
             if (playLaunchSound)
             {
-                PlayFeedback(FeedbackCue.Play, 0.16f);
+                PlayFeedback(FeedbackCue.Deal, 0.16f);
             }
 
-            yield return AnimateFloatingCard(ghost, motion, duration, fadeOutNearEnd: !revealToHand, revealFromBack: revealToHand);
+            var dealMotion = new CardMotionSnapshot(
+                motion.Card,
+                motion.Seat,
+                ghost.Root.anchoredPosition,
+                motion.EndPosition,
+                ghost.Root.sizeDelta,
+                motion.EndSize,
+                ghost.Root.localRotation,
+                motion.EndRotation,
+                motion.ArcHeight,
+                Vector2.zero,
+                motion.Delay);
+            yield return AnimateFloatingCard(ghost, dealMotion, duration, fadeOutNearEnd: !revealToHand, revealFromBack: revealToHand);
         }
 
         private void SubmitBid(int bid)
@@ -1422,6 +1608,7 @@ namespace BackyardLegends.Runtime
 
             if (!controller.TrySubmitBid(SeatId.Bottom, bid, out var error))
             {
+                PlayFeedback(FeedbackCue.Invalid, 0.18f);
                 FlashStatus(error, theme.red);
                 return;
             }
@@ -1446,12 +1633,14 @@ namespace BackyardLegends.Runtime
 
             if (controller == null || controller.State.Phase != MatchPhase.TrickPlay)
             {
+                PlayFeedback(FeedbackCue.Invalid, 0.16f);
                 FlashStatus("Cards are not live yet.", theme.red);
                 return;
             }
 
             if (controller.State.RoundState.TrickState.CurrentTurn != SeatId.Bottom)
             {
+                PlayFeedback(FeedbackCue.Invalid, 0.16f);
                 FlashStatus("Wait for your turn.", theme.red);
                 return;
             }
@@ -1465,6 +1654,7 @@ namespace BackyardLegends.Runtime
             var legalCards = controller.GetLegalCardsForSeat(SeatId.Bottom).ToHashSet();
             if (!legalCards.Contains(card))
             {
+                PlayFeedback(FeedbackCue.Invalid, 0.18f);
                 FlashStatus("Classic enforces follow suit. Street relaxes it but still scores reneges.", theme.red);
                 var invalidView = handPool.FirstOrDefault(view => view.gameObject.activeSelf && view.gameObject.name == card.ShortLabel);
                 if (invalidView != null)
@@ -1521,12 +1711,14 @@ namespace BackyardLegends.Runtime
 
             if (!selectedCard.HasValue)
             {
+                PlayFeedback(FeedbackCue.Invalid, 0.16f);
                 FlashStatus("Pick a card first.", theme.red);
                 return;
             }
 
             if (!controller.TryPlayCard(SeatId.Bottom, selectedCard.Value, out var error))
             {
+                PlayFeedback(FeedbackCue.Invalid, 0.18f);
                 FlashStatus(error, theme.red);
                 return;
             }
@@ -1779,7 +1971,8 @@ namespace BackyardLegends.Runtime
                 GetAnchoredSize(targetRect),
                 Quaternion.Euler(0f, 0f, sourceRect.eulerAngles.z),
                 Quaternion.identity,
-                seat == SeatId.Bottom ? 96f : 72f);
+                seat == SeatId.Bottom ? 96f : 72f,
+                Vector2.zero);
         }
 
         private CardMotionSnapshot BuildTrickCollectMotion(TrickPlay play, SeatId winner, int index)
@@ -1796,6 +1989,7 @@ namespace BackyardLegends.Runtime
                 Quaternion.identity,
                 Quaternion.Euler(0f, 0f, winner == SeatId.Left ? -10f : winner == SeatId.Right ? 10f : 0f),
                 54f,
+                Vector2.zero,
                 index * 0.04f);
         }
 
@@ -1812,16 +2006,28 @@ namespace BackyardLegends.Runtime
             }
         }
 
-        private CardMotionSnapshot BuildOpeningDealMotion(SeatId seat, Card card, int index, int count)
+        private CardMotionSnapshot BuildOpeningDealMotion(SeatId seat, Card card, int index, int count, CardButtonView previewSource = null)
         {
-            var startPosition = GetOpeningStackPosition() + new Vector2(Random.Range(-12f, 12f), Random.Range(-10f, 10f));
-            var startSize = ResolveCardButtonBaseSize() * 0.82f;
+            var stackCenter = GetOpeningStackPosition();
+            var startPosition = previewSource != null
+                ? previewSource.Root.anchoredPosition
+                : stackCenter + new Vector2(Random.Range(-12f, 12f), Random.Range(-10f, 10f));
+            var startSize = previewSource != null
+                ? previewSource.Root.sizeDelta
+                : ResolveCardButtonBaseSize() * 0.82f;
             var endSize = seat == SeatId.Bottom
                 ? ResolveBottomHandCardSize()
                 : ResolveCardButtonBaseSize() * 0.52f;
             var endRotation = seat == SeatId.Bottom
                 ? GetFanTargetRotation(index, count)
                 : Quaternion.Euler(0f, 0f, seat == SeatId.Left ? -84f : seat == SeatId.Right ? 84f : 0f);
+            var explodeDirection = (startPosition - stackCenter).normalized;
+            if (explodeDirection.sqrMagnitude < 0.01f)
+            {
+                explodeDirection = Quaternion.Euler(0f, 0f, Random.Range(0f, 360f)) * Vector2.right;
+            }
+
+            var burstOffset = explodeDirection * Mathf.Lerp(34f, 92f, GetOpeningStackPreviewRandom01(index + count * 7));
             return new CardMotionSnapshot(
                 card,
                 seat,
@@ -1829,9 +2035,10 @@ namespace BackyardLegends.Runtime
                 seat == SeatId.Bottom ? GetHandAnimationPoint(index, count, false) : GetSeatDealPoint(seat, index, count),
                 startSize,
                 endSize,
-                Quaternion.Euler(0f, 0f, Random.Range(-18f, 18f)),
+                previewSource != null ? previewSource.Root.localRotation : Quaternion.Euler(0f, 0f, Random.Range(-18f, 18f)),
                 endRotation,
-                seat == SeatId.Bottom ? 78f : 58f);
+                seat == SeatId.Bottom ? 78f : 58f,
+                burstOffset);
         }
 
         private RectTransform ResolvePlaySourceRect(SeatId seat, Card card)
@@ -1981,18 +2188,21 @@ namespace BackyardLegends.Runtime
             RenderAll();
 
             var totalCards = ResolveOpeningStackCardCount();
-            var delayStep = 0.012f;
-            var travelDuration = Mathf.Max(0.18f, theme.modalDuration * 0.92f);
+            var delayStep = 0.014f;
+            var baseTravelDuration = Mathf.Max(0.32f, theme.modalDuration * 1.45f);
             var previewSize = ResolveOpeningStackPreviewCardSize();
+            var maxTravelDuration = 0f;
 
             for (var index = 0; index < totalCards; index++)
             {
                 var preview = CreateOpeningStackPreviewCard(index, previewSize);
+                var travelDuration = baseTravelDuration / GetOpeningStackPreviewSpeedFactor(index);
+                maxTravelDuration = Mathf.Max(maxTravelDuration, travelDuration);
                 openingStackPreviewAnimations[preview] = StartCoroutine(AnimateOpeningStackPreviewCard(preview, index, totalCards, travelDuration, delayStep * index));
             }
 
             PlayFeedback(FeedbackCue.Collect, 0.14f);
-            yield return new WaitForSecondsRealtime(delayStep * Mathf.Max(0, totalCards - 1) + travelDuration + 0.06f);
+            yield return new WaitForSecondsRealtime(delayStep * Mathf.Max(0, totalCards - 1) + maxTravelDuration + 0.04f);
 
             openingStackIntroRunning = false;
             openingStackIntroLoop = null;
@@ -2051,7 +2261,7 @@ namespace BackyardLegends.Runtime
             {
                 elapsed += Time.unscaledDeltaTime;
                 var t = Mathf.Clamp01(elapsed / duration);
-                var eased = 1f - Mathf.Pow(1f - t, 3f);
+                var eased = Mathf.SmoothStep(0f, 1f, t);
                 preview.CanvasGroup.alpha = Mathf.Lerp(0f, 1f, eased);
                 preview.Root.anchoredPosition = Vector2.Lerp(startPosition, targetPosition, eased) + Vector2.up * Mathf.Sin(t * Mathf.PI) * arcHeight;
                 preview.Root.sizeDelta = Vector2.Lerp(previewSize * 0.92f, previewSize, eased);
@@ -2067,12 +2277,14 @@ namespace BackyardLegends.Runtime
             preview.Root.localScale = Vector3.one;
             while (preview != null && openingDealPending && !openingDealRunning)
             {
-                var floatTime = Time.unscaledTime * 1.08f + index * 0.29f;
+                var floatTime = Time.unscaledTime * GetOpeningStackPreviewFloatSpeed(index) + index * 0.29f;
+                var floatAmplitude = GetOpeningStackPreviewFloatAmplitude(index);
+                var rotationAmplitude = Mathf.Lerp(3.8f, 6.6f, GetOpeningStackPreviewRandom01(index * 2 + 5));
                 var floatOffset = new Vector2(
-                    Mathf.Sin(floatTime) * 4.8f,
-                    Mathf.Cos(floatTime * 1.17f) * 6.2f);
+                    Mathf.Sin(floatTime) * floatAmplitude.x,
+                    Mathf.Cos(floatTime * 1.17f) * floatAmplitude.y);
                 preview.Root.anchoredPosition = targetPosition + floatOffset;
-                preview.Root.localRotation = Quaternion.Euler(0f, 0f, GetOpeningStackPreviewRotation(index, totalCards) + Mathf.Sin(floatTime * 0.92f) * 3.2f);
+                preview.Root.localRotation = Quaternion.Euler(0f, 0f, GetOpeningStackPreviewRotation(index, totalCards) + Mathf.Sin(floatTime * 0.92f) * rotationAmplitude);
                 yield return null;
             }
 
@@ -2398,6 +2610,28 @@ namespace BackyardLegends.Runtime
             };
         }
 
+        private static float GetOpeningStackPreviewRandom01(int index)
+        {
+            return Mathf.Abs(Mathf.Sin((index + 1) * 12.9898f));
+        }
+
+        private static float GetOpeningStackPreviewSpeedFactor(int index)
+        {
+            return Mathf.Lerp(0.76f, 0.94f, GetOpeningStackPreviewRandom01(index));
+        }
+
+        private static float GetOpeningStackPreviewFloatSpeed(int index)
+        {
+            return Mathf.Lerp(1.35f, 2.25f, GetOpeningStackPreviewRandom01(index + 17));
+        }
+
+        private static Vector2 GetOpeningStackPreviewFloatAmplitude(int index)
+        {
+            return new Vector2(
+                Mathf.Lerp(5.6f, 9.8f, GetOpeningStackPreviewRandom01(index + 31)),
+                Mathf.Lerp(7.4f, 12.6f, GetOpeningStackPreviewRandom01(index + 53)));
+        }
+
         private static Vector2 GetOpeningStackPreviewOffset(int index, int totalCards)
         {
             if (totalCards <= 1)
@@ -2408,8 +2642,8 @@ namespace BackyardLegends.Runtime
             var centered = (index / (float)(totalCards - 1)) * 2f - 1f;
             var band = (index % 4) - 1.5f;
             return new Vector2(
-                centered * 58f + Mathf.Sin(index * 0.73f) * 8f,
-                -Mathf.Abs(centered) * 14f + band * 5.4f + Mathf.Cos(index * 0.47f) * 2.8f);
+                centered * 84f + Mathf.Sin(index * 0.73f) * 12f,
+                -Mathf.Abs(centered) * 18f + band * 7.2f + Mathf.Cos(index * 0.47f) * 4.1f);
         }
 
         private static float GetOpeningStackPreviewRotation(int index, int totalCards)
@@ -2727,35 +2961,7 @@ namespace BackyardLegends.Runtime
 
         private void UpdateCenterHintLayout()
         {
-            if (sceneRefs.CenterHintText == null)
-            {
-                return;
-            }
-
-            var rect = sceneRefs.CenterHintText.rectTransform;
-            switch (controller.State.Phase)
-            {
-                case MatchPhase.Bidding:
-                    SetAnchors(rect, new Vector2(0.30f, 0.37f), new Vector2(0.70f, 0.45f));
-                    sceneRefs.CenterHintText.alignment = TextAnchor.MiddleCenter;
-                    sceneRefs.CenterHintText.fontSize = 22;
-                    break;
-                case MatchPhase.TrickPlay:
-                    SetAnchors(rect, new Vector2(0.28f, 0.37f), new Vector2(0.72f, 0.45f));
-                    sceneRefs.CenterHintText.alignment = TextAnchor.MiddleCenter;
-                    sceneRefs.CenterHintText.fontSize = 22;
-                    break;
-                case MatchPhase.RoundSummary:
-                    SetAnchors(rect, new Vector2(0.22f, 0.28f), new Vector2(0.78f, 0.36f));
-                    sceneRefs.CenterHintText.alignment = TextAnchor.MiddleCenter;
-                    sceneRefs.CenterHintText.fontSize = 20;
-                    break;
-                case MatchPhase.MatchEnded:
-                    SetAnchors(rect, new Vector2(0.22f, 0.25f), new Vector2(0.78f, 0.33f));
-                    sceneRefs.CenterHintText.alignment = TextAnchor.MiddleCenter;
-                    sceneRefs.CenterHintText.fontSize = 20;
-                    break;
-            }
+            // Preserve the editor-authored Center Hint layout and position.
         }
 
         private void ApplyFanLayout(CardButtonView view, Vector2 targetPosition, Quaternion targetRotation, float targetScale)
