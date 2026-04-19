@@ -44,6 +44,7 @@ namespace BackyardLegends.Runtime
         private Coroutine homeDeltaLoop;
         private Coroutine awayDeltaLoop;
         private Coroutine dealButtonFadeLoop;
+        private Coroutine exitPromptFadeLoop;
         private SpadesMatchController controller;
         private IRuleEngine ruleEngine;
         private BackyardLegendsSession session;
@@ -225,31 +226,6 @@ namespace BackyardLegends.Runtime
             if (titleTransform != null)
             {
                 SetAnchors(titleTransform, new Vector2(0.21f, 0.58f), new Vector2(0.60f, 0.96f));
-            }
-
-            if (sceneRefs.ExitPromptOverlay == null)
-            {
-                var overlayGo = new GameObject("Exit Prompt Overlay Runtime", typeof(RectTransform), typeof(Image));
-                overlayGo.transform.SetParent(transform, false);
-                var overlayRect = overlayGo.GetComponent<RectTransform>();
-                StretchToParent(overlayRect);
-                var overlayImage = overlayGo.GetComponent<Image>();
-                overlayImage.sprite = theme.softPanelSprite != null ? theme.softPanelSprite : ResolveSoftPanelSprite();
-                overlayImage.type = Image.Type.Sliced;
-                overlayImage.color = new Color(0f, 0f, 0f, 0.64f);
-                overlayGo.SetActive(false);
-                sceneRefs.ExitPromptOverlay = overlayRect;
-                sceneRefs.ExitPromptOverlayImage = overlayImage;
-
-                var panel = CreateRuntimePanel("Exit Prompt Panel Runtime", overlayGo.transform, new Vector2(0.12f, 0.36f), new Vector2(0.88f, 0.65f));
-                panel.sprite = ResolveSheetSprite();
-                panel.type = Image.Type.Sliced;
-                panel.color = new Color(0.15f, 0.16f, 0.18f, 0.98f);
-                sceneRefs.ExitPromptPanelImage = panel;
-                sceneRefs.ExitPromptTitleText = CreateRuntimeText("Exit Prompt Title Runtime", panel.transform, "LEAVE THE TABLE?", 32, FontStyle.Bold, theme.gold, TextAnchor.UpperCenter, new Vector2(0.08f, 0.74f), new Vector2(0.92f, 0.94f));
-                sceneRefs.ExitPromptBodyText = CreateRuntimeText("Exit Prompt Body Runtime", panel.transform, "Current match progress will be lost if you go back to the lobby.", 23, FontStyle.Normal, theme.primaryText, TextAnchor.UpperLeft, new Vector2(0.08f, 0.34f), new Vector2(0.92f, 0.68f));
-                sceneRefs.ExitPromptCancelButton = CreateRuntimeButton("Exit Prompt Cancel Runtime", panel.transform, "STAY HERE", theme.green, new Vector2(0.08f, 0.08f), new Vector2(0.44f, 0.22f));
-                sceneRefs.ExitPromptConfirmButton = CreateRuntimeButton("Exit Prompt Confirm Runtime", panel.transform, "GO TO LOBBY", theme.red, new Vector2(0.56f, 0.08f), new Vector2(0.92f, 0.22f));
             }
 
             if (sceneRefs.ExitPromptOverlay != null)
@@ -702,9 +678,6 @@ namespace BackyardLegends.Runtime
             ApplyThemeText(sceneRefs.RoundSummaryText, theme.primaryText, 24, FontStyle.Normal);
             ApplyThemeText(sceneRefs.EndSummaryText, theme.primaryText, 24, FontStyle.Normal);
             ApplyThemeText(sceneRefs.BannerText, theme.gold, 32, FontStyle.Bold);
-            ApplyThemeText(sceneRefs.ExitPromptTitleText, theme.gold, 32, FontStyle.Bold);
-            ApplyThemeText(sceneRefs.ExitPromptBodyText, theme.primaryText, 23, FontStyle.Normal);
-
             if (sceneRefs.BackgroundImage != null)
             {
                 ApplyFallbackSprite(
@@ -726,9 +699,6 @@ namespace BackyardLegends.Runtime
             ApplyThemedImage(sceneRefs.BidSheetImage, sheetTint, ResolveSheetSprite());
             ApplyThemedImage(sceneRefs.RoundSheetImage, sheetTint, ResolveSheetSprite());
             ApplyThemedImage(sceneRefs.EndSheetImage, sheetTint, ResolveSheetSprite());
-            ApplyThemedImage(sceneRefs.ExitPromptOverlayImage, new Color(0f, 0f, 0f, 0.64f), ResolveSoftPanelSprite());
-            ApplyThemedImage(sceneRefs.ExitPromptPanelImage, sheetTint, ResolveSheetSprite());
-
             ConfigureChipImage(sceneRefs.HomeScoreText, theme.green);
             ConfigureChipImage(sceneRefs.AwayScoreText, theme.red);
 
@@ -776,9 +746,6 @@ namespace BackyardLegends.Runtime
             TintButton(sceneRefs.ReturnToLobbyButton, theme.panelStroke);
             TintButton(sceneRefs.DealButton, theme.green);
             TintButton(sceneRefs.PlaySelectedButton, theme.gold);
-            TintButton(sceneRefs.ExitPromptCancelButton, theme.green);
-            TintButton(sceneRefs.ExitPromptConfirmButton, theme.red);
-
             foreach (var pair in bidButtons)
             {
                 TintButton(pair.Value, theme.panelStroke);
@@ -832,6 +799,7 @@ namespace BackyardLegends.Runtime
             SetSheetVisible(sceneRefs.RoundSheet, false);
             SetSheetVisible(sceneRefs.EndSheet, false);
             SetSheetVisible(sceneRefs.ExitPromptOverlay, false);
+            ResetExitPromptVisualState();
             ShowSeatCallout(SeatId.Top, "HEY PARTNER !", 999f, new Color(theme.green.r, theme.green.g, theme.green.b, 0.95f), theme.backgroundColor);
             RenderAll();
             StartOpeningStackIntro();
@@ -1514,6 +1482,90 @@ namespace BackyardLegends.Runtime
             }
 
             return canvasGroup;
+        }
+
+        private void StartExitPromptVisibility(bool visible, System.Action onComplete = null)
+        {
+            if (sceneRefs.ExitPromptOverlay == null)
+            {
+                onComplete?.Invoke();
+                return;
+            }
+
+            if (exitPromptFadeLoop != null)
+            {
+                StopCoroutine(exitPromptFadeLoop);
+                exitPromptFadeLoop = null;
+            }
+
+            exitPromptFadeLoop = StartCoroutine(AnimateExitPromptVisibility(visible, onComplete));
+        }
+
+        private IEnumerator AnimateExitPromptVisibility(bool visible, System.Action onComplete)
+        {
+            if (sceneRefs.ExitPromptOverlay == null)
+            {
+                exitPromptFadeLoop = null;
+                onComplete?.Invoke();
+                yield break;
+            }
+
+            var overlayObject = sceneRefs.ExitPromptOverlay.gameObject;
+            var canvasGroup = ResolveCanvasGroup(overlayObject);
+            var startAlpha = canvasGroup.alpha;
+            var targetAlpha = visible ? 1f : 0f;
+            var duration = Mathf.Max(0.12f, theme.modalDuration * 0.85f);
+
+            if (visible)
+            {
+                overlayObject.SetActive(true);
+                canvasGroup.blocksRaycasts = true;
+                canvasGroup.interactable = true;
+            }
+            else
+            {
+                canvasGroup.blocksRaycasts = false;
+                canvasGroup.interactable = false;
+            }
+
+            var elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(elapsed / duration);
+                canvasGroup.alpha = Mathf.Lerp(startAlpha, targetAlpha, Mathf.SmoothStep(0f, 1f, t));
+                yield return null;
+            }
+
+            canvasGroup.alpha = targetAlpha;
+            if (!visible)
+            {
+                overlayObject.SetActive(false);
+            }
+
+            exitPromptFadeLoop = null;
+            onComplete?.Invoke();
+        }
+
+        private void ResetExitPromptVisualState()
+        {
+            if (sceneRefs.ExitPromptOverlay == null)
+            {
+                return;
+            }
+
+            if (exitPromptFadeLoop != null)
+            {
+                StopCoroutine(exitPromptFadeLoop);
+                exitPromptFadeLoop = null;
+            }
+
+            var overlayObject = sceneRefs.ExitPromptOverlay.gameObject;
+            var canvasGroup = ResolveCanvasGroup(overlayObject);
+            canvasGroup.alpha = 0f;
+            canvasGroup.blocksRaycasts = false;
+            canvasGroup.interactable = false;
+            overlayObject.SetActive(false);
         }
 
         private IEnumerator AnimateOpeningDealGhost(CardButtonView ghost, CardMotionSnapshot motion, float delay, bool revealToHand, float duration, bool playLaunchSound)
@@ -2813,13 +2865,9 @@ namespace BackyardLegends.Runtime
             }
 
             sceneRefs.ExitPromptOverlay.SetAsLastSibling();
-            SetSheetVisible(sceneRefs.ExitPromptOverlay, true);
+            StartExitPromptVisibility(true);
             PlayFeedback(FeedbackCue.Select, 0.16f);
             SpawnImpactBurst(GetAnchoredPoint(sceneRefs.ExitPromptOverlay, new Vector2(0.5f, 0.5f)), theme.red, 32f, 4);
-            if (sceneRefs.ExitPromptPanelImage != null)
-            {
-                StartCoroutine(PulseRect(sceneRefs.ExitPromptPanelImage.rectTransform, 1.03f, Mathf.Max(0.12f, theme.pulseDuration)));
-            }
         }
 
         private void CloseBackWarning()
@@ -2830,15 +2878,13 @@ namespace BackyardLegends.Runtime
             }
 
             exitPromptOpen = false;
-            SetSheetVisible(sceneRefs.ExitPromptOverlay, false);
-            ScheduleAiLoop();
+            StartExitPromptVisibility(false, ScheduleAiLoop);
         }
 
         private void ConfirmReturnToLobby()
         {
             exitPromptOpen = false;
-            SetSheetVisible(sceneRefs.ExitPromptOverlay, false);
-            ReturnToLobby();
+            StartExitPromptVisibility(false, ReturnToLobby);
         }
 
         private void ReturnToLobby()
@@ -2953,10 +2999,11 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
-            label.font = theme.ResolveFont();
             label.color = color;
-            label.fontSize = fontSize;
-            label.fontStyle = style;
+            if (label.font == null)
+            {
+                label.font = theme.ResolveFont();
+            }
         }
 
         private void UpdateCenterHintLayout()
@@ -3246,8 +3293,10 @@ namespace BackyardLegends.Runtime
             var label = button.GetComponentInChildren<Text>();
             if (label != null)
             {
-                label.font = theme.ResolveFont();
-                label.color = theme.backgroundColor;
+                if (label.font == null)
+                {
+                    label.font = theme.ResolveFont();
+                }
             }
         }
 
