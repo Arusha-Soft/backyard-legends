@@ -10,6 +10,8 @@ namespace BackyardLegends.Runtime
 {
     public sealed class BackyardLegendsBootstrap : MonoBehaviour
     {
+        private const float BottomHandCardSizeMultiplier = 2.25f;
+
         [SerializeField] private BackyardLegendsSceneRefs sceneRefs;
         [SerializeField] private ThemeConfig themeOverride;
 
@@ -17,6 +19,8 @@ namespace BackyardLegends.Runtime
         private readonly Dictionary<SeatId, TrickSlotView> trickSlots = new();
         private readonly List<CardButtonView> handPool = new();
         private readonly Dictionary<CardButtonView, Coroutine> handAnimations = new();
+        private readonly List<CardButtonView> openingStackPreviewCards = new();
+        private readonly Dictionary<CardButtonView, Coroutine> openingStackPreviewAnimations = new();
         private readonly Dictionary<int, Button> bidButtons = new();
         private readonly Dictionary<SeatId, Coroutine> bidBubbleLoops = new();
         private readonly Queue<string> recentFeed = new();
@@ -26,12 +30,15 @@ namespace BackyardLegends.Runtime
         private readonly Dictionary<SeatId, Card> resolvedTrickCards = new();
         private readonly List<CardButtonView> floatingCards = new();
         private readonly List<Graphic> transientFx = new();
+        private readonly HashSet<Image> preservedSeatPanelVisuals = new();
+        private readonly Dictionary<SeatId, Vector3> preservedSeatRootScales = new();
 
         private ThemeConfig theme;
         private RuleSetDefinition selectedRule;
         private Card? selectedCard;
         private Coroutine aiLoop;
         private Coroutine animationQueueLoop;
+        private Coroutine openingStackIntroLoop;
         private Coroutine bannerLoop;
         private Coroutine flashLoop;
         private Coroutine homeDeltaLoop;
@@ -40,6 +47,7 @@ namespace BackyardLegends.Runtime
         private IRuleEngine ruleEngine;
         private BackyardLegendsSession session;
         private AudioSource feedbackAudioSource;
+        private Image openingStackEffectImage;
         private AudioClip bidClip;
         private AudioClip selectClip;
         private AudioClip playClip;
@@ -49,6 +57,7 @@ namespace BackyardLegends.Runtime
         private bool pendingEndSheetOpen;
         private bool openingDealPending;
         private bool openingDealRunning;
+        private bool openingStackIntroRunning;
         private bool suppressNextHandEntryAnimation;
         private bool exitPromptOpen;
 
@@ -165,6 +174,7 @@ namespace BackyardLegends.Runtime
             }
 
             CacheViewRefs();
+            CapturePreservedSeatPanelVisuals();
             EnsureRuntimeCardArtTargets();
             ConfigureFeedbackAudio();
             ConfigureUiCallbacks();
@@ -300,35 +310,7 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
-            if (exitPromptOpen)
-            {
-                foreach (var pair in seatViews)
-                {
-                    pair.Value.Root.localScale = Vector3.Lerp(pair.Value.Root.localScale, Vector3.one, Time.unscaledDeltaTime * 8f);
-                }
-
-                return;
-            }
-
-            if (openingDealPending || openingDealRunning)
-            {
-                foreach (var pair in seatViews)
-                {
-                    pair.Value.Root.localScale = Vector3.Lerp(pair.Value.Root.localScale, Vector3.one, Time.unscaledDeltaTime * 8f);
-                }
-
-                return;
-            }
-
-            foreach (var pair in seatViews)
-            {
-                var isActive = controller.State.Phase is MatchPhase.Bidding or MatchPhase.TrickPlay &&
-                               GetCurrentTurnSeat() == pair.Key;
-                var scale = isActive
-                    ? 1f + Mathf.Sin(Time.unscaledTime * 5f) * 0.02f * theme.activePulseScale
-                    : 1f;
-                pair.Value.Root.localScale = Vector3.Lerp(pair.Value.Root.localScale, Vector3.one * scale, Time.unscaledDeltaTime * 8f);
-            }
+            RestoreSeatRootScales();
         }
 
         private static bool WasBackPressedThisFrame()
@@ -393,6 +375,25 @@ namespace BackyardLegends.Runtime
             foreach (var slot in trickSlots.Values)
             {
                 EnsureTrickFaceImage(slot);
+            }
+        }
+
+        private void CapturePreservedSeatPanelVisuals()
+        {
+            preservedSeatPanelVisuals.Clear();
+            preservedSeatRootScales.Clear();
+            foreach (var pair in seatViews)
+            {
+                var view = pair.Value;
+                if (view?.Panel != null)
+                {
+                    preservedSeatPanelVisuals.Add(view.Panel);
+                }
+
+                if (view != null)
+                {
+                    preservedSeatRootScales[pair.Key] = view.Root.localScale;
+                }
             }
         }
 
@@ -692,10 +693,16 @@ namespace BackyardLegends.Runtime
             ApplyThemeText(sceneRefs.ExitPromptTitleText, theme.gold, 32, FontStyle.Bold);
             ApplyThemeText(sceneRefs.ExitPromptBodyText, theme.primaryText, 23, FontStyle.Normal);
 
-            sceneRefs.BackgroundImage.sprite = theme.tableBackgroundSprite != null
-                ? theme.tableBackgroundSprite
-                : ThemeSpriteFactory.CreateBackgroundSprite(theme.backgroundSecondary, theme.backgroundColor);
-            sceneRefs.BackgroundImage.color = Color.white;
+            if (sceneRefs.BackgroundImage != null)
+            {
+                ApplyFallbackSprite(
+                    sceneRefs.BackgroundImage,
+                    theme.tableBackgroundSprite != null
+                        ? theme.tableBackgroundSprite
+                        : ThemeSpriteFactory.CreateBackgroundSprite(theme.backgroundSecondary, theme.backgroundColor));
+                sceneRefs.BackgroundImage.color = Color.white;
+            }
+
             ApplyThemedImage(sceneRefs.HudPanel, theme.panelColor, ResolvePanelSprite());
             ApplyThemedImage(sceneRefs.TablePanel, new Color(0.18f, 0.19f, 0.21f, 0.9f), ResolvePanelSprite());
             ApplyThemedImage(sceneRefs.HandPanel, theme.panelColor, ResolvePanelSprite());
@@ -713,18 +720,21 @@ namespace BackyardLegends.Runtime
             ConfigureChipImage(sceneRefs.HomeScoreText, theme.green);
             ConfigureChipImage(sceneRefs.AwayScoreText, theme.red);
 
-            foreach (var view in seatViews.Values)
+            foreach (var pair in seatViews)
             {
+                var view = pair.Value;
                 if (view != null && view.Panel != null)
                 {
-                    view.Panel.sprite = ResolvePanelSprite();
-                    view.Panel.type = Image.Type.Sliced;
+                    if (!ShouldPreserveSeatPanelVisual(view.Panel))
+                    {
+                        ApplyFallbackSprite(view.Panel, ResolvePanelSprite());
+                        view.Panel.color = GetSeatPanelTint(pair.Key);
+                    }
                 }
 
                 if (view?.BidCalloutPanel != null)
                 {
-                    view.BidCalloutPanel.sprite = theme.buttonSprite != null ? theme.buttonSprite : ResolveSoftPanelSprite();
-                    view.BidCalloutPanel.type = Image.Type.Sliced;
+                    ApplyFallbackSprite(view.BidCalloutPanel, theme.buttonSprite != null ? theme.buttonSprite : ResolveSoftPanelSprite());
                     view.BidCalloutPanel.color = new Color(0.15f, 0.16f, 0.18f, 0.96f);
                 }
 
@@ -743,8 +753,7 @@ namespace BackyardLegends.Runtime
             {
                 if (slot != null && slot.Panel != null)
                 {
-                    slot.Panel.sprite = ResolveSoftPanelSprite();
-                    slot.Panel.type = Image.Type.Sliced;
+                    ApplyFallbackSprite(slot.Panel, ResolveSoftPanelSprite());
                     slot.Panel.color = Color.white;
                 }
             }
@@ -805,6 +814,7 @@ namespace BackyardLegends.Runtime
             SetSheetVisible(sceneRefs.ExitPromptOverlay, false);
             ShowSeatCallout(SeatId.Top, "HEY PARTNER !", 999f, new Color(theme.green.r, theme.green.g, theme.green.b, 0.95f), theme.backgroundColor);
             RenderAll();
+            StartOpeningStackIntro();
         }
 
         private void OnMatchEvent(SpadesMatchEvent matchEvent)
@@ -889,10 +899,18 @@ namespace BackyardLegends.Runtime
             sceneRefs.DeckAnchorText.text = $"DECK\n{liveCards} LIVE";
             sceneRefs.DiscardAnchorText.text = $"DISCARD\n{takenCards} TAKEN";
             sceneRefs.StatusText.text = openingDealPending
-                ? openingDealRunning ? "Throwing the cards out." : "Cut the deck when you're ready."
+                ? openingDealRunning
+                    ? "Throwing the cards out."
+                    : openingStackIntroRunning
+                        ? "Stacking the deck in the middle."
+                        : "Cut the deck when you're ready."
                 : controller.State.RoundState.LastStatusMessage;
             sceneRefs.CenterHintText.text = openingDealPending
-                ? openingDealRunning ? "Cards are spreading across the table." : "Press DEAL to start the game."
+                ? openingDealRunning
+                    ? "Cards are spreading across the table."
+                    : openingStackIntroRunning
+                        ? "Deck is gathering at center table."
+                        : "Press DEAL to start the game."
                 : controller.State.Phase switch
             {
                 MatchPhase.Bidding => controller.State.RoundState.BidState.CurrentBidder == SeatId.Bottom ? "Tap a bid to lock your contract." : $"{controller.State.SeatNames[controller.State.RoundState.BidState.CurrentBidder]} is bidding.",
@@ -903,13 +921,34 @@ namespace BackyardLegends.Runtime
             };
             if (sceneRefs.DealButton != null)
             {
-                sceneRefs.DealButton.gameObject.SetActive(openingDealPending && !openingDealRunning);
-                sceneRefs.DealButton.interactable = openingDealPending && !openingDealRunning;
+                var canDeal = openingDealPending && !openingDealRunning && !openingStackIntroRunning;
+                sceneRefs.DealButton.gameObject.SetActive(canDeal);
+                sceneRefs.DealButton.interactable = canDeal;
             }
 
             if (sceneRefs.OpeningStackImage != null)
             {
-                sceneRefs.OpeningStackImage.gameObject.SetActive(openingDealPending || openingDealRunning);
+                var openingStackVisible = openingDealPending || openingDealRunning;
+                sceneRefs.OpeningStackImage.gameObject.SetActive(openingStackVisible);
+                sceneRefs.OpeningStackImage.color = new Color(1f, 1f, 1f,
+                    openingDealPending && !openingDealRunning && (openingStackIntroRunning || openingStackPreviewCards.Count > 0)
+                        ? 0f
+                        : 1f);
+            }
+
+            if (sceneRefs.OpeningStackText != null)
+            {
+                sceneRefs.OpeningStackText.gameObject.SetActive(openingDealPending && !openingStackIntroRunning && openingStackPreviewCards.Count == 0);
+            }
+
+            if (openingDealPending || openingDealRunning)
+            {
+                RefreshOpeningStackEffectVisual();
+            }
+
+            if (openingStackEffectImage != null)
+            {
+                openingStackEffectImage.gameObject.SetActive((openingDealPending || openingDealRunning) && openingStackEffectImage.sprite != null);
             }
 
             sceneRefs.LastTrickText.text = $"Last hand: {controller.DescribeLastTrick()}";
@@ -933,9 +972,10 @@ namespace BackyardLegends.Runtime
                 view.BidText.text = bid.HasValue ? $"Bid: {(bid.Value == 0 ? "Nil" : bid.Value.ToString())}" : "Bid: --";
                 view.TricksText.text = $"Books: {tricks}";
                 view.StatusText.text = seat == controller.HumanSeat ? "Player" : "Rule-based AI";
-                view.Panel.color = seat.ToTeam() == TeamId.Home
-                    ? new Color(theme.panelColor.r, theme.panelColor.g + 0.02f, theme.panelColor.b, 0.97f)
-                    : new Color(theme.panelColor.r + 0.03f, theme.panelColor.g, theme.panelColor.b, 0.97f);
+                if (view.Panel != null && !ShouldPreserveSeatPanelVisual(view.Panel))
+                {
+                    view.Panel.color = GetSeatPanelTint(seat);
+                }
             }
         }
 
@@ -997,12 +1037,14 @@ namespace BackyardLegends.Runtime
 
             var hand = controller.GetHand(SeatId.Bottom).ToList();
             selectedCard = selectedCard.HasValue && hand.Contains(selectedCard.Value) ? selectedCard : null;
+            var selectedIndex = selectedCard.HasValue ? hand.FindIndex(card => card.Equals(selectedCard.Value)) : -1;
             var legalCards = controller.State.Phase == MatchPhase.TrickPlay && controller.State.RoundState.TrickState.CurrentTurn == SeatId.Bottom
                 ? controller.GetLegalCardsForSeat(SeatId.Bottom).ToHashSet()
                 : new HashSet<Card>();
 
             EnsureCardPoolSize(hand.Count);
             var previousHand = lastRenderedHand.ToHashSet();
+            CardButtonView selectedView = null;
 
             for (var index = 0; index < hand.Count; index++)
             {
@@ -1010,12 +1052,16 @@ namespace BackyardLegends.Runtime
                 var view = handPool[index];
                 var isLegal = legalCards.Contains(card);
                 var isSelected = selectedCard.HasValue && selectedCard.Value.Equals(card);
-                var targetPosition = GetFanTargetPosition(index, hand.Count, isSelected);
+                var targetPosition = GetFanTargetPosition(index, hand.Count, isSelected, selectedIndex);
                 var targetRotation = GetFanTargetRotation(index, hand.Count);
                 var targetScale = isSelected ? theme.selectedCardScale : 1f;
                 ConfigureCardView(view, card, isLegal, isSelected);
                 view.gameObject.SetActive(true);
                 view.Root.SetSiblingIndex(index);
+                if (isSelected)
+                {
+                    selectedView = view;
+                }
 
                 if (!previousHand.Contains(card))
                 {
@@ -1032,6 +1078,11 @@ namespace BackyardLegends.Runtime
                 {
                     StartHandLayoutAnimation(view, targetPosition, targetRotation, targetScale);
                 }
+            }
+
+            if (selectedView != null)
+            {
+                selectedView.Root.SetAsLastSibling();
             }
 
             for (var index = hand.Count; index < handPool.Count; index++)
@@ -1073,6 +1124,7 @@ namespace BackyardLegends.Runtime
             StopHandAnimation(view);
             EnsureCardFaceImage(view);
             view.gameObject.name = card.ShortLabel;
+            view.Root.sizeDelta = ResolveBottomHandCardSize();
             view.RankText.font = theme.ResolveFont();
             view.SuitText.font = theme.ResolveFont();
             view.RankText.text = card.RankLabel;
@@ -1098,6 +1150,30 @@ namespace BackyardLegends.Runtime
             view.Panel.type = Image.Type.Sliced;
             view.Panel.color = Color.white;
             HideFaceImage(view.FaceImage);
+            SetGraphicAlpha(view.RankText, 0f);
+            SetGraphicAlpha(view.SuitText, 0f);
+        }
+
+        private void ApplyOpeningStackPreviewVisual(CardButtonView view)
+        {
+            var artImage = EnsureCardFaceImage(view);
+            if (artImage != null)
+            {
+                SetAnchors(artImage.rectTransform, Vector2.zero, Vector2.one);
+            }
+
+            if (artImage == null || !BackyardLegendsCardArtCatalog.TryGetEmptyCardSprite(out var sprite))
+            {
+                ApplyCardBackVisual(view);
+                return;
+            }
+
+            view.Panel.sprite = null;
+            view.Panel.type = Image.Type.Simple;
+            view.Panel.color = Color.clear;
+            artImage.sprite = sprite;
+            artImage.color = Color.white;
+            artImage.enabled = true;
             SetGraphicAlpha(view.RankText, 0f);
             SetGraphicAlpha(view.SuitText, 0f);
         }
@@ -1244,6 +1320,12 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
+            if (openingStackIntroRunning)
+            {
+                FlashStatus("Give the deck a second to settle.", theme.gold);
+                return;
+            }
+
             if (aiLoop != null)
             {
                 StopCoroutine(aiLoop);
@@ -1251,6 +1333,7 @@ namespace BackyardLegends.Runtime
             }
 
             openingDealRunning = true;
+            ClearOpeningStackPreviewCards();
             HideAllBidBubbles(true);
             PlayFeedback(FeedbackCue.Banner, 0.16f);
             SpawnImpactBurst(GetOpeningStackPosition(), theme.gold, 38f, 5);
@@ -1292,6 +1375,7 @@ namespace BackyardLegends.Runtime
             suppressNextHandEntryAnimation = true;
             openingDealPending = false;
             openingDealRunning = false;
+            ClearOpeningStackPreviewCards();
             RenderAll();
 
             foreach (var ghost in ghosts)
@@ -1372,6 +1456,12 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
+            var clearedPreviousSelection = selectedCard.HasValue && !selectedCard.Value.Equals(card);
+            if (clearedPreviousSelection)
+            {
+                selectedCard = null;
+            }
+
             var legalCards = controller.GetLegalCardsForSeat(SeatId.Bottom).ToHashSet();
             if (!legalCards.Contains(card))
             {
@@ -1380,6 +1470,11 @@ namespace BackyardLegends.Runtime
                 if (invalidView != null)
                 {
                     StartCoroutine(Shake(invalidView.Root));
+                }
+
+                if (clearedPreviousSelection)
+                {
+                    RenderHand();
                 }
 
                 return;
@@ -1611,7 +1706,6 @@ namespace BackyardLegends.Runtime
             SpawnImpactBurst(GetAnchoredPoint(seatViews[winner].Root, GetSeatInnerAnchor(winner)), winner.ToTeam() == TeamId.Home ? theme.green : theme.red, 42f, 5);
             SpawnImpactBurst(GetAnchoredPoint(sceneRefs.DiscardAnchorImage.rectTransform, new Vector2(0.5f, 0.5f)), theme.gold, 28f, 3);
             yield return PulseRect(sceneRefs.DiscardAnchorImage.rectTransform, 1.07f, Mathf.Max(0.12f, theme.pulseDuration * 0.8f));
-            yield return PulseRect(seatViews[winner].Root, 1.08f, Mathf.Max(0.14f, theme.pulseDuration));
         }
 
         private IEnumerator AnimateFloatingCard(CardButtonView ghost, CardMotionSnapshot motion, float duration, bool fadeOutNearEnd, bool revealFromBack)
@@ -1721,10 +1815,10 @@ namespace BackyardLegends.Runtime
         private CardMotionSnapshot BuildOpeningDealMotion(SeatId seat, Card card, int index, int count)
         {
             var startPosition = GetOpeningStackPosition() + new Vector2(Random.Range(-12f, 12f), Random.Range(-10f, 10f));
-            var startSize = sceneRefs.CardButtonPrefab != null ? sceneRefs.CardButtonPrefab.Root.sizeDelta * 0.82f : new Vector2(82f, 116f);
+            var startSize = ResolveCardButtonBaseSize() * 0.82f;
             var endSize = seat == SeatId.Bottom
-                ? (sceneRefs.CardButtonPrefab != null ? sceneRefs.CardButtonPrefab.Root.sizeDelta : new Vector2(82f, 116f))
-                : (sceneRefs.CardButtonPrefab != null ? sceneRefs.CardButtonPrefab.Root.sizeDelta * 0.52f : new Vector2(46f, 64f));
+                ? ResolveBottomHandCardSize()
+                : ResolveCardButtonBaseSize() * 0.52f;
             var endRotation = seat == SeatId.Bottom
                 ? GetFanTargetRotation(index, count)
                 : Quaternion.Euler(0f, 0f, seat == SeatId.Left ? -84f : seat == SeatId.Right ? 84f : 0f);
@@ -1836,6 +1930,8 @@ namespace BackyardLegends.Runtime
             resolvedTrickCards.Clear();
             pendingRoundSheetOpen = false;
             pendingEndSheetOpen = false;
+            StopOpeningStackIntro();
+            ClearOpeningStackPreviewCards();
             ClearFloatingCards();
             ClearTransientFx();
             HideAllBidBubbles(true);
@@ -1851,6 +1947,203 @@ namespace BackyardLegends.Runtime
                 StopCoroutine(animationQueueLoop);
                 animationQueueLoop = null;
             }
+        }
+
+        private void StartOpeningStackIntro()
+        {
+            StopOpeningStackIntro();
+            ClearOpeningStackPreviewCards();
+            if (!openingDealPending || controller?.State?.RoundState == null || sceneRefs.CardButtonPrefab == null)
+            {
+                openingStackIntroRunning = false;
+                RenderAll();
+                return;
+            }
+
+            openingStackIntroLoop = StartCoroutine(OpeningStackIntroSequence());
+        }
+
+        private void StopOpeningStackIntro()
+        {
+            if (openingStackIntroLoop != null)
+            {
+                StopCoroutine(openingStackIntroLoop);
+                openingStackIntroLoop = null;
+            }
+
+            openingStackIntroRunning = false;
+        }
+
+        private IEnumerator OpeningStackIntroSequence()
+        {
+            openingStackIntroRunning = true;
+            RefreshOpeningStackEffectVisual();
+            RenderAll();
+
+            var totalCards = ResolveOpeningStackCardCount();
+            var delayStep = 0.012f;
+            var travelDuration = Mathf.Max(0.18f, theme.modalDuration * 0.92f);
+            var previewSize = ResolveOpeningStackPreviewCardSize();
+
+            for (var index = 0; index < totalCards; index++)
+            {
+                var preview = CreateOpeningStackPreviewCard(index, previewSize);
+                openingStackPreviewAnimations[preview] = StartCoroutine(AnimateOpeningStackPreviewCard(preview, index, totalCards, travelDuration, delayStep * index));
+            }
+
+            PlayFeedback(FeedbackCue.Collect, 0.14f);
+            yield return new WaitForSecondsRealtime(delayStep * Mathf.Max(0, totalCards - 1) + travelDuration + 0.06f);
+
+            openingStackIntroRunning = false;
+            openingStackIntroLoop = null;
+            RenderAll();
+        }
+
+        private CardButtonView CreateOpeningStackPreviewCard(int index, Vector2 previewSize)
+        {
+            var preview = Instantiate(sceneRefs.CardButtonPrefab, AnimationRoot);
+            preview.gameObject.name = $"Opening Stack Preview {index + 1}";
+            preview.transform.SetAsLastSibling();
+            preview.Button.onClick.RemoveAllListeners();
+            preview.Button.enabled = false;
+            preview.CanvasGroup = preview.CanvasGroup != null ? preview.CanvasGroup : preview.GetComponent<CanvasGroup>();
+            if (preview.CanvasGroup == null)
+            {
+                preview.CanvasGroup = preview.gameObject.AddComponent<CanvasGroup>();
+            }
+
+            preview.CanvasGroup.blocksRaycasts = false;
+            preview.Root.anchorMin = new Vector2(0.5f, 0.5f);
+            preview.Root.anchorMax = new Vector2(0.5f, 0.5f);
+            preview.Root.pivot = new Vector2(0.5f, 0.5f);
+            preview.Root.anchoredPosition = GetOpeningStackPreviewEntryPosition(index);
+            preview.Root.sizeDelta = previewSize;
+            preview.Root.localRotation = Quaternion.Euler(0f, 0f, GetOpeningStackPreviewEntryRotation(index));
+            preview.Root.localScale = Vector3.one * Random.Range(0.94f, 1f);
+            preview.CanvasGroup.alpha = 0f;
+            ApplyOpeningStackPreviewVisual(preview);
+            openingStackPreviewCards.Add(preview);
+            return preview;
+        }
+
+        private IEnumerator AnimateOpeningStackPreviewCard(CardButtonView preview, int index, int totalCards, float duration, float delay)
+        {
+            if (preview == null)
+            {
+                yield break;
+            }
+
+            if (delay > 0f)
+            {
+                yield return new WaitForSecondsRealtime(delay);
+            }
+
+            var startPosition = preview.Root.anchoredPosition;
+            var startRotation = preview.Root.localRotation;
+            var startScale = preview.Root.localScale;
+            var previewSize = ResolveOpeningStackPreviewCardSize();
+            var targetPosition = GetOpeningStackPosition() + GetOpeningStackPreviewOffset(index, totalCards);
+            var targetRotation = Quaternion.Euler(0f, 0f, GetOpeningStackPreviewRotation(index, totalCards));
+            var arcHeight = Mathf.Lerp(18f, 42f, totalCards <= 1 ? 0f : index / (float)(totalCards - 1));
+            var elapsed = 0f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(elapsed / duration);
+                var eased = 1f - Mathf.Pow(1f - t, 3f);
+                preview.CanvasGroup.alpha = Mathf.Lerp(0f, 1f, eased);
+                preview.Root.anchoredPosition = Vector2.Lerp(startPosition, targetPosition, eased) + Vector2.up * Mathf.Sin(t * Mathf.PI) * arcHeight;
+                preview.Root.sizeDelta = Vector2.Lerp(previewSize * 0.92f, previewSize, eased);
+                preview.Root.localRotation = Quaternion.Slerp(startRotation, targetRotation, eased);
+                preview.Root.localScale = Vector3.Lerp(startScale, Vector3.one, eased);
+                yield return null;
+            }
+
+            preview.CanvasGroup.alpha = 1f;
+            preview.Root.anchoredPosition = targetPosition;
+            preview.Root.sizeDelta = previewSize;
+            preview.Root.localRotation = targetRotation;
+            preview.Root.localScale = Vector3.one;
+            while (preview != null && openingDealPending && !openingDealRunning)
+            {
+                var floatTime = Time.unscaledTime * 1.08f + index * 0.29f;
+                var floatOffset = new Vector2(
+                    Mathf.Sin(floatTime) * 4.8f,
+                    Mathf.Cos(floatTime * 1.17f) * 6.2f);
+                preview.Root.anchoredPosition = targetPosition + floatOffset;
+                preview.Root.localRotation = Quaternion.Euler(0f, 0f, GetOpeningStackPreviewRotation(index, totalCards) + Mathf.Sin(floatTime * 0.92f) * 3.2f);
+                yield return null;
+            }
+
+            openingStackPreviewAnimations.Remove(preview);
+        }
+
+        private void ClearOpeningStackPreviewCards()
+        {
+            foreach (var pair in openingStackPreviewAnimations.ToArray())
+            {
+                if (pair.Value != null)
+                {
+                    StopCoroutine(pair.Value);
+                }
+            }
+
+            openingStackPreviewAnimations.Clear();
+            foreach (var preview in openingStackPreviewCards.ToArray())
+            {
+                if (preview != null)
+                {
+                    Destroy(preview.gameObject);
+                }
+            }
+
+            openingStackPreviewCards.Clear();
+        }
+
+        private void RefreshOpeningStackEffectVisual()
+        {
+            EnsureOpeningStackEffectVisual();
+            if (openingStackEffectImage == null)
+            {
+                return;
+            }
+
+            if (!BackyardLegendsCardArtCatalog.TryGetOpeningEffectSprite(out var effectSprite))
+            {
+                openingStackEffectImage.sprite = null;
+                openingStackEffectImage.enabled = false;
+                return;
+            }
+
+            var previewSize = ResolveOpeningStackPreviewCardSize();
+            var rect = openingStackEffectImage.rectTransform;
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = new Vector2(-10f, -8f);
+            rect.sizeDelta = previewSize * 1.2f;
+            rect.localRotation = Quaternion.Euler(0f, 0f, -7f);
+            rect.localScale = Vector3.one;
+            openingStackEffectImage.sprite = effectSprite;
+            openingStackEffectImage.type = Image.Type.Simple;
+            openingStackEffectImage.preserveAspect = true;
+            openingStackEffectImage.color = new Color(1f, 1f, 1f, 0.86f);
+            openingStackEffectImage.enabled = true;
+            openingStackEffectImage.transform.SetAsFirstSibling();
+        }
+
+        private void EnsureOpeningStackEffectVisual()
+        {
+            if (sceneRefs.OpeningStackImage == null || openingStackEffectImage != null)
+            {
+                return;
+            }
+
+            var go = new GameObject("Opening Stack Effect Runtime", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(sceneRefs.OpeningStackImage.transform, false);
+            openingStackEffectImage = go.GetComponent<Image>();
+            openingStackEffectImage.raycastTarget = false;
         }
 
         private void ApplyDeferredSheetState()
@@ -2065,6 +2358,69 @@ namespace BackyardLegends.Runtime
             return sceneRefs.OpeningStackImage != null
                 ? GetAnchoredPoint(sceneRefs.OpeningStackImage.rectTransform, new Vector2(0.5f, 0.5f))
                 : GetAnchoredPoint(sceneRefs.TablePanel.rectTransform, new Vector2(0.5f, 0.5f));
+        }
+
+        private int ResolveOpeningStackCardCount()
+        {
+            return controller?.State?.RoundState != null
+                ? controller.State.RoundState.HandsBySeat.Values.Sum(cards => cards.Count)
+                : 52;
+        }
+
+        private Vector2 ResolveOpeningStackPreviewCardSize()
+        {
+            return ResolveCardButtonBaseSize() * 1.12f;
+        }
+
+        private Vector2 GetOpeningStackPreviewEntryPosition(int index)
+        {
+            var rect = AnimationRoot.rect;
+            var sidePadding = 150f;
+            var innerX = Mathf.Lerp(rect.xMin + 84f, rect.xMax - 84f, Random.value);
+            var innerY = Mathf.Lerp(rect.yMin + 112f, rect.yMax - 112f, Random.value);
+            return (index % 4) switch
+            {
+                0 => new Vector2(innerX, rect.yMax + sidePadding),
+                1 => new Vector2(rect.xMax + sidePadding, innerY),
+                2 => new Vector2(innerX, rect.yMin - sidePadding),
+                _ => new Vector2(rect.xMin - sidePadding, innerY)
+            };
+        }
+
+        private float GetOpeningStackPreviewEntryRotation(int index)
+        {
+            return (index % 4) switch
+            {
+                0 => Random.Range(-24f, 24f),
+                1 => Random.Range(-34f, -10f),
+                2 => Random.Range(-24f, 24f),
+                _ => Random.Range(10f, 34f)
+            };
+        }
+
+        private static Vector2 GetOpeningStackPreviewOffset(int index, int totalCards)
+        {
+            if (totalCards <= 1)
+            {
+                return Vector2.zero;
+            }
+
+            var centered = (index / (float)(totalCards - 1)) * 2f - 1f;
+            var band = (index % 4) - 1.5f;
+            return new Vector2(
+                centered * 58f + Mathf.Sin(index * 0.73f) * 8f,
+                -Mathf.Abs(centered) * 14f + band * 5.4f + Mathf.Cos(index * 0.47f) * 2.8f);
+        }
+
+        private static float GetOpeningStackPreviewRotation(int index, int totalCards)
+        {
+            if (totalCards <= 1)
+            {
+                return 0f;
+            }
+
+            var centered = (index / (float)(totalCards - 1)) * 2f - 1f;
+            return -centered * 16f + Mathf.Sin(index * 0.62f) * 3.4f;
         }
 
         private Vector2 GetHandAnimationPoint(int index, int count, bool isSelected)
@@ -2412,7 +2768,7 @@ namespace BackyardLegends.Runtime
             view.Root.localScale = targetScale * Vector3.one;
         }
 
-        private Vector2 GetFanTargetPosition(int index, int count, bool isSelected)
+        private Vector2 GetFanTargetPosition(int index, int count, bool isSelected, int selectedIndex = -1)
         {
             if (count <= 0)
             {
@@ -2424,6 +2780,14 @@ namespace BackyardLegends.Runtime
             var containerWidth = sceneRefs.HandContent != null ? sceneRefs.HandContent.rect.width : 720f;
             var maxSpread = Mathf.Clamp((containerWidth - 120f) / Mathf.Max(1, count), 28f, 52f);
             var x = t * span * 0.5f * maxSpread;
+            if (selectedIndex >= 0 && selectedIndex < count && index != selectedIndex)
+            {
+                var delta = index - selectedIndex;
+                var pushBase = Mathf.Clamp(ResolveBottomHandCardSize().x * 0.16f, 18f, 34f);
+                var falloff = Mathf.Pow(0.72f, Mathf.Abs(delta) - 1);
+                x += Mathf.Sign(delta) * pushBase * falloff;
+            }
+
             var y = -Mathf.Abs(t) * 20f + 8f + (isSelected ? theme.cardLiftAmount : 0f);
             return new Vector2(x, y);
         }
@@ -2437,6 +2801,43 @@ namespace BackyardLegends.Runtime
 
             var t = (index / (float)(count - 1)) * 2f - 1f;
             return Quaternion.Euler(0f, 0f, -t * 10f);
+        }
+
+        private Vector2 ResolveCardButtonBaseSize()
+        {
+            return sceneRefs.CardButtonPrefab != null ? sceneRefs.CardButtonPrefab.Root.sizeDelta : new Vector2(82f, 116f);
+        }
+
+        private Vector2 ResolveBottomHandCardSize()
+        {
+            return ResolveCardButtonBaseSize() * BottomHandCardSizeMultiplier;
+        }
+
+        private Color GetSeatPanelTint(SeatId seat)
+        {
+            return seat.ToTeam() == TeamId.Home
+                ? new Color(theme.panelColor.r, theme.panelColor.g + 0.02f, theme.panelColor.b, 0.97f)
+                : new Color(theme.panelColor.r + 0.03f, theme.panelColor.g, theme.panelColor.b, 0.97f);
+        }
+
+        private void RestoreSeatRootScales()
+        {
+            foreach (var pair in seatViews)
+            {
+                if (pair.Value == null)
+                {
+                    continue;
+                }
+
+                pair.Value.Root.localScale = preservedSeatRootScales.TryGetValue(pair.Key, out var scale)
+                    ? scale
+                    : Vector3.one;
+            }
+        }
+
+        private bool ShouldPreserveSeatPanelVisual(Image image)
+        {
+            return image != null && preservedSeatPanelVisuals.Contains(image);
         }
 
         private static void SetAnchors(RectTransform rectTransform, Vector2 anchorMin, Vector2 anchorMax)
@@ -2545,11 +2946,23 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
-            chipImage.sprite = theme.chipSprite != null
-                ? theme.chipSprite
-                : ThemeSpriteFactory.CreateChipSprite(tint, theme.gold);
-            chipImage.type = Image.Type.Sliced;
+            ApplyFallbackSprite(
+                chipImage,
+                theme.chipSprite != null
+                    ? theme.chipSprite
+                    : ThemeSpriteFactory.CreateChipSprite(tint, theme.gold));
             chipImage.color = tint;
+        }
+
+        private static void ApplyFallbackSprite(Image image, Sprite sprite)
+        {
+            if (image == null || image.sprite != null || sprite == null)
+            {
+                return;
+            }
+
+            image.sprite = sprite;
+            image.type = Image.Type.Sliced;
         }
 
         private static void ApplyThemedImage(Image image, Color color, Sprite sprite)
@@ -2559,8 +2972,7 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
-            image.sprite = sprite;
-            image.type = sprite != null ? Image.Type.Sliced : Image.Type.Simple;
+            ApplyFallbackSprite(image, sprite);
             image.color = color;
         }
 
@@ -2571,8 +2983,8 @@ namespace BackyardLegends.Runtime
             var image = go.GetComponent<Image>();
             var rect = image.rectTransform;
             SetAnchors(rect, anchorMin, anchorMax);
-            image.sprite = ResolveCardBackSprite();
-            image.type = Image.Type.Sliced;
+            image.sprite = null;
+            image.type = Image.Type.Simple;
             image.color = Color.white;
             return image;
         }
@@ -2619,10 +3031,11 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
-            button.image.sprite = theme.buttonSprite != null
-                ? theme.buttonSprite
-                : ThemeSpriteFactory.CreateRoundedRectSprite(tint, theme.backgroundSecondary, 256, 96, 22);
-            button.image.type = Image.Type.Sliced;
+            ApplyFallbackSprite(
+                button.image,
+                theme.buttonSprite != null
+                    ? theme.buttonSprite
+                    : ThemeSpriteFactory.CreateRoundedRectSprite(tint, theme.backgroundSecondary, 256, 96, 22));
             button.image.color = tint;
             var label = button.GetComponentInChildren<Text>();
             if (label != null)
