@@ -248,10 +248,10 @@ RectTransform:
   - {fileID: 1910750815}
   m_Father: {fileID: 746925501}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
+  m_AnchorMin: {x: 0.65900004, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: -2.289917, y: 0.4967041}
+  m_SizeDelta: {x: 4.788025, y: -0.9934082}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &213726233
 MonoBehaviour:
@@ -673,12 +673,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   autoPlayOnEnable: 1
   stagger: 0.01
-  includeInactiveChildren: 1
+  includeInactiveChildren: 0
   autoRandomizeOnPlay: 0
-  strength: 1
-  durationMin: 0.35
-  durationMax: 0.6
-  preset: 8
+  strength: 1.4755555
+  durationMin: 0.25
+  durationMax: 0.25
+  preset: 47
   deactivateGameObjectAfterPlayOut: 0
   destroyGameObjectAfterPlayOut: 0
   allowPreviewInEditMode: 1
@@ -694,34 +694,43 @@ MonoBehaviour:
   elements:
   - ignore: 0
     target: {fileID: 1653516581}
-    animatePosition: 1
-    positionOffset: {x: 14.575745, y: 119.891685}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
     useCurvePath: 1
-    curveAmplitude: 31.221365
+    curveAmplitude: 10.993008
     useShakeJitter: 0
     shakeMagnitude: 0
     shakeRotationMagnitude: 0
     shakeFrequency: 0
     shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: 1.5377156}
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
     animateScale: 1
-    scaleFrom: {x: 0.8954751, y: 0.8954751, z: 0.8954751}
+    scaleFrom: {x: 0.9452988, y: 0.9452988, z: 0.9452988}
     animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
+    fadeFrom: 0.15115203
+    animateColor: 1
     graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.6
-    delay: 0.016783245
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 1.0034463
+    delay: 0.048316594
     ease:
       serializedVersion: 2
       m_Curve:
       - serializedVersion: 3
         time: 0
         value: 0
-        inSlope: 0
-        outSlope: 5
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
@@ -730,7 +739,7 @@ MonoBehaviour:
         time: 1
         value: 1
         inSlope: 0
-        outSlope: 0
+        outSlope: 0.7854
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
@@ -746,740 +755,26 @@ MonoBehaviour:
     hasInitialState: 1
   - ignore: 0
     target: {fileID: 1197257266}
-    animatePosition: 1
-    positionOffset: {x: 78.360954, y: 103.171135}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
     useCurvePath: 1
-    curveAmplitude: 38.80355
+    curveAmplitude: 11.827463
     useShakeJitter: 0
     shakeMagnitude: 0
     shakeRotationMagnitude: 0
     shakeFrequency: 0
     shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: -58.643673}
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
     animateScale: 1
-    scaleFrom: {x: 0.8820421, y: 0.8820421, z: 0.8820421}
+    scaleFrom: {x: 0.89039236, y: 0.89039236, z: 0.89039236}
     animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
+    fadeFrom: 0.101159535
+    animateColor: 1
     graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.5403008
-    delay: 0.038353868
-    ease:
-      serializedVersion: 2
-      m_Curve:
-      - serializedVersion: 3
-        time: 0
-        value: 0
-        inSlope: 0
-        outSlope: 5
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 1
-        value: 1
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      m_PreInfinity: 2
-      m_PostInfinity: 2
-      m_RotationOrder: 4
-    initialPosition: {x: 0, y: 0}
-    initialRotation: {x: 0, y: 0, z: 0, w: 1}
-    initialScale: {x: 1, y: 1, z: 1}
-    initialAlpha: 1
-    initialColor: {r: 1, g: 1, b: 1, a: 1}
-    hasInitialState: 1
-  - ignore: 0
-    target: {fileID: 35879245}
-    animatePosition: 1
-    positionOffset: {x: -58.556595, y: 103.01656}
-    useCurvePath: 1
-    curveAmplitude: 30.344034
-    useShakeJitter: 0
-    shakeMagnitude: 0
-    shakeRotationMagnitude: 0
-    shakeFrequency: 0
-    shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: -13.018684}
-    animateScale: 1
-    scaleFrom: {x: 0.799319, y: 0.799319, z: 0.799319}
-    animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
-    graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.5346218
-    delay: 0.0748511
-    ease:
-      serializedVersion: 2
-      m_Curve:
-      - serializedVersion: 3
-        time: 0
-        value: 0
-        inSlope: 0
-        outSlope: 5
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 1
-        value: 1
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      m_PreInfinity: 2
-      m_PostInfinity: 2
-      m_RotationOrder: 4
-    initialPosition: {x: 0, y: 0}
-    initialRotation: {x: 0, y: 0, z: 0, w: 1}
-    initialScale: {x: 1, y: 1, z: 1}
-    initialAlpha: 1
-    initialColor: {r: 1, g: 1, b: 1, a: 1}
-    hasInitialState: 1
-  - ignore: 0
-    target: {fileID: 1132557856}
-    animatePosition: 1
-    positionOffset: {x: 67.58659, y: 61.47305}
-    useCurvePath: 1
-    curveAmplitude: 27.37046
-    useShakeJitter: 0
-    shakeMagnitude: 0
-    shakeRotationMagnitude: 0
-    shakeFrequency: 0
-    shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: 17.226236}
-    animateScale: 1
-    scaleFrom: {x: 0.7152444, y: 0.7152444, z: 0.7152444}
-    animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
-    graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.5459674
-    delay: 0.04162993
-    ease:
-      serializedVersion: 2
-      m_Curve:
-      - serializedVersion: 3
-        time: 0
-        value: 0
-        inSlope: 0
-        outSlope: 5
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 1
-        value: 1
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      m_PreInfinity: 2
-      m_PostInfinity: 2
-      m_RotationOrder: 4
-    initialPosition: {x: 0, y: 0}
-    initialRotation: {x: 0, y: 0, z: 0, w: 1}
-    initialScale: {x: 1, y: 1, z: 1}
-    initialAlpha: 1
-    initialColor: {r: 0.15, g: 0.16, b: 0.18, a: 0.98}
-    hasInitialState: 1
-  - ignore: 0
-    target: {fileID: 1172612408}
-    animatePosition: 1
-    positionOffset: {x: 61.262707, y: 97.60562}
-    useCurvePath: 1
-    curveAmplitude: 27.936892
-    useShakeJitter: 0
-    shakeMagnitude: 0
-    shakeRotationMagnitude: 0
-    shakeFrequency: 0
-    shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: 31.639595}
-    animateScale: 1
-    scaleFrom: {x: 0.84511346, y: 0.84511346, z: 0.84511346}
-    animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
-    graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.6
-    delay: 0.03218658
-    ease:
-      serializedVersion: 2
-      m_Curve:
-      - serializedVersion: 3
-        time: 0
-        value: 0
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 0.5
-        value: 0.5
-        inSlope: 2
-        outSlope: 2
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 1
-        value: 1
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      m_PreInfinity: 2
-      m_PostInfinity: 2
-      m_RotationOrder: 4
-    initialPosition: {x: 0, y: -30}
-    initialRotation: {x: 0, y: 0, z: 0, w: 1}
-    initialScale: {x: 1, y: 1, z: 1}
-    initialAlpha: 1
-    initialColor: {r: 0.95, g: 0.95, b: 0.95, a: 1}
-    hasInitialState: 1
-  - ignore: 0
-    target: {fileID: 1325517912}
-    animatePosition: 1
-    positionOffset: {x: -21.43586, y: 101.49289}
-    useCurvePath: 1
-    curveAmplitude: 36.197136
-    useShakeJitter: 0
-    shakeMagnitude: 0
-    shakeRotationMagnitude: 0
-    shakeFrequency: 0
-    shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: -38.960526}
-    animateScale: 1
-    scaleFrom: {x: 0.7358783, y: 0.7358783, z: 0.7358783}
-    animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
-    graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.6
-    delay: 0.028006824
-    ease:
-      serializedVersion: 2
-      m_Curve:
-      - serializedVersion: 3
-        time: 0
-        value: 0
-        inSlope: 0
-        outSlope: 5
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 1
-        value: 1
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      m_PreInfinity: 2
-      m_PostInfinity: 2
-      m_RotationOrder: 4
-    initialPosition: {x: 0, y: 0}
-    initialRotation: {x: 0, y: 0, z: 0, w: 1}
-    initialScale: {x: 1, y: 1, z: 1}
-    initialAlpha: 1
-    initialColor: {r: 1, g: 1, b: 1, a: 0.22}
-    hasInitialState: 1
-  - ignore: 0
-    target: {fileID: 306744404}
-    animatePosition: 1
-    positionOffset: {x: 9.694314, y: 76.09698}
-    useCurvePath: 1
-    curveAmplitude: 30.542566
-    useShakeJitter: 0
-    shakeMagnitude: 0
-    shakeRotationMagnitude: 0
-    shakeFrequency: 0
-    shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: -24.986155}
-    animateScale: 1
-    scaleFrom: {x: 0.82759905, y: 0.82759905, z: 0.82759905}
-    animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
-    graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.6
-    delay: 0.03678718
-    ease:
-      serializedVersion: 2
-      m_Curve:
-      - serializedVersion: 3
-        time: 0
-        value: 0
-        inSlope: 0.7854
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 0.5
-        value: 0.5
-        inSlope: 0.7854
-        outSlope: 0.7854
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 1
-        value: 1
-        inSlope: 0
-        outSlope: 0.7854
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      m_PreInfinity: 2
-      m_PostInfinity: 2
-      m_RotationOrder: 4
-    initialPosition: {x: -0.78900146, y: -0.9980011}
-    initialRotation: {x: 0, y: 0, z: 0, w: 1}
-    initialScale: {x: 0.6818, y: 0.6818, z: 0.6818}
-    initialAlpha: 1
-    initialColor: {r: 0.1981132, g: 0, b: 0, a: 1}
-    hasInitialState: 1
-  - ignore: 0
-    target: {fileID: 1190795028}
-    animatePosition: 1
-    positionOffset: {x: 42.402195, y: 117.17878}
-    useCurvePath: 1
-    curveAmplitude: 42.006252
-    useShakeJitter: 0
-    shakeMagnitude: 0
-    shakeRotationMagnitude: 0
-    shakeFrequency: 0
-    shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: -57.308735}
-    animateScale: 1
-    scaleFrom: {x: 0.7046722, y: 0.7046722, z: 0.7046722}
-    animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
-    graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.5129623
-    delay: 0.09472016
-    ease:
-      serializedVersion: 2
-      m_Curve:
-      - serializedVersion: 3
-        time: 0
-        value: 0
-        inSlope: 0
-        outSlope: 5
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 1
-        value: 1
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      m_PreInfinity: 2
-      m_PostInfinity: 2
-      m_RotationOrder: 4
-    initialPosition: {x: 1.1380005, y: -2.6410065}
-    initialRotation: {x: 0, y: 0, z: 0, w: 1}
-    initialScale: {x: 0.6818, y: 0.6818, z: 0.6818}
-    initialAlpha: 1
-    initialColor: {r: 0.1981132, g: 0, b: 0, a: 1}
-    hasInitialState: 1
-  - ignore: 0
-    target: {fileID: 2034991020}
-    animatePosition: 1
-    positionOffset: {x: -32.178665, y: 52.037792}
-    useCurvePath: 1
-    curveAmplitude: 33.971073
-    useShakeJitter: 0
-    shakeMagnitude: 0
-    shakeRotationMagnitude: 0
-    shakeFrequency: 0
-    shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: -34.307125}
-    animateScale: 1
-    scaleFrom: {x: 0.82386625, y: 0.82386625, z: 0.82386625}
-    animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
-    graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.42500252
-    delay: 0.053880766
-    ease:
-      serializedVersion: 2
-      m_Curve:
-      - serializedVersion: 3
-        time: 0
-        value: 0
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 1
-        value: 1
-        inSlope: 4
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      m_PreInfinity: 2
-      m_PostInfinity: 2
-      m_RotationOrder: 4
-    initialPosition: {x: 0, y: 0}
-    initialRotation: {x: 0, y: 0, z: 0, w: 1}
-    initialScale: {x: 1, y: 1, z: 1}
-    initialAlpha: 1
-    initialColor: {r: 0.66, g: 0.67, b: 0.7, a: 1}
-    hasInitialState: 1
-  - ignore: 0
-    target: {fileID: 1163224366}
-    animatePosition: 1
-    positionOffset: {x: 21.554731, y: 67.27633}
-    useCurvePath: 1
-    curveAmplitude: 39.59029
-    useShakeJitter: 0
-    shakeMagnitude: 0
-    shakeRotationMagnitude: 0
-    shakeFrequency: 0
-    shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: -30.53105}
-    animateScale: 1
-    scaleFrom: {x: 0.8070539, y: 0.8070539, z: 0.8070539}
-    animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
-    graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.46643645
-    delay: 0.009944485
-    ease:
-      serializedVersion: 2
-      m_Curve:
-      - serializedVersion: 3
-        time: 0
-        value: 0
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 0.2
-        value: 0.02
-        inSlope: 0.2
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 0.4
-        value: 0.08
-        inSlope: 0.4
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 0.6
-        value: 0.2
-        inSlope: 0.6
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 0.8
-        value: 0.4
-        inSlope: 0.8
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 1
-        value: 1
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      m_PreInfinity: 2
-      m_PostInfinity: 2
-      m_RotationOrder: 4
-    initialPosition: {x: 0, y: 0}
-    initialRotation: {x: 0, y: 0, z: 0, w: 1}
-    initialScale: {x: 1, y: 1, z: 1}
-    initialAlpha: 1
-    initialColor: {r: 1, g: 1, b: 1, a: 1}
-    hasInitialState: 1
-  - ignore: 0
-    target: {fileID: 934058690}
-    animatePosition: 1
-    positionOffset: {x: -29.752565, y: 74.08323}
-    useCurvePath: 1
-    curveAmplitude: 36.640743
-    useShakeJitter: 0
-    shakeMagnitude: 0
-    shakeRotationMagnitude: 0
-    shakeFrequency: 0
-    shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: 49.992542}
-    animateScale: 1
-    scaleFrom: {x: 0.6816522, y: 0.6816522, z: 0.6816522}
-    animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
-    graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.5368482
-    delay: 0.055952266
-    ease:
-      serializedVersion: 2
-      m_Curve:
-      - serializedVersion: 3
-        time: 0
-        value: 0
-        inSlope: 0
-        outSlope: 5
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 1
-        value: 1
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      m_PreInfinity: 2
-      m_PostInfinity: 2
-      m_RotationOrder: 4
-    initialPosition: {x: 181.79297, y: -64.50377}
-    initialRotation: {x: 0, y: 0, z: 0, w: 1}
-    initialScale: {x: 1.1149, y: 1.1149, z: 1.1149}
-    initialAlpha: 1
-    initialColor: {r: 1, g: 1, b: 1, a: 1}
-    hasInitialState: 1
-  - ignore: 0
-    target: {fileID: 843164153}
-    animatePosition: 1
-    positionOffset: {x: 26.862688, y: 88.35294}
-    useCurvePath: 1
-    curveAmplitude: 44.725254
-    useShakeJitter: 0
-    shakeMagnitude: 0
-    shakeRotationMagnitude: 0
-    shakeFrequency: 0
-    shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: 1.6804168}
-    animateScale: 1
-    scaleFrom: {x: 0.7537993, y: 0.7537993, z: 0.7537993}
-    animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
-    graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.52441466
-    delay: 0.08645017
-    ease:
-      serializedVersion: 2
-      m_Curve:
-      - serializedVersion: 3
-        time: 0
-        value: 0
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 1
-        value: 1
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      m_PreInfinity: 2
-      m_PostInfinity: 2
-      m_RotationOrder: 4
-    initialPosition: {x: 11, y: 0}
-    initialRotation: {x: 0, y: 0, z: 0, w: 1}
-    initialScale: {x: 1, y: 1, z: 1}
-    initialAlpha: 1
-    initialColor: {r: 0.07, g: 0.08, b: 0.09, a: 1}
-    hasInitialState: 1
-  - ignore: 0
-    target: {fileID: 394453771}
-    animatePosition: 1
-    positionOffset: {x: 35.184063, y: 90.5549}
-    useCurvePath: 1
-    curveAmplitude: 26.57747
-    useShakeJitter: 0
-    shakeMagnitude: 0
-    shakeRotationMagnitude: 0
-    shakeFrequency: 0
-    shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: 54.79585}
-    animateScale: 1
-    scaleFrom: {x: 0.82836044, y: 0.82836044, z: 0.82836044}
-    animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
-    graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.57049507
-    delay: 0.07492624
-    ease:
-      serializedVersion: 2
-      m_Curve:
-      - serializedVersion: 3
-        time: 0
-        value: 0
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 0.2
-        value: 0.02
-        inSlope: 0.2
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 0.4
-        value: 0.08
-        inSlope: 0.4
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 0.6
-        value: 0.2
-        inSlope: 0.6
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 0.8
-        value: 0.4
-        inSlope: 0.8
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 1
-        value: 1
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      m_PreInfinity: 2
-      m_PostInfinity: 2
-      m_RotationOrder: 4
-    initialPosition: {x: 345.9999, y: -9.00001}
-    initialRotation: {x: -0, y: -0, z: -0, w: 1}
-    initialScale: {x: 0.5736298, y: 0.5736298, z: 0.5736298}
-    initialAlpha: 1
-    initialColor: {r: 1, g: 1, b: 1, a: 1}
-    hasInitialState: 1
-  - ignore: 0
-    target: {fileID: 715313181}
-    animatePosition: 1
-    positionOffset: {x: 20.928196, y: 110.12357}
-    useCurvePath: 1
-    curveAmplitude: 30.458498
-    useShakeJitter: 0
-    shakeMagnitude: 0
-    shakeRotationMagnitude: 0
-    shakeFrequency: 0
-    shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: -1.742014}
-    animateScale: 1
-    scaleFrom: {x: 0.76490045, y: 0.76490045, z: 0.76490045}
-    animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
-    graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.594723
-    delay: 0.008868959
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 1.0219473
+    delay: 0.06208164
     ease:
       serializedVersion: 2
       m_Curve:
@@ -1585,34 +880,34 @@ MonoBehaviour:
       m_PreInfinity: 2
       m_PostInfinity: 2
       m_RotationOrder: 4
-    initialPosition: {x: 615.2788, y: -64.50377}
+    initialPosition: {x: 0, y: 0}
     initialRotation: {x: 0, y: 0, z: 0, w: 1}
-    initialScale: {x: 1.1149, y: 1.1149, z: 1.1149}
+    initialScale: {x: 1, y: 1, z: 1}
     initialAlpha: 1
     initialColor: {r: 1, g: 1, b: 1, a: 1}
     hasInitialState: 1
   - ignore: 0
-    target: {fileID: 333200124}
-    animatePosition: 1
-    positionOffset: {x: 67.674904, y: 131.85458}
+    target: {fileID: 35879245}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
     useCurvePath: 1
-    curveAmplitude: 27.759445
+    curveAmplitude: 14.368838
     useShakeJitter: 0
     shakeMagnitude: 0
     shakeRotationMagnitude: 0
     shakeFrequency: 0
     shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: 20.189375}
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
     animateScale: 1
-    scaleFrom: {x: 0.8430816, y: 0.8430816, z: 0.8430816}
+    scaleFrom: {x: 0.9297105, y: 0.9297105, z: 0.9297105}
     animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
+    fadeFrom: 0.09067097
+    animateColor: 1
     graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.5422503
-    delay: 0.03982265
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.9378411
+    delay: 0.026714267
     ease:
       serializedVersion: 2
       m_Curve:
@@ -1620,7 +915,79 @@ MonoBehaviour:
         time: 0
         value: 0
         inSlope: 0
-        outSlope: 5
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.1
+        value: 0.001
+        inSlope: 0.01
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.2
+        value: 0.004
+        inSlope: 0.04
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.3
+        value: 0.012
+        inSlope: 0.12
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.4
+        value: 0.031
+        inSlope: 0.31
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.062
+        inSlope: 0.62
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.6
+        value: 0.125
+        inSlope: 1.25
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.7
+        value: 0.25
+        inSlope: 2.5
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.8
+        value: 0.5
+        inSlope: 5
+        outSlope: 0
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
@@ -1629,6 +996,546 @@ MonoBehaviour:
         time: 1
         value: 1
         inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 0, y: 0}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1132557856}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
+    useCurvePath: 1
+    curveAmplitude: 14.029166
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    animateScale: 1
+    scaleFrom: {x: 0.9539653, y: 0.9539653, z: 0.9539653}
+    animateFade: 1
+    fadeFrom: 0.081104174
+    animateColor: 1
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 1.0078408
+    delay: 0.06645949
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 0, y: 0}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 0.15, g: 0.16, b: 0.18, a: 0.98}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1172612408}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
+    useCurvePath: 1
+    curveAmplitude: 9.6624775
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    animateScale: 1
+    scaleFrom: {x: 0.9233129, y: 0.9233129, z: 0.9233129}
+    animateFade: 1
+    fadeFrom: 0.0957799
+    animateColor: 1
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.9266083
+    delay: 0.034511216
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 0, y: -30}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 0.95, g: 0.95, b: 0.95, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1325517912}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
+    useCurvePath: 1
+    curveAmplitude: 12.821066
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    animateScale: 1
+    scaleFrom: {x: 0.95629215, y: 0.95629215, z: 0.95629215}
+    animateFade: 1
+    fadeFrom: 0.16088472
+    animateColor: 1
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.8861295
+    delay: 0.068710774
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 0, y: 0}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 0.22}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 306744404}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
+    useCurvePath: 1
+    curveAmplitude: 17.536188
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    animateScale: 1
+    scaleFrom: {x: 0.95689553, y: 0.95689553, z: 0.95689553}
+    animateFade: 1
+    fadeFrom: 0.08955293
+    animateColor: 1
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.8861295
+    delay: 0.05676373
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: -0.78900146, y: -0.48350525}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 0.6818, y: 0.6818, z: 0.6818}
+    initialAlpha: 1
+    initialColor: {r: 0.1981132, g: 0, b: 0, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1190795028}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
+    useCurvePath: 1
+    curveAmplitude: 9.056866
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    animateScale: 1
+    scaleFrom: {x: 0.93732595, y: 0.93732595, z: 0.93732595}
+    animateFade: 1
+    fadeFrom: 0.10282153
+    animateColor: 1
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 1.0320297
+    delay: 0.067435786
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 1.1380005, y: -3.100998}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 0.6818, y: 0.6818, z: 0.6818}
+    initialAlpha: 1
+    initialColor: {r: 0.1981132, g: 0, b: 0, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 2034991020}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
+    useCurvePath: 1
+    curveAmplitude: 15.21913
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    animateScale: 1
+    scaleFrom: {x: 0.93963397, y: 0.93963397, z: 0.93963397}
+    animateFade: 1
+    fadeFrom: 0.10564914
+    animateColor: 1
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.9440217
+    delay: 0.06419
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 0, y: 0}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 0.66, g: 0.67, b: 0.7, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1163224366}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
+    useCurvePath: 1
+    curveAmplitude: 11.776871
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    animateScale: 1
+    scaleFrom: {x: 0.9427583, y: 0.9427583, z: 0.9427583}
+    animateFade: 1
+    fadeFrom: 0.084836096
+    animateColor: 1
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.8861295
+    delay: 0.061422475
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 0, y: 0}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 934058690}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
+    useCurvePath: 1
+    curveAmplitude: 12.374206
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    animateScale: 1
+    scaleFrom: {x: 0.8968679, y: 0.8968679, z: 0.8968679}
+    animateFade: 1
+    fadeFrom: 0.093848035
+    animateColor: 1
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.90608245
+    delay: 0.03536086
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: -19.198975, y: 0.49667358}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1.1149, y: 1.1149, z: 1.1149}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 843164153}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
+    useCurvePath: 1
+    curveAmplitude: 19.555729
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    animateScale: 1
+    scaleFrom: {x: 0.89990675, y: 0.89990675, z: 0.89990675}
+    animateFade: 1
+    fadeFrom: 0.11546071
+    animateColor: 1
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.9434943
+    delay: 0.055461187
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 3
         outSlope: 0
         tangentMode: 0
         weightedMode: 0
@@ -1644,35 +1551,44 @@ MonoBehaviour:
     initialColor: {r: 0.07, g: 0.08, b: 0.09, a: 1}
     hasInitialState: 1
   - ignore: 0
-    target: {fileID: 1446060543}
-    animatePosition: 1
-    positionOffset: {x: -85.74664, y: 72.06818}
+    target: {fileID: 394453771}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
     useCurvePath: 1
-    curveAmplitude: 27.53123
+    curveAmplitude: 12.928345
     useShakeJitter: 0
     shakeMagnitude: 0
     shakeRotationMagnitude: 0
     shakeFrequency: 0
     shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: 49.691593}
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
     animateScale: 1
-    scaleFrom: {x: 0.7975202, y: 0.7975202, z: 0.7975202}
+    scaleFrom: {x: 0.965438, y: 0.965438, z: 0.965438}
     animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
+    fadeFrom: 0.0976572
+    animateColor: 1
     graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.5079608
-    delay: 0.010592418
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.8861295
+    delay: 0.04103037
     ease:
       serializedVersion: 2
       m_Curve:
       - serializedVersion: 3
         time: 0
         value: 0
-        inSlope: 0
-        outSlope: 5
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
@@ -1681,7 +1597,7 @@ MonoBehaviour:
         time: 1
         value: 1
         inSlope: 0
-        outSlope: 0
+        outSlope: 0.7854
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
@@ -1689,7 +1605,190 @@ MonoBehaviour:
       m_PreInfinity: 2
       m_PostInfinity: 2
       m_RotationOrder: 4
-    initialPosition: {x: 359.00012, y: -8.99999}
+    initialPosition: {x: -58.000095, y: -9.000008}
+    initialRotation: {x: -0, y: -0, z: -0, w: 1}
+    initialScale: {x: 0.5736298, y: 0.5736298, z: 0.5736298}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 715313181}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
+    useCurvePath: 1
+    curveAmplitude: 8.6267605
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    animateScale: 1
+    scaleFrom: {x: 0.9326483, y: 0.9326483, z: 0.9326483}
+    animateFade: 1
+    fadeFrom: 0.06848115
+    animateColor: 1
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.8861295
+    delay: 0.05510703
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 10.303101, y: 0.49667358}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1.1149, y: 1.1149, z: 1.1149}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 333200124}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
+    useCurvePath: 1
+    curveAmplitude: 12.929077
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    animateScale: 1
+    scaleFrom: {x: 0.9568974, y: 0.9568974, z: 0.9568974}
+    animateFade: 1
+    fadeFrom: 0.0958208
+    animateColor: 1
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.8861295
+    delay: 0.023351846
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 11, y: 0}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 0.07, g: 0.08, b: 0.09, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1446060543}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
+    useCurvePath: 1
+    curveAmplitude: 15.46426
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    animateScale: 1
+    scaleFrom: {x: 0.95344746, y: 0.95344746, z: 0.95344746}
+    animateFade: 1
+    fadeFrom: 0.076759
+    animateColor: 1
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.9300104
+    delay: 0.02478028
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: -44.99988, y: -8.999995}
     initialRotation: {x: -0, y: -0, z: -0, w: 1}
     initialScale: {x: 0.57362974, y: 0.57362974, z: 0.57362974}
     initialAlpha: 1
@@ -1697,26 +1796,26 @@ MonoBehaviour:
     hasInitialState: 1
   - ignore: 0
     target: {fileID: 746925501}
-    animatePosition: 1
-    positionOffset: {x: 86.27076, y: 72.73499}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
     useCurvePath: 1
-    curveAmplitude: 35.245594
+    curveAmplitude: 16.794977
     useShakeJitter: 0
     shakeMagnitude: 0
     shakeRotationMagnitude: 0
     shakeFrequency: 0
     shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: 30.170967}
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
     animateScale: 1
-    scaleFrom: {x: 0.8377789, y: 0.8377789, z: 0.8377789}
+    scaleFrom: {x: 0.9585892, y: 0.9585892, z: 0.9585892}
     animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
+    fadeFrom: 0.13917264
+    animateColor: 1
     graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.56325084
-    delay: 0.033950128
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.9253402
+    delay: 0.005908916
     ease:
       serializedVersion: 2
       m_Curve:
@@ -1724,7 +1823,7 @@ MonoBehaviour:
         time: 0
         value: 0
         inSlope: 0
-        outSlope: 5
+        outSlope: 2
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
@@ -1749,34 +1848,43 @@ MonoBehaviour:
     hasInitialState: 1
   - ignore: 0
     target: {fileID: 763805624}
-    animatePosition: 1
-    positionOffset: {x: -82.74266, y: 43.98418}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
     useCurvePath: 1
-    curveAmplitude: 37.59717
+    curveAmplitude: 9.623237
     useShakeJitter: 0
     shakeMagnitude: 0
     shakeRotationMagnitude: 0
     shakeFrequency: 0
     shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: -57.17207}
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
     animateScale: 1
-    scaleFrom: {x: 0.6936848, y: 0.6936848, z: 0.6936848}
+    scaleFrom: {x: 0.95673335, y: 0.95673335, z: 0.95673335}
     animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
+    fadeFrom: 0.092686564
+    animateColor: 1
     graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.6
-    delay: 0.060042992
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 1.0070957
+    delay: 0.047221333
     ease:
       serializedVersion: 2
       m_Curve:
       - serializedVersion: 3
         time: 0
         value: 0
-        inSlope: 0
-        outSlope: 5
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
@@ -1785,7 +1893,7 @@ MonoBehaviour:
         time: 1
         value: 1
         inSlope: 0
-        outSlope: 0
+        outSlope: 0.7854
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
@@ -1793,7 +1901,7 @@ MonoBehaviour:
       m_PreInfinity: 2
       m_PostInfinity: 2
       m_RotationOrder: 4
-    initialPosition: {x: 141.88855, y: -64.503784}
+    initialPosition: {x: -0.10595703, y: 0.4967041}
     initialRotation: {x: 0, y: 0, z: 0, w: 1}
     initialScale: {x: 1, y: 1, z: 1}
     initialAlpha: 1
@@ -1801,34 +1909,43 @@ MonoBehaviour:
     hasInitialState: 1
   - ignore: 0
     target: {fileID: 1224619828}
-    animatePosition: 1
-    positionOffset: {x: -85.48718, y: 67.29717}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
     useCurvePath: 1
-    curveAmplitude: 32.00329
+    curveAmplitude: 12.643013
     useShakeJitter: 0
     shakeMagnitude: 0
     shakeRotationMagnitude: 0
     shakeFrequency: 0
     shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: 34.58726}
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
     animateScale: 1
-    scaleFrom: {x: 0.7297261, y: 0.7297261, z: 0.7297261}
+    scaleFrom: {x: 0.8877769, y: 0.8877769, z: 0.8877769}
     animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
+    fadeFrom: 0.13589665
+    animateColor: 1
     graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.4547051
-    delay: 0.029481279
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.8861295
+    delay: 0.07583513
     ease:
       serializedVersion: 2
       m_Curve:
       - serializedVersion: 3
         time: 0
         value: 0
-        inSlope: 0
-        outSlope: 5
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
@@ -1837,7 +1954,7 @@ MonoBehaviour:
         time: 1
         value: 1
         inSlope: 0
-        outSlope: 0
+        outSlope: 0.7854
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
@@ -1845,7 +1962,7 @@ MonoBehaviour:
       m_PreInfinity: 2
       m_PostInfinity: 2
       m_RotationOrder: 4
-    initialPosition: {x: 7.9999976, y: 8.000044}
+    initialPosition: {x: 8.000002, y: 8.00004}
     initialRotation: {x: 0, y: 0, z: 0, w: 1}
     initialScale: {x: 1, y: 1, z: 1}
     initialAlpha: 1
@@ -1853,34 +1970,43 @@ MonoBehaviour:
     hasInitialState: 1
   - ignore: 0
     target: {fileID: 604204196}
-    animatePosition: 1
-    positionOffset: {x: -48.314854, y: 84.30551}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
     useCurvePath: 1
-    curveAmplitude: 27.6931
+    curveAmplitude: 19.355482
     useShakeJitter: 0
     shakeMagnitude: 0
     shakeRotationMagnitude: 0
     shakeFrequency: 0
     shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: 54.315746}
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
     animateScale: 1
-    scaleFrom: {x: 0.81845784, y: 0.81845784, z: 0.81845784}
+    scaleFrom: {x: 0.9019693, y: 0.9019693, z: 0.9019693}
     animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
+    fadeFrom: 0.1446102
+    animateColor: 1
     graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.58275634
-    delay: 0.009005071
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.8861295
+    delay: 0.01781227
     ease:
       serializedVersion: 2
       m_Curve:
       - serializedVersion: 3
         time: 0
         value: 0
-        inSlope: 0
-        outSlope: 5
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
@@ -1889,7 +2015,7 @@ MonoBehaviour:
         time: 1
         value: 1
         inSlope: 0
-        outSlope: 0
+        outSlope: 0.7854
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
@@ -1897,7 +2023,7 @@ MonoBehaviour:
       m_PreInfinity: 2
       m_PostInfinity: 2
       m_RotationOrder: 4
-    initialPosition: {x: 408.53558, y: -64.503784}
+    initialPosition: {x: -0.9479675, y: 0.4967041}
     initialRotation: {x: 0, y: 0, z: 0, w: 1}
     initialScale: {x: 1, y: 1, z: 1}
     initialAlpha: 1
@@ -1905,34 +2031,43 @@ MonoBehaviour:
     hasInitialState: 1
   - ignore: 0
     target: {fileID: 2117072319}
-    animatePosition: 1
-    positionOffset: {x: -81.87593, y: 43.062965}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
     useCurvePath: 1
-    curveAmplitude: 36.003563
+    curveAmplitude: 14.27233
     useShakeJitter: 0
     shakeMagnitude: 0
     shakeRotationMagnitude: 0
     shakeFrequency: 0
     shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: -55.139626}
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
     animateScale: 1
-    scaleFrom: {x: 0.8445429, y: 0.8445429, z: 0.8445429}
+    scaleFrom: {x: 0.8777997, y: 0.8777997, z: 0.8777997}
     animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
+    fadeFrom: 0.09124656
+    animateColor: 1
     graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.54199153
-    delay: 0.051421247
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.9624003
+    delay: 0.048814457
     ease:
       serializedVersion: 2
       m_Curve:
       - serializedVersion: 3
         time: 0
         value: 0
-        inSlope: 0
-        outSlope: 5
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
@@ -1941,7 +2076,7 @@ MonoBehaviour:
         time: 1
         value: 1
         inSlope: 0
-        outSlope: 0
+        outSlope: 0.7854
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
@@ -1949,7 +2084,7 @@ MonoBehaviour:
       m_PreInfinity: 2
       m_PostInfinity: 2
       m_RotationOrder: 4
-    initialPosition: {x: 7.9999967, y: 7.9999933}
+    initialPosition: {x: 8.000002, y: 7.999991}
     initialRotation: {x: 0, y: 0, z: 0, w: 1}
     initialScale: {x: 1, y: 1, z: 1}
     initialAlpha: 1
@@ -1957,182 +2092,26 @@ MonoBehaviour:
     hasInitialState: 1
   - ignore: 0
     target: {fileID: 213726232}
-    animatePosition: 1
-    positionOffset: {x: 86.6237, y: 124.23242}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
     useCurvePath: 1
-    curveAmplitude: 23.689627
+    curveAmplitude: 9.882815
     useShakeJitter: 0
     shakeMagnitude: 0
     shakeRotationMagnitude: 0
     shakeFrequency: 0
     shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: 46.19425}
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
     animateScale: 1
-    scaleFrom: {x: 0.74553376, y: 0.74553376, z: 0.74553376}
+    scaleFrom: {x: 0.88856053, y: 0.88856053, z: 0.88856053}
     animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
+    fadeFrom: 0.07657257
+    animateColor: 1
     graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.5055583
-    delay: 0.004275309
-    ease:
-      serializedVersion: 2
-      m_Curve:
-      - serializedVersion: 3
-        time: 0
-        value: 0
-        inSlope: 0
-        outSlope: 5
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 1
-        value: 1
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      m_PreInfinity: 2
-      m_PostInfinity: 2
-      m_RotationOrder: 4
-    initialPosition: {x: 675.18274, y: -64.50379}
-    initialRotation: {x: 0, y: 0, z: 0, w: 1}
-    initialScale: {x: 1, y: 1, z: 1}
-    initialAlpha: 1
-    initialColor: {r: 1, g: 1, b: 1, a: 1}
-    hasInitialState: 1
-  - ignore: 0
-    target: {fileID: 1910750815}
-    animatePosition: 1
-    positionOffset: {x: 84.62198, y: 120.09003}
-    useCurvePath: 1
-    curveAmplitude: 28.144125
-    useShakeJitter: 0
-    shakeMagnitude: 0
-    shakeRotationMagnitude: 0
-    shakeFrequency: 0
-    shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: -42.858425}
-    animateScale: 1
-    scaleFrom: {x: 0.8962903, y: 0.8962903, z: 0.8962903}
-    animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
-    graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.54055655
-    delay: 0.09616988
-    ease:
-      serializedVersion: 2
-      m_Curve:
-      - serializedVersion: 3
-        time: 0
-        value: 0
-        inSlope: 0
-        outSlope: 5
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 1
-        value: 1
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      m_PreInfinity: 2
-      m_PostInfinity: 2
-      m_RotationOrder: 4
-    initialPosition: {x: 7.9999957, y: 8.000038}
-    initialRotation: {x: 0, y: 0, z: 0, w: 1}
-    initialScale: {x: 1, y: 1, z: 1}
-    initialAlpha: 1
-    initialColor: {r: 0.07, g: 0.08, b: 0.09, a: 1}
-    hasInitialState: 1
-  - ignore: 0
-    target: {fileID: 1131622569}
-    animatePosition: 1
-    positionOffset: {x: 47.128807, y: 38.75562}
-    useCurvePath: 1
-    curveAmplitude: 48.125553
-    useShakeJitter: 0
-    shakeMagnitude: 0
-    shakeRotationMagnitude: 0
-    shakeFrequency: 0
-    shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: -33.623856}
-    animateScale: 1
-    scaleFrom: {x: 0.8857178, y: 0.8857178, z: 0.8857178}
-    animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
-    graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.5171249
-    delay: 0.096290134
-    ease:
-      serializedVersion: 2
-      m_Curve:
-      - serializedVersion: 3
-        time: 0
-        value: 0
-        inSlope: 0
-        outSlope: 5
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
-        time: 1
-        value: 1
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      m_PreInfinity: 2
-      m_PostInfinity: 2
-      m_RotationOrder: 4
-    initialPosition: {x: 311.20013, y: 40.619972}
-    initialRotation: {x: 0, y: 0, z: 0, w: 1}
-    initialScale: {x: 0.69948, y: 0.69948, z: 0.69948}
-    initialAlpha: 1
-    initialColor: {r: 1, g: 1, b: 1, a: 1}
-    hasInitialState: 1
-  - ignore: 0
-    target: {fileID: 1893744655}
-    animatePosition: 1
-    positionOffset: {x: -91.45111, y: 91.59186}
-    useCurvePath: 1
-    curveAmplitude: 25.93007
-    useShakeJitter: 0
-    shakeMagnitude: 0
-    shakeRotationMagnitude: 0
-    shakeFrequency: 0
-    shakeSeed: 0
-    animateRotation: 1
-    rotationOffset: {x: 0, y: 0, z: -42.487057}
-    animateScale: 1
-    scaleFrom: {x: 0.75155157, y: 0.75155157, z: 0.75155157}
-    animateFade: 1
-    fadeFrom: 0
-    animateColor: 0
-    graphicOverride: {fileID: 0}
-    colorFrom: {r: 1, g: 1, b: 1, a: 1}
-    duration: 0.49337995
-    delay: 0.08936384
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.9797777
+    delay: 0.04936668
     ease:
       serializedVersion: 2
       m_Curve:
@@ -2148,7 +2127,7 @@ MonoBehaviour:
       - serializedVersion: 3
         time: 0.2
         value: 0.02
-        inSlope: 0.1
+        inSlope: 0.2
         outSlope: 0
         tangentMode: 0
         weightedMode: 0
@@ -2156,36 +2135,27 @@ MonoBehaviour:
         outWeight: 0
       - serializedVersion: 3
         time: 0.4
-        value: 0.12
-        inSlope: 0.3
+        value: 0.08
+        inSlope: 0.4
         outSlope: 0
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
         outWeight: 0
       - serializedVersion: 3
-        time: 0.5
-        value: 0.5
-        inSlope: 0.5
-        outSlope: 0.5
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0
-        outWeight: 0
-      - serializedVersion: 3
         time: 0.6
-        value: 0.88
-        inSlope: 0
-        outSlope: 0.3
+        value: 0.2
+        inSlope: 0.6
+        outSlope: 0
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
         outWeight: 0
       - serializedVersion: 3
         time: 0.8
-        value: 0.98
-        inSlope: 0
-        outSlope: 0.1
+        value: 0.4
+        inSlope: 0.8
+        outSlope: 0
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
@@ -2195,6 +2165,189 @@ MonoBehaviour:
         value: 1
         inSlope: 0
         outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: -2.289917, y: 0.4967041}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1910750815}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
+    useCurvePath: 1
+    curveAmplitude: 14.226353
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    animateScale: 1
+    scaleFrom: {x: 0.9246478, y: 0.9246478, z: 0.9246478}
+    animateFade: 1
+    fadeFrom: 0.10055402
+    animateColor: 1
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.8861295
+    delay: 0.00904393
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: 8, y: 8.000035}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 1, y: 1, z: 1}
+    initialAlpha: 1
+    initialColor: {r: 0.07, g: 0.08, b: 0.09, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1131622569}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
+    useCurvePath: 1
+    curveAmplitude: 14.048199
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    animateScale: 1
+    scaleFrom: {x: 0.9294015, y: 0.9294015, z: 0.9294015}
+    animateFade: 1
+    fadeFrom: 0.09336015
+    animateColor: 1
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.91527355
+    delay: 0.047821585
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    initialPosition: {x: -4.7998657, y: 0.6199951}
+    initialRotation: {x: 0, y: 0, z: 0, w: 1}
+    initialScale: {x: 0.69948, y: 0.69948, z: 0.69948}
+    initialAlpha: 1
+    initialColor: {r: 1, g: 1, b: 1, a: 1}
+    hasInitialState: 1
+  - ignore: 0
+    target: {fileID: 1893744655}
+    animatePosition: 0
+    positionOffset: {x: 0, y: 0}
+    useCurvePath: 1
+    curveAmplitude: 19.284742
+    useShakeJitter: 0
+    shakeMagnitude: 0
+    shakeRotationMagnitude: 0
+    shakeFrequency: 0
+    shakeSeed: 0
+    animateRotation: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    animateScale: 1
+    scaleFrom: {x: 0.886916, y: 0.886916, z: 0.886916}
+    animateFade: 1
+    fadeFrom: 0.1093495
+    animateColor: 1
+    graphicOverride: {fileID: 0}
+    colorFrom: {r: 1.1, g: 1.1, b: 1.25, a: 1}
+    duration: 0.9219024
+    delay: 0.025209865
+    ease:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0.7854
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 0.5
+        value: 0.5
+        inSlope: 0.7854
+        outSlope: 0.7854
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0.7854
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
@@ -2248,7 +2401,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.390569, y: 0.56100005}
   m_AnchorMax: {x: 0.9256725, y: 0.80200005}
-  m_AnchoredPosition: {x: -0.78900146, y: -0.48349762}
+  m_AnchoredPosition: {x: -0.78900146, y: -0.48350525}
   m_SizeDelta: {x: 198.734, y: 52.695}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &306744405
@@ -2569,9 +2722,9 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 934058690}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 345.9999, y: -9.000009}
+  m_AnchorMin: {x: 1, y: 1}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: -58.000095, y: -9.000008}
   m_SizeDelta: {x: 238, y: 257}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &394453772
@@ -2679,10 +2832,10 @@ RectTransform:
   - {fileID: 2117072319}
   m_Father: {fileID: 746925501}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
+  m_AnchorMin: {x: 0.328, y: 0}
+  m_AnchorMax: {x: 0.6738808, y: 1}
+  m_AnchoredPosition: {x: -0.9479675, y: 0.4967041}
+  m_SizeDelta: {x: 0.7880249, y: -0.9934082}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &604204197
 MonoBehaviour:
@@ -2861,10 +3014,10 @@ RectTransform:
   - {fileID: 1446060543}
   m_Father: {fileID: 1163224366}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
+  m_AnchorMin: {x: 0.4816715, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 10.303101, y: 0.49667358}
+  m_SizeDelta: {x: -20.39795, y: -0.99334717}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &715313182
 MonoBehaviour:
@@ -3007,7 +3160,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 746925500}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 30649d3a9faa99c48a7b1166b86bf2a0, type: 3}
   m_Name: 
@@ -3074,9 +3227,9 @@ RectTransform:
   m_Father: {fileID: 746925501}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
+  m_AnchorMax: {x: 0.34800002, y: 1}
+  m_AnchoredPosition: {x: -0.10595703, y: 0.4967041}
+  m_SizeDelta: {x: -0.2119751, y: -0.9934082}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &763805625
 MonoBehaviour:
@@ -3301,9 +3454,9 @@ RectTransform:
   m_Father: {fileID: 1163224366}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
+  m_AnchorMax: {x: 0.492657, y: 1}
+  m_AnchoredPosition: {x: -19.198975, y: 0.49667358}
+  m_SizeDelta: {x: 1.6020508, y: -0.99334717}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &934058691
 MonoBehaviour:
@@ -3434,10 +3587,10 @@ RectTransform:
   - {fileID: 1893744655}
   m_Father: {fileID: 1132557856}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.18, y: 0.03}
-  m_AnchorMax: {x: 0.18, y: 0.03}
-  m_AnchoredPosition: {x: 311.20013, y: 40.619976}
-  m_SizeDelta: {x: 864, y: 178}
+  m_AnchorMin: {x: 0.192, y: 0.01751951}
+  m_AnchorMax: {x: 0.818, y: 0.092519514}
+  m_AnchoredPosition: {x: -4.7998657, y: 0.6199951}
+  m_SizeDelta: {x: 256, y: 58}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1131622570
 MonoBehaviour:
@@ -3673,7 +3826,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1163224365}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 30649d3a9faa99c48a7b1166b86bf2a0, type: 3}
   m_Name: 
@@ -3987,7 +4140,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 7.9999957, y: 8.000042}
+  m_AnchoredPosition: {x: 8.000002, y: 8.00004}
   m_SizeDelta: {x: -16, y: -16}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1224619829
@@ -4168,9 +4321,9 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 715313181}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 359.00012, y: -8.999992}
+  m_AnchorMin: {x: 1, y: 1}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: -44.99988, y: -8.999995}
   m_SizeDelta: {x: 238, y: 257}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1446060544
@@ -4458,7 +4611,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 8, y: 8.000038}
+  m_AnchoredPosition: {x: 8, y: 8.000035}
   m_SizeDelta: {x: -16, y: -16}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1910750816
@@ -4642,7 +4795,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 7.999995, y: 7.9999905}
+  m_AnchoredPosition: {x: 8.000002, y: 7.999991}
   m_SizeDelta: {x: -16, y: -16}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &2117072320

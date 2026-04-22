@@ -682,8 +682,8 @@ namespace BackyardLegends.Runtime
             ApplyThemeText(sceneRefs.LastTrickText, theme.mutedText, 18, FontStyle.Normal);
             ApplyThemeText(sceneRefs.FeedText, theme.mutedText, 15, FontStyle.Normal);
             ApplyThemeText(sceneRefs.CenterHintText, theme.primaryText, 22, FontStyle.Bold);
-            ApplyThemeText(sceneRefs.DeckAnchorText, theme.primaryText, 15, FontStyle.Bold);
-            ApplyThemeText(sceneRefs.DiscardAnchorText, theme.primaryText, 15, FontStyle.Bold);
+            EnsureFallbackFont(sceneRefs.DeckAnchorText);
+            EnsureFallbackFont(sceneRefs.DiscardAnchorText);
             ApplyThemeText(sceneRefs.OpeningStackText, theme.gold, 24, FontStyle.Bold);
             ApplyThemeText(sceneRefs.RoundSummaryText, theme.primaryText, 24, FontStyle.Normal);
             ApplyThemeText(sceneRefs.EndSummaryText, theme.primaryText, 24, FontStyle.Normal);
@@ -702,8 +702,8 @@ namespace BackyardLegends.Runtime
             ApplyThemedImage(sceneRefs.TablePanel, new Color(0.18f, 0.19f, 0.21f, 0.9f), ResolvePanelSprite());
             ApplyThemedImage(sceneRefs.HandPanel, theme.panelColor, ResolvePanelSprite());
             ApplyThemedImage(sceneRefs.FeedPanel, new Color(1f, 1f, 1f, 0.18f), ResolveSoftPanelSprite());
-            ApplyThemedImage(sceneRefs.DeckAnchorImage, new Color(1f, 1f, 1f, 0.22f), ResolveSoftPanelSprite());
-            ApplyThemedImage(sceneRefs.DiscardAnchorImage, new Color(1f, 1f, 1f, 0.22f), ResolveSoftPanelSprite());
+            ApplyFallbackSprite(sceneRefs.DeckAnchorImage, ResolveSoftPanelSprite());
+            ApplyFallbackSprite(sceneRefs.DiscardAnchorImage, ResolveSoftPanelSprite());
             ApplyThemedImage(sceneRefs.OpeningStackImage, Color.white, ResolveCardBackSprite());
             var sheetTint = new Color(0.15f, 0.16f, 0.18f, 0.98f);
             ApplyThemedImage(sceneRefs.BidSheetImage, sheetTint, ResolveSheetSprite());
@@ -3014,6 +3014,16 @@ namespace BackyardLegends.Runtime
             {
                 label.font = theme.ResolveFont();
             }
+        }
+
+        private void EnsureFallbackFont(Text label)
+        {
+            if (label == null || label.font != null)
+            {
+                return;
+            }
+
+            label.font = theme.ResolveFont();
         }
 
         private void UpdateCenterHintLayout()
