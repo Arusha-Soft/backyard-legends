@@ -242,8 +242,8 @@ namespace BackyardLegends.Runtime
             {
                 sceneRefs.RuleSummaryText.text =
                     $"{selectedRule.DisplayName} mode locks the core single-player loop first.\n" +
-                    $"{(selectedRule.FollowSuitRequired ? "Follow suit stays hot." : "Street lets you throw off-suit.")}\n" +
-                    $"{(selectedRule.RenegePenaltyEnabled ? "Reneges trigger a -200 penalty." : "Classic keeps the table strict without a renege penalty hook.")}";
+                    $"{(selectedRule.AllowSpadesAnytime ? "Spades can lead any time." : "Spades wait until broken.")}\n" +
+                    $"{(selectedRule.FollowSuitRequired ? "Follow suit stays hot." : "Off-suit plays are allowed.")}";
             }
 
             if (sceneRefs.SelectionSummaryText != null)

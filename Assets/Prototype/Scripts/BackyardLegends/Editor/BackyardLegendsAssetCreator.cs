@@ -45,7 +45,7 @@ namespace BackyardLegends.Editor
                 streetSerialized.FindProperty("displayName").stringValue = "Street";
                 streetSerialized.FindProperty("spadesMustBeBroken").boolValue = false;
                 streetSerialized.FindProperty("allowSpadesAnytime").boolValue = true;
-                streetSerialized.FindProperty("followSuitRequired").boolValue = false;
+                streetSerialized.FindProperty("followSuitRequired").boolValue = true;
                 streetSerialized.FindProperty("renegePenaltyEnabled").boolValue = true;
                 streetSerialized.ApplyModifiedPropertiesWithoutUndo();
                 EditorUtility.SetDirty(street);

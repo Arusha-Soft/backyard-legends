@@ -313,12 +313,6 @@ namespace BackyardLegends.Core
             State.RoundState.CompletedTricks.Add(completedTrick);
             State.RoundState.LastStatusMessage = $"{State.SeatNames[winner]} took the trick.";
 
-            var winnerTeam = winner.ToTeam();
-            if (GetTeamBid(winnerTeam) > 0 && GetTeamTricks(winnerTeam) == GetTeamBid(winnerTeam))
-            {
-                Raise(new SetBookReachedEvent(CreateSnapshot(), winnerTeam));
-            }
-
             State.RoundState.TrickState.Plays.Clear();
             State.RoundState.TrickState.LeadSuit = null;
             State.RoundState.TrickState.Leader = winner;
@@ -341,6 +335,10 @@ namespace BackyardLegends.Core
             State.WinningTeam = result.WinningTeam;
             State.RoundState.LastStatusMessage = result.Summary;
             Raise(new RoundScoredEvent(CreateSnapshot(), result.Summary));
+            foreach (var teamScore in result.TeamScores.Values.Where(teamScore => teamScore.ContractBid > 0 && teamScore.TricksWon < teamScore.ContractBid))
+            {
+                Raise(new SetBookReachedEvent(CreateSnapshot(), teamScore.Team));
+            }
 
             if (result.WinningTeam.HasValue)
             {

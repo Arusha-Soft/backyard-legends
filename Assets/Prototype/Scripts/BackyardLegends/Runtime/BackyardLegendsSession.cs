@@ -159,7 +159,7 @@ namespace BackyardLegends.Runtime
                 definition.DisplayName = "Street";
                 definition.AllowSpadesAnytime = true;
                 definition.SpadesMustBeBroken = false;
-                definition.FollowSuitRequired = false;
+                definition.FollowSuitRequired = true;
                 definition.RenegePenaltyEnabled = true;
             }
             else

@@ -75,7 +75,7 @@ namespace BackyardLegends.Core
                 DisplayName = "Street",
                 SpadesMustBeBroken = false,
                 AllowSpadesAnytime = true,
-                FollowSuitRequired = false,
+                FollowSuitRequired = true,
                 RenegePenaltyEnabled = true,
                 RenegePenaltyPoints = -200,
                 NilScore = 100,

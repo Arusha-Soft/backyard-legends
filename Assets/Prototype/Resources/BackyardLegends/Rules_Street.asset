@@ -15,7 +15,7 @@ MonoBehaviour:
   displayName: Street
   spadesMustBeBroken: 0
   allowSpadesAnytime: 1
-  followSuitRequired: 0
+  followSuitRequired: 1
   renegePenaltyEnabled: 1
   renegePenaltyPoints: -200
   nilScore: 100

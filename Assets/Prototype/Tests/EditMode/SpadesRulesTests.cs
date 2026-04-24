@@ -103,7 +103,38 @@ namespace BackyardLegends.Tests
         }
 
         [Test]
-        public void StreetModeAllowsRenegeButAppliesPenalty()
+        public void StreetModeAllowsLeadingSpadesBeforeBroken()
+        {
+            var controller = new SpadesMatchController(
+                RuleSetConfig.CreateStreet(100),
+                new SpadesRuleEngine(),
+                new Dictionary<SeatId, IAiAgent>
+                {
+                    { SeatId.Left, new SimpleAiAgent() },
+                    { SeatId.Top, new SimpleAiAgent() },
+                    { SeatId.Right, new SimpleAiAgent() }
+                },
+                seed: 7);
+            controller.StartMatch();
+            ForceBids(controller, 4, 4, 4, 4);
+
+            var round = controller.State.RoundState;
+            round.TrickState.Plays.Clear();
+            round.TrickState.SpadesBroken = false;
+            round.TrickState.CurrentTurn = SeatId.Bottom;
+            round.HandsBySeat[SeatId.Bottom] = new List<Card>
+            {
+                new(Suit.Spades, 14),
+                new(Suit.Hearts, 2)
+            };
+
+            var legal = controller.GetLegalCardsForSeat(SeatId.Bottom);
+            Assert.That(legal, Has.Count.EqualTo(2));
+            Assert.That(legal.Contains(new Card(Suit.Spades, 14)), Is.True);
+        }
+
+        [Test]
+        public void StreetModeRequiresFollowingSuitBeforeCuttingWithSpades()
         {
             var controller = new SpadesMatchController(
                 RuleSetConfig.CreateStreet(100),
@@ -120,16 +151,54 @@ namespace BackyardLegends.Tests
 
             var round = controller.State.RoundState;
             round.HandsBySeat[SeatId.Left] = new List<Card> { new(Suit.Hearts, 8) };
-            round.HandsBySeat[SeatId.Top] = new List<Card> { new(Suit.Hearts, 6), new(Suit.Clubs, 2) };
+            round.HandsBySeat[SeatId.Top] = new List<Card> { new(Suit.Hearts, 6), new(Suit.Spades, 2) };
             round.HandsBySeat[SeatId.Right] = new List<Card> { new(Suit.Hearts, 5) };
             round.HandsBySeat[SeatId.Bottom] = new List<Card> { new(Suit.Hearts, 7) };
             round.TrickState.CurrentTurn = SeatId.Left;
             round.TrickState.Plays.Clear();
 
             Assert.That(controller.TryPlayCard(SeatId.Left, round.HandsBySeat[SeatId.Left][0], out _), Is.True);
-            Assert.That(controller.TryPlayCard(SeatId.Top, new Card(Suit.Clubs, 2), out _), Is.True);
-            Assert.That(round.RenegeSeats.Contains(SeatId.Top), Is.True);
+            var legal = controller.GetLegalCardsForSeat(SeatId.Top);
+            Assert.That(legal, Has.Count.EqualTo(1));
+            Assert.That(legal[0].Suit, Is.EqualTo(Suit.Hearts));
+            Assert.That(controller.TryPlayCard(SeatId.Top, new Card(Suit.Spades, 2), out _), Is.False);
+        }
 
+        [Test]
+        public void StreetAiFollowsSuitInsteadOfCuttingWithSpades()
+        {
+            var controller = new SpadesMatchController(
+                RuleSetConfig.CreateStreet(100),
+                new SpadesRuleEngine(),
+                new Dictionary<SeatId, IAiAgent>
+                {
+                    { SeatId.Left, new SimpleAiAgent() },
+                    { SeatId.Top, new SimpleAiAgent() },
+                    { SeatId.Right, new SimpleAiAgent() }
+                },
+                seed: 7);
+            controller.StartMatch();
+            ForceBids(controller, 4, 4, 4, 4);
+
+            var round = controller.State.RoundState;
+            round.HandsBySeat[SeatId.Left] = new List<Card> { new(Suit.Hearts, 8) };
+            round.HandsBySeat[SeatId.Top] = new List<Card> { new(Suit.Hearts, 6), new(Suit.Spades, 2) };
+            round.HandsBySeat[SeatId.Right] = new List<Card> { new(Suit.Hearts, 5) };
+            round.HandsBySeat[SeatId.Bottom] = new List<Card> { new(Suit.Hearts, 7) };
+            round.TrickState.CurrentTurn = SeatId.Left;
+            round.TrickState.Plays.Clear();
+
+            Assert.That(controller.TryPlayCard(SeatId.Left, round.HandsBySeat[SeatId.Left][0], out _), Is.True);
+            controller.AdvanceAiTurn();
+
+            var topPlay = round.TrickState.Plays.Single(play => play.Seat == SeatId.Top);
+            Assert.That(topPlay.Card.Suit, Is.EqualTo(Suit.Hearts));
+            Assert.That(round.HandsBySeat[SeatId.Top].Contains(new Card(Suit.Spades, 2)), Is.True);
+        }
+
+        [Test]
+        public void StreetModeScoresRenegePenalty()
+        {
             var scoringState = CreateScoringState(RuleSetConfig.CreateStreet(100));
             scoringState.RoundState.RenegeSeats.Add(SeatId.Top);
             scoringState.RoundState.BidState.BidsBySeat[SeatId.Bottom] = 4;
@@ -143,6 +212,106 @@ namespace BackyardLegends.Tests
             var result = new SpadesRuleEngine().ScoreRound(scoringState);
 
             Assert.That(result.TeamScores[TeamId.Home].RenegeDelta, Is.EqualTo(-200));
+        }
+
+        [Test]
+        public void SetBookDoesNotTriggerWhenTeamReachesBidBeforeRoundEnds()
+        {
+            var controller = CreateController();
+            controller.StartMatch();
+            ForceBids(controller, 3, 4, 3, 4);
+            var setBookEvents = new List<SetBookReachedEvent>();
+            controller.EventRaised += matchEvent =>
+            {
+                if (matchEvent is SetBookReachedEvent setBook)
+                {
+                    setBookEvents.Add(setBook);
+                }
+            };
+
+            var round = controller.State.RoundState;
+            round.TricksWonBySeat[SeatId.Bottom] = 3;
+            round.TricksWonBySeat[SeatId.Top] = 2;
+            round.TricksWonBySeat[SeatId.Left] = 8;
+            round.TrickState.Plays.Clear();
+            round.TrickState.CurrentTurn = SeatId.Bottom;
+            round.HandsBySeat[SeatId.Bottom] = new List<Card> { new(Suit.Hearts, 14), new(Suit.Clubs, 2) };
+            round.HandsBySeat[SeatId.Left] = new List<Card> { new(Suit.Hearts, 2), new(Suit.Clubs, 3) };
+            round.HandsBySeat[SeatId.Top] = new List<Card> { new(Suit.Hearts, 13), new(Suit.Clubs, 4) };
+            round.HandsBySeat[SeatId.Right] = new List<Card> { new(Suit.Hearts, 3), new(Suit.Clubs, 5) };
+
+            PlayCurrentTrick(controller);
+
+            Assert.That(controller.GetTeamTricks(TeamId.Home), Is.EqualTo(6));
+            Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.TrickPlay));
+            Assert.That(setBookEvents, Is.Empty);
+        }
+
+        [Test]
+        public void SetBookDoesNotTriggerWhenTeamMakesBidAtRoundEnd()
+        {
+            var controller = CreateController();
+            controller.StartMatch();
+            ForceBids(controller, 3, 4, 3, 4);
+            var setBookEvents = new List<SetBookReachedEvent>();
+            controller.EventRaised += matchEvent =>
+            {
+                if (matchEvent is SetBookReachedEvent setBook)
+                {
+                    setBookEvents.Add(setBook);
+                }
+            };
+
+            var round = controller.State.RoundState;
+            round.TricksWonBySeat[SeatId.Bottom] = 3;
+            round.TricksWonBySeat[SeatId.Top] = 2;
+            round.TricksWonBySeat[SeatId.Left] = 8;
+            round.TrickState.Plays.Clear();
+            round.TrickState.CurrentTurn = SeatId.Bottom;
+            round.HandsBySeat[SeatId.Bottom] = new List<Card> { new(Suit.Hearts, 14) };
+            round.HandsBySeat[SeatId.Left] = new List<Card> { new(Suit.Hearts, 2) };
+            round.HandsBySeat[SeatId.Top] = new List<Card> { new(Suit.Hearts, 13) };
+            round.HandsBySeat[SeatId.Right] = new List<Card> { new(Suit.Hearts, 3) };
+
+            PlayCurrentTrick(controller);
+
+            Assert.That(controller.GetTeamTricks(TeamId.Home), Is.EqualTo(6));
+            Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.RoundSummary));
+            Assert.That(setBookEvents, Is.Empty);
+        }
+
+        [Test]
+        public void SetBookTriggersOnlyAfterRoundEndWhenTeamMissesBid()
+        {
+            var controller = CreateController();
+            controller.StartMatch();
+            ForceBids(controller, 3, 4, 3, 4);
+            var setBookEvents = new List<SetBookReachedEvent>();
+            controller.EventRaised += matchEvent =>
+            {
+                if (matchEvent is SetBookReachedEvent setBook)
+                {
+                    setBookEvents.Add(setBook);
+                }
+            };
+
+            var round = controller.State.RoundState;
+            round.TricksWonBySeat[SeatId.Bottom] = 3;
+            round.TricksWonBySeat[SeatId.Top] = 2;
+            round.TricksWonBySeat[SeatId.Left] = 7;
+            round.TrickState.Plays.Clear();
+            round.TrickState.CurrentTurn = SeatId.Left;
+            round.HandsBySeat[SeatId.Left] = new List<Card> { new(Suit.Hearts, 14) };
+            round.HandsBySeat[SeatId.Top] = new List<Card> { new(Suit.Hearts, 13) };
+            round.HandsBySeat[SeatId.Right] = new List<Card> { new(Suit.Hearts, 12) };
+            round.HandsBySeat[SeatId.Bottom] = new List<Card> { new(Suit.Hearts, 11) };
+
+            PlayCurrentTrick(controller);
+
+            Assert.That(controller.GetTeamTricks(TeamId.Home), Is.EqualTo(5));
+            Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.RoundSummary));
+            Assert.That(setBookEvents, Has.Count.EqualTo(1));
+            Assert.That(setBookEvents[0].Team, Is.EqualTo(TeamId.Home));
         }
 
         [Test]
@@ -184,6 +353,16 @@ namespace BackyardLegends.Tests
             Assert.That(controller.TrySubmitBid(SeatId.Top, top, out _), Is.True);
             Assert.That(controller.TrySubmitBid(SeatId.Right, right, out _), Is.True);
             Assert.That(controller.TrySubmitBid(SeatId.Bottom, bottom, out _), Is.True);
+        }
+
+        private static void PlayCurrentTrick(SpadesMatchController controller)
+        {
+            for (var i = 0; i < 4; i++)
+            {
+                var seat = controller.State.RoundState.TrickState.CurrentTurn;
+                var card = controller.GetLegalCardsForSeat(seat).First();
+                Assert.That(controller.TryPlayCard(seat, card, out _), Is.True);
+            }
         }
 
         private static SpadesMatchController CreateController()

@@ -14,6 +14,8 @@ namespace BackyardLegends.Runtime
 
         [SerializeField] private BackyardLegendsSceneRefs sceneRefs;
         [SerializeField] private ThemeConfig themeOverride;
+        [SerializeField] private float handReviewSeconds = 3f;
+        [SerializeField] private float bidTurnDelaySeconds = 1.15f;
         [Header("Audio Overrides")]
         [SerializeField] private AudioClip selectClipAsset;
         [SerializeField] private AudioClip bidClipAsset;
@@ -54,6 +56,8 @@ namespace BackyardLegends.Runtime
         private Coroutine homeDeltaLoop;
         private Coroutine awayDeltaLoop;
         private Coroutine dealButtonFadeLoop;
+        private Coroutine handReviewLoop;
+        private Coroutine bidTurnDelayLoop;
         private Coroutine exitPromptFadeLoop;
         private SpadesMatchController controller;
         private IRuleEngine ruleEngine;
@@ -73,6 +77,8 @@ namespace BackyardLegends.Runtime
         private bool pendingEndSheetOpen;
         private bool openingDealPending;
         private bool openingDealRunning;
+        private bool handReviewPending;
+        private bool bidTurnDelayPending;
         private bool openingStackIntroRunning;
         private bool suppressNextHandEntryAnimation;
         private bool dealButtonDismissRunning;
@@ -589,7 +595,7 @@ namespace BackyardLegends.Runtime
             if (sceneRefs.DealButton != null)
             {
                 sceneRefs.DealButton.onClick.RemoveAllListeners();
-                sceneRefs.DealButton.onClick.AddListener(OnDealPressed);
+                sceneRefs.DealButton.gameObject.SetActive(false);
             }
 
             foreach (var pair in bidButtons)
@@ -675,8 +681,8 @@ namespace BackyardLegends.Runtime
             ApplyThemeText(sceneRefs.StatusText, theme.mutedText, 18, FontStyle.Normal);
             ApplyThemeText(sceneRefs.HudModeText, theme.primaryText, 22, FontStyle.Bold);
             ApplyThemeText(sceneRefs.TimerHookText, theme.mutedText, 16, FontStyle.Bold);
-            ApplyThemeText(sceneRefs.HomeScoreText, theme.backgroundColor, 17, FontStyle.Bold);
-            ApplyThemeText(sceneRefs.AwayScoreText, theme.backgroundColor, 17, FontStyle.Bold);
+            ApplyThemeText(sceneRefs.HomeScoreText, theme.backgroundColor, 14, FontStyle.Bold);
+            ApplyThemeText(sceneRefs.AwayScoreText, theme.backgroundColor, 14, FontStyle.Bold);
             ApplyThemeText(sceneRefs.HomeDeltaText, theme.green, 18, FontStyle.Bold);
             ApplyThemeText(sceneRefs.AwayDeltaText, theme.red, 18, FontStyle.Bold);
             ApplyThemeText(sceneRefs.LastTrickText, theme.mutedText, 18, FontStyle.Normal);
@@ -711,6 +717,7 @@ namespace BackyardLegends.Runtime
             ApplyThemedImage(sceneRefs.EndSheetImage, sheetTint, ResolveSheetSprite());
             ConfigureChipImage(sceneRefs.HomeScoreText, theme.green);
             ConfigureChipImage(sceneRefs.AwayScoreText, theme.red);
+            ConfigureScoreboardLayout();
 
             foreach (var pair in seatViews)
             {
@@ -780,9 +787,23 @@ namespace BackyardLegends.Runtime
             HideAllBidBubbles(true);
             openingDealPending = true;
             openingDealRunning = false;
+            handReviewPending = false;
+            bidTurnDelayPending = false;
             suppressNextHandEntryAnimation = false;
             dealButtonDismissRunning = false;
             exitPromptOpen = false;
+            if (handReviewLoop != null)
+            {
+                StopCoroutine(handReviewLoop);
+                handReviewLoop = null;
+            }
+
+            if (bidTurnDelayLoop != null)
+            {
+                StopCoroutine(bidTurnDelayLoop);
+                bidTurnDelayLoop = null;
+            }
+
             if (dealButtonFadeLoop != null)
             {
                 StopCoroutine(dealButtonFadeLoop);
@@ -826,11 +847,21 @@ namespace BackyardLegends.Runtime
                 case RoundStartedEvent:
                     ClearTransientMotionState(false);
                     AddFeedMessage($"Round {controller.State.RoundState.RoundNumber} started. Dealer: {controller.State.SeatNames[controller.State.RoundState.Dealer]}.");
+                    if (!openingDealPending && !openingDealRunning)
+                    {
+                        BeginHandReview();
+                    }
+
                     break;
                 case BidSubmittedEvent bidEvent:
                     AddFeedMessage($"{controller.State.SeatNames[bidEvent.Seat]} called {(bidEvent.Bid == 0 ? "Nil" : bidEvent.Bid.ToString())}.");
                     ShowBidCallout(bidEvent.Seat, bidEvent.Bid);
                     PlayFeedback(FeedbackCue.Bid, 0.22f);
+                    if (controller.State.Phase == MatchPhase.Bidding)
+                    {
+                        BeginBidTurnDelay();
+                    }
+
                     break;
                 case CardPlayedEvent playedEvent:
                     AddFeedMessage($"{controller.State.SeatNames[playedEvent.Seat]} dropped {playedEvent.Card.ShortLabel}.");
@@ -842,7 +873,7 @@ namespace BackyardLegends.Runtime
                     break;
                 case SetBookReachedEvent setBook:
                     ShowBanner(setBook.Team == TeamId.Home ? "HOME SET BOOK" : "RIVALS SET BOOK", setBook.Team == TeamId.Home ? theme.green : theme.red);
-                    AddFeedMessage(setBook.Team == TeamId.Home ? "Home team hit its contract." : "Rivals hit their contract.");
+                    AddFeedMessage(setBook.Team == TeamId.Home ? "Home team missed its contract." : "Rivals missed their contract.");
                     break;
                 case RoundScoredEvent:
                     sceneRefs.RoundSummaryText.text = BuildRoundSummaryText();
@@ -888,29 +919,31 @@ namespace BackyardLegends.Runtime
             }
 
             sceneRefs.HudModeText.text = $"{selectedRule.DisplayName.ToUpperInvariant()} | {selectedRule.TargetScore}";
-            sceneRefs.TimerHookText.text = selectedRule.EnableFutureTurnTimer
-                ? $"TURN CLOCK | RESERVED {selectedRule.ReservedTurnTimerSeconds}s"
-                : $"TURN CLOCK | OFF IN PHASE 1 ({selectedRule.ReservedTurnTimerSeconds}s HOOK)";
+            sceneRefs.TimerHookText.text = BuildTurnIndicatorText();
             sceneRefs.StatusText.text = controller.State.RoundState.LastStatusMessage;
-            sceneRefs.HomeScoreText.text = $"HOME {controller.State.Scores[TeamId.Home].Score} | BAGS {controller.State.Scores[TeamId.Home].Bags} | T {controller.GetTeamTricks(TeamId.Home)}";
-            sceneRefs.AwayScoreText.text = $"AWAY {controller.State.Scores[TeamId.Away].Score} | BAGS {controller.State.Scores[TeamId.Away].Bags} | T {controller.GetTeamTricks(TeamId.Away)}";
-            var liveCards = controller.State.RoundState.HandsBySeat.Values.Sum(cards => cards.Count) + controller.State.RoundState.TrickState.Plays.Count;
-            var takenCards = controller.State.RoundState.CompletedTricks.Count * 4;
-            sceneRefs.DeckAnchorText.text = $"DECK\n{liveCards} LIVE";
-            sceneRefs.DiscardAnchorText.text = $"DISCARD\n{takenCards} TAKEN";
+            sceneRefs.HomeScoreText.text = BuildScoreboardText(TeamId.Home);
+            sceneRefs.AwayScoreText.text = BuildScoreboardText(TeamId.Away);
             sceneRefs.StatusText.text = openingDealPending
                 ? openingDealRunning
                     ? "Throwing the cards out."
                     : openingStackIntroRunning
                         ? "Stacking the deck in the middle."
-                        : "Cut the deck when you're ready."
+                        : "Cards deal automatically."
+                : handReviewPending
+                    ? "Count your books before bidding."
+                : bidTurnDelayPending
+                    ? "Next bid is coming up."
                 : controller.State.RoundState.LastStatusMessage;
             sceneRefs.CenterHintText.text = openingDealPending
                 ? openingDealRunning
                     ? "Cards are spreading across the table."
                     : openingStackIntroRunning
                         ? "Deck is gathering at center table."
-                        : "Press DEAL to start the game."
+                        : "Getting ready to deal."
+                : handReviewPending
+                    ? "Review your hand. Bidding opens in a moment."
+                : bidTurnDelayPending
+                    ? $"{controller.State.SeatNames[controller.State.RoundState.BidState.CurrentBidder]} is counting books."
                 : controller.State.Phase switch
             {
                 MatchPhase.Bidding => controller.State.RoundState.BidState.CurrentBidder == SeatId.Bottom ? "Tap a bid to lock your contract." : $"{controller.State.SeatNames[controller.State.RoundState.BidState.CurrentBidder]} is bidding.",
@@ -921,32 +954,8 @@ namespace BackyardLegends.Runtime
             };
             if (sceneRefs.DealButton != null)
             {
-                var canDeal = openingDealPending && !openingDealRunning && !openingStackIntroRunning;
-                var dealButtonGroup = ResolveCanvasGroup(sceneRefs.DealButton.gameObject);
-                if (canDeal)
-                {
-                    if (dealButtonFadeLoop != null)
-                    {
-                        StopCoroutine(dealButtonFadeLoop);
-                        dealButtonFadeLoop = null;
-                    }
-
-                    dealButtonDismissRunning = false;
-                    sceneRefs.DealButton.gameObject.SetActive(true);
-                    sceneRefs.DealButton.interactable = true;
-                    dealButtonGroup.alpha = 1f;
-                }
-                else if (dealButtonDismissRunning)
-                {
-                    sceneRefs.DealButton.gameObject.SetActive(true);
-                    sceneRefs.DealButton.interactable = false;
-                }
-                else
-                {
-                    sceneRefs.DealButton.interactable = false;
-                    sceneRefs.DealButton.gameObject.SetActive(false);
-                    dealButtonGroup.alpha = 1f;
-                }
+                sceneRefs.DealButton.interactable = false;
+                sceneRefs.DealButton.gameObject.SetActive(false);
             }
 
             if (sceneRefs.OpeningStackImage != null)
@@ -964,6 +973,8 @@ namespace BackyardLegends.Runtime
                 sceneRefs.OpeningStackText.gameObject.SetActive(openingDealPending && !openingDealRunning && !openingStackIntroRunning && openingStackPreviewCards.Count == 0);
             }
 
+            SetDeckCountersVisible(false);
+
             if (openingDealPending || openingDealRunning)
             {
                 RefreshOpeningStackEffectVisual();
@@ -974,7 +985,7 @@ namespace BackyardLegends.Runtime
                 openingStackEffectImage.gameObject.SetActive(openingDealPending && !openingDealRunning && openingStackEffectImage.sprite != null);
             }
 
-            sceneRefs.LastTrickText.text = $"Last hand: {controller.DescribeLastTrick()}";
+            sceneRefs.LastTrickText.text = $"Previous book: {controller.DescribeLastTrick()}";
             sceneRefs.FeedText.text = recentFeed.Count == 0 ? "TABLE FEED\nNo hands yet." : "TABLE FEED\n" + string.Join("\n", recentFeed.Reverse());
 
             UpdateCenterHintLayout();
@@ -991,13 +1002,16 @@ namespace BackyardLegends.Runtime
                 var view = seatViews[seat];
                 var bid = controller.State.RoundState.BidState.BidsBySeat[seat];
                 var tricks = controller.State.RoundState.TricksWonBySeat[seat];
+                var isCurrentTurn = IsCurrentTurnSeat(seat);
                 view.NameText.text = controller.State.SeatNames[seat];
                 view.BidText.text = bid.HasValue ? $"Bid: {(bid.Value == 0 ? "Nil" : bid.Value.ToString())}" : "Bid: --";
                 view.TricksText.text = $"Books: {tricks}";
-                view.StatusText.text = seat == controller.HumanSeat ? "Player" : "Rule-based AI";
+                view.StatusText.text = isCurrentTurn
+                    ? controller.State.Phase == MatchPhase.Bidding ? "BIDDING NOW" : "TURN NOW"
+                    : seat == controller.HumanSeat ? "Player" : "AI";
                 if (view.Panel != null && !ShouldPreserveSeatPanelVisual(view.Panel))
                 {
-                    view.Panel.color = GetSeatPanelTint(seat);
+                    view.Panel.color = isCurrentTurn ? theme.gold : GetSeatPanelTint(seat);
                 }
             }
         }
@@ -1314,7 +1328,7 @@ namespace BackyardLegends.Runtime
 
         private void RenderBidSheet()
         {
-            if (openingDealPending || openingDealRunning)
+            if (openingDealPending || openingDealRunning || handReviewPending || bidTurnDelayPending)
             {
                 SetSheetVisible(sceneRefs.BidSheet, false);
                 return;
@@ -1328,6 +1342,7 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
+            ConfigureBidSheetForHandVisibility();
             var legal = controller.GetLegalBidsForSeat(SeatId.Bottom).ToHashSet();
             foreach (var pair in bidButtons)
             {
@@ -1421,6 +1436,50 @@ namespace BackyardLegends.Runtime
 
             PlayFeedback(FeedbackCue.Collect, 0.18f);
             SpawnImpactBurst(GetAnchoredPoint(sceneRefs.HandContent, new Vector2(0.5f, 0.55f)), theme.gold, 34f, 4);
+            BeginHandReview();
+        }
+
+        private void BeginHandReview()
+        {
+            if (handReviewLoop != null)
+            {
+                StopCoroutine(handReviewLoop);
+            }
+
+            handReviewPending = true;
+            SetSheetVisible(sceneRefs.BidSheet, false);
+            RenderAll();
+            handReviewLoop = StartCoroutine(HandReviewRoutine());
+        }
+
+        private IEnumerator HandReviewRoutine()
+        {
+            yield return new WaitForSecondsRealtime(Mathf.Max(0f, handReviewSeconds));
+            handReviewPending = false;
+            handReviewLoop = null;
+            RenderAll();
+            ScheduleAiLoop();
+        }
+
+        private void BeginBidTurnDelay()
+        {
+            if (bidTurnDelayLoop != null)
+            {
+                StopCoroutine(bidTurnDelayLoop);
+            }
+
+            bidTurnDelayPending = true;
+            SetSheetVisible(sceneRefs.BidSheet, false);
+            RenderAll();
+            bidTurnDelayLoop = StartCoroutine(BidTurnDelayRoutine());
+        }
+
+        private IEnumerator BidTurnDelayRoutine()
+        {
+            yield return new WaitForSecondsRealtime(Mathf.Max(0f, bidTurnDelaySeconds));
+            bidTurnDelayPending = false;
+            bidTurnDelayLoop = null;
+            RenderAll();
             ScheduleAiLoop();
         }
 
@@ -1431,15 +1490,9 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
-            if (dealButtonFadeLoop != null)
-            {
-                StopCoroutine(dealButtonFadeLoop);
-            }
-
-            dealButtonDismissRunning = true;
-            sceneRefs.DealButton.gameObject.SetActive(true);
             sceneRefs.DealButton.interactable = false;
-            dealButtonFadeLoop = StartCoroutine(FadeDealButtonOut());
+            sceneRefs.DealButton.gameObject.SetActive(false);
+            dealButtonDismissRunning = false;
         }
 
         private IEnumerator FadeDealButtonOut()
@@ -1479,8 +1532,8 @@ namespace BackyardLegends.Runtime
 
             var canvasGroup = ResolveCanvasGroup(sceneRefs.DealButton.gameObject);
             canvasGroup.alpha = 1f;
-            sceneRefs.DealButton.gameObject.SetActive(true);
-            sceneRefs.DealButton.interactable = true;
+            sceneRefs.DealButton.gameObject.SetActive(false);
+            sceneRefs.DealButton.interactable = false;
         }
 
         private static CanvasGroup ResolveCanvasGroup(GameObject target)
@@ -1689,7 +1742,7 @@ namespace BackyardLegends.Runtime
 
             if (openingDealPending || openingDealRunning)
             {
-                FlashStatus("Press DEAL to start the table.", theme.gold);
+                FlashStatus("Cards are dealing automatically.", theme.gold);
                 return;
             }
 
@@ -1717,7 +1770,7 @@ namespace BackyardLegends.Runtime
             if (!legalCards.Contains(card))
             {
                 PlayFeedback(FeedbackCue.Invalid, 0.18f);
-                FlashStatus("Classic enforces follow suit. Street relaxes it but still scores reneges.", theme.red);
+                FlashStatus("Follow suit is required. Spades can only cut when you are void in the led suit.", theme.red);
                 var invalidView = handPool.FirstOrDefault(view => view.gameObject.activeSelf && view.gameObject.name == card.ShortLabel);
                 if (invalidView != null)
                 {
@@ -1767,7 +1820,7 @@ namespace BackyardLegends.Runtime
 
             if (openingDealPending || openingDealRunning)
             {
-                FlashStatus("Press DEAL to start the table.", theme.gold);
+                FlashStatus("Cards are dealing automatically.", theme.gold);
                 return;
             }
 
@@ -1798,7 +1851,7 @@ namespace BackyardLegends.Runtime
                 aiLoop = null;
             }
 
-            if (exitPromptOpen || openingDealPending || HasVisualMotionPending)
+            if (exitPromptOpen || openingDealPending || handReviewPending || bidTurnDelayPending || HasVisualMotionPending)
             {
                 return;
             }
@@ -1820,7 +1873,7 @@ namespace BackyardLegends.Runtime
                 }
 
                 yield return new WaitForSecondsRealtime(0.55f);
-                if (exitPromptOpen || controller == null || HasVisualMotionPending)
+                if (exitPromptOpen || handReviewPending || bidTurnDelayPending || controller == null || HasVisualMotionPending)
                 {
                     aiLoop = null;
                     yield break;
@@ -2269,6 +2322,8 @@ namespace BackyardLegends.Runtime
             openingStackIntroRunning = false;
             openingStackIntroLoop = null;
             RenderAll();
+            yield return new WaitForSecondsRealtime(0.35f);
+            OnDealPressed();
         }
 
         private CardButtonView CreateOpeningStackPreviewCard(int index, Vector2 previewSize)
@@ -2931,6 +2986,142 @@ namespace BackyardLegends.Runtime
             sceneRefs.FeedText.text = "TABLE FEED\n" + string.Join("\n", recentFeed.Reverse());
         }
 
+        private string BuildTurnIndicatorText()
+        {
+            if (openingDealPending || openingDealRunning)
+            {
+                return "AUTO DEAL";
+            }
+
+            if (handReviewPending)
+            {
+                return "COUNT BOOKS";
+            }
+
+            if (bidTurnDelayPending)
+            {
+                return "NEXT BID";
+            }
+
+            return controller.State.Phase switch
+            {
+                MatchPhase.Bidding => $"BID: {controller.State.SeatNames[controller.State.RoundState.BidState.CurrentBidder]}",
+                MatchPhase.TrickPlay => $"TURN: {controller.State.SeatNames[controller.State.RoundState.TrickState.CurrentTurn]}",
+                MatchPhase.RoundSummary => "ROUND COMPLETE",
+                MatchPhase.MatchEnded => "MATCH COMPLETE",
+                _ => "READY"
+            };
+        }
+
+        private bool IsCurrentTurnSeat(SeatId seat)
+        {
+            if (openingDealPending || openingDealRunning || handReviewPending || bidTurnDelayPending)
+            {
+                return false;
+            }
+
+            return controller.State.Phase switch
+            {
+                MatchPhase.Bidding => controller.State.RoundState.BidState.CurrentBidder == seat,
+                MatchPhase.TrickPlay => controller.State.RoundState.TrickState.CurrentTurn == seat,
+                _ => false
+            };
+        }
+
+        private string BuildScoreboardText(TeamId team)
+        {
+            var score = controller.State.Scores[team];
+            var label = team == TeamId.Home ? "HOME" : "AWAY";
+            var bid = controller.GetTeamBid(team);
+            var bidLabel = bid > 0 ? bid.ToString() : "--";
+            return $"{label} {score.Score}/{selectedRule.TargetScore} | BID {bidLabel} | BOOKS {controller.GetTeamTricks(team)}";
+        }
+
+        private void SetDeckCountersVisible(bool visible)
+        {
+            if (sceneRefs.DeckAnchorImage != null)
+            {
+                sceneRefs.DeckAnchorImage.gameObject.SetActive(visible);
+            }
+
+            if (sceneRefs.DiscardAnchorImage != null)
+            {
+                sceneRefs.DiscardAnchorImage.gameObject.SetActive(visible);
+            }
+        }
+
+        private void ConfigureScoreboardLayout()
+        {
+            SetScoreChipAnchors(sceneRefs.HomeScoreText, new Vector2(0.04f, 0.08f), new Vector2(0.40f, 0.34f));
+            SetScoreChipAnchors(sceneRefs.AwayScoreText, new Vector2(0.60f, 0.08f), new Vector2(0.96f, 0.34f));
+            if (sceneRefs.TimerHookText != null)
+            {
+                SetAnchors(sceneRefs.TimerHookText.rectTransform, new Vector2(0.40f, 0.08f), new Vector2(0.60f, 0.34f));
+                sceneRefs.TimerHookText.alignment = TextAnchor.MiddleCenter;
+                sceneRefs.TimerHookText.fontSize = 15;
+            }
+        }
+
+        private static void SetScoreChipAnchors(Text label, Vector2 anchorMin, Vector2 anchorMax)
+        {
+            if (label == null || label.transform.parent == null)
+            {
+                return;
+            }
+
+            if (label.transform.parent is RectTransform chip)
+            {
+                SetAnchors(chip, anchorMin, anchorMax);
+            }
+
+            label.alignment = TextAnchor.MiddleCenter;
+            label.horizontalOverflow = HorizontalWrapMode.Wrap;
+            label.verticalOverflow = VerticalWrapMode.Truncate;
+        }
+
+        private void ConfigureBidSheetForHandVisibility()
+        {
+            if (sceneRefs.BidSheet == null)
+            {
+                return;
+            }
+
+            sceneRefs.BidSheet.anchorMin = new Vector2(0.04f, 0.29f);
+            sceneRefs.BidSheet.anchorMax = new Vector2(0.96f, 0.50f);
+            sceneRefs.BidSheet.offsetMin = Vector2.zero;
+            sceneRefs.BidSheet.offsetMax = Vector2.zero;
+
+            var title = sceneRefs.BidSheet.Find("Bid Title") as RectTransform;
+            if (title != null)
+            {
+                SetAnchors(title, new Vector2(0.04f, 0.72f), new Vector2(0.28f, 0.96f));
+                var titleText = title.GetComponent<Text>();
+                if (titleText != null)
+                {
+                    titleText.fontSize = 24;
+                    titleText.alignment = TextAnchor.MiddleLeft;
+                }
+            }
+
+            var bidGrid = sceneRefs.BidSheet.Find("Bid Grid") as RectTransform;
+            if (bidGrid == null)
+            {
+                return;
+            }
+
+            SetAnchors(bidGrid, new Vector2(0.30f, 0.12f), new Vector2(0.96f, 0.90f));
+            var grid = bidGrid.GetComponent<GridLayoutGroup>();
+            if (grid != null)
+            {
+                grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+                grid.constraintCount = 7;
+                grid.spacing = new Vector2(8f, 8f);
+                var width = Mathf.Max(420f, sceneRefs.BidSheet.rect.width * 0.62f);
+                var height = Mathf.Max(118f, sceneRefs.BidSheet.rect.height * 0.78f);
+                grid.cellSize = new Vector2((width - grid.spacing.x * 6f) / 7f, (height - grid.spacing.y) / 2f);
+            }
+        }
+
         private void AnimateScoreDelta(TeamId team)
         {
             var score = controller.State.Scores[team];
@@ -2976,20 +3167,15 @@ namespace BackyardLegends.Runtime
         {
             var home = controller.State.Scores[TeamId.Home];
             var away = controller.State.Scores[TeamId.Away];
-            var trickTail = controller.State.RoundState.CompletedTricks.TakeLast(3).ToList();
-            var startNumber = controller.State.RoundState.CompletedTricks.Count - trickTail.Count + 1;
-            var recentTricks = trickTail
-                .Select((trick, index) => $"{startNumber + index}. {string.Join(" | ", trick.Select(play => $"{controller.State.SeatNames[play.Seat]} {play.Card.ShortLabel}"))}")
-                .ToList();
             var reneges = controller.State.RoundState.RenegeSeats.Count == 0
                 ? "None"
                 : string.Join(", ", controller.State.RoundState.RenegeSeats.Select(seat => controller.State.SeatNames[seat]));
 
             return
-                $"Home: {home.Score} total | round {home.RoundDelta:+#;-#;0} | nil {home.NilDelta:+#;-#;0}\n" +
-                $"Away: {away.Score} total | round {away.RoundDelta:+#;-#;0} | nil {away.NilDelta:+#;-#;0}\n\n" +
-                $"Reneges this round: {reneges}\n" +
-                $"Last hands:\n{(recentTricks.Count > 0 ? string.Join("\n", recentTricks) : "No completed tricks recorded.")}";
+                $"Home: {home.Score} total | bid {home.ContractBid} | books {home.TricksWon} | round {home.RoundDelta:+#;-#;0} | nil {home.NilDelta:+#;-#;0}\n" +
+                $"Away: {away.Score} total | bid {away.ContractBid} | books {away.TricksWon} | round {away.RoundDelta:+#;-#;0} | nil {away.NilDelta:+#;-#;0}\n\n" +
+                $"Reneges: {reneges}\n" +
+                $"Target: {selectedRule.TargetScore}";
         }
 
         private string BuildMatchSummaryText(TeamId winningTeam)

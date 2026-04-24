@@ -131,13 +131,13 @@ namespace BackyardLegends.Editor
             refs.HudModeText = CreateText("Mode", hudPanel.transform, "CLASSIC | 100", 22, FontStyle.Bold, theme.primaryText, TextAnchor.UpperRight, new Vector2(0.66f, 0.60f), new Vector2(0.96f, 0.94f));
             refs.StatusText = CreateText("Status", hudPanel.transform, "Preparing the table.", 18, FontStyle.Normal, theme.mutedText, TextAnchor.MiddleLeft, new Vector2(0.04f, 0.46f), new Vector2(0.62f, 0.66f));
             CreateText("Title", hudPanel.transform, "BACKYARD LEGENDS", 38, FontStyle.Bold, theme.gold, TextAnchor.UpperLeft, new Vector2(0.21f, 0.58f), new Vector2(0.60f, 0.96f));
-            refs.HomeScoreText = CreateChipLabel(hudPanel.transform, "Home Chip", new Vector2(0.04f, 0.10f), new Vector2(0.23f, 0.34f), "HOME 0 | BAGS 0", theme.green, theme.backgroundColor);
-            refs.AwayScoreText = CreateChipLabel(hudPanel.transform, "Away Chip", new Vector2(0.77f, 0.10f), new Vector2(0.96f, 0.34f), "AWAY 0 | BAGS 0", theme.red, theme.backgroundColor);
+            refs.HomeScoreText = CreateChipLabel(hudPanel.transform, "Home Chip", new Vector2(0.04f, 0.08f), new Vector2(0.40f, 0.34f), "HOME 0/100 | BID -- | BOOKS 0", theme.green, theme.backgroundColor);
+            refs.AwayScoreText = CreateChipLabel(hudPanel.transform, "Away Chip", new Vector2(0.60f, 0.08f), new Vector2(0.96f, 0.34f), "AWAY 0/100 | BID -- | BOOKS 0", theme.red, theme.backgroundColor);
             ApplySprite(refs.HomeScoreText.transform.parent.GetComponent<Image>(), theme.chipSprite, Image.Type.Sliced, theme.green);
             ApplySprite(refs.AwayScoreText.transform.parent.GetComponent<Image>(), theme.chipSprite, Image.Type.Sliced, theme.red);
             refs.HomeDeltaText = CreateText("Home Delta", hudPanel.transform, string.Empty, 18, FontStyle.Bold, theme.green, TextAnchor.MiddleCenter, new Vector2(0.04f, 0.33f), new Vector2(0.23f, 0.48f));
             refs.AwayDeltaText = CreateText("Away Delta", hudPanel.transform, string.Empty, 18, FontStyle.Bold, theme.red, TextAnchor.MiddleCenter, new Vector2(0.77f, 0.33f), new Vector2(0.96f, 0.48f));
-            refs.TimerHookText = CreateText("Turn Clock", hudPanel.transform, "TURN CLOCK | OFF IN PHASE 1", 16, FontStyle.Bold, theme.mutedText, TextAnchor.MiddleCenter, new Vector2(0.30f, 0.10f), new Vector2(0.70f, 0.28f));
+            refs.TimerHookText = CreateText("Turn Clock", hudPanel.transform, "AUTO DEAL", 15, FontStyle.Bold, theme.mutedText, TextAnchor.MiddleCenter, new Vector2(0.40f, 0.08f), new Vector2(0.60f, 0.34f));
 
             var tablePanel = CreatePanel("Table", appRoot.transform, new Vector2(0.03f, 0.27f), new Vector2(0.97f, 0.84f), new Color(0.1f, 0.11f, 0.12f, 0.86f));
             refs.TablePanel = tablePanel;
@@ -149,10 +149,12 @@ namespace BackyardLegends.Editor
             refs.FeedText = CreateText("Feed", feedPanel.transform, "TABLE FEED\nNo hands yet.", 14, FontStyle.Normal, theme.mutedText, TextAnchor.UpperLeft, new Vector2(0.08f, 0.10f), new Vector2(0.92f, 0.90f));
             refs.DeckAnchorImage = CreatePanel("Deck Anchor", tablePanel.transform, new Vector2(0.03f, 0.36f), new Vector2(0.14f, 0.48f), new Color(0.13f, 0.14f, 0.16f, 0.94f));
             ApplySprite(refs.DeckAnchorImage, theme.softPanelSprite, Image.Type.Sliced, new Color(1f, 1f, 1f, 0.24f));
-            refs.DeckAnchorText = CreateText("Deck Label", refs.DeckAnchorImage.transform, "DECK\n52 LIVE", 16, FontStyle.Bold, theme.primaryText, TextAnchor.MiddleCenter, new Vector2(0.08f, 0.10f), new Vector2(0.92f, 0.90f));
+            refs.DeckAnchorText = CreateText("Deck Label", refs.DeckAnchorImage.transform, string.Empty, 16, FontStyle.Bold, theme.primaryText, TextAnchor.MiddleCenter, new Vector2(0.08f, 0.10f), new Vector2(0.92f, 0.90f));
+            refs.DeckAnchorImage.gameObject.SetActive(false);
             refs.DiscardAnchorImage = CreatePanel("Discard Anchor", tablePanel.transform, new Vector2(0.86f, 0.36f), new Vector2(0.97f, 0.48f), new Color(0.13f, 0.14f, 0.16f, 0.94f));
             ApplySprite(refs.DiscardAnchorImage, theme.softPanelSprite, Image.Type.Sliced, new Color(1f, 1f, 1f, 0.24f));
-            refs.DiscardAnchorText = CreateText("Discard Label", refs.DiscardAnchorImage.transform, "DISCARD\n0 TAKEN", 16, FontStyle.Bold, theme.primaryText, TextAnchor.MiddleCenter, new Vector2(0.08f, 0.10f), new Vector2(0.92f, 0.90f));
+            refs.DiscardAnchorText = CreateText("Discard Label", refs.DiscardAnchorImage.transform, string.Empty, 16, FontStyle.Bold, theme.primaryText, TextAnchor.MiddleCenter, new Vector2(0.08f, 0.10f), new Vector2(0.92f, 0.90f));
+            refs.DiscardAnchorImage.gameObject.SetActive(false);
             refs.OpeningStackImage = CreatePanel("Opening Stack", tablePanel.transform, new Vector2(0.42f, 0.39f), new Vector2(0.58f, 0.60f), new Color(0.13f, 0.14f, 0.16f, 0.96f));
             ApplySprite(refs.OpeningStackImage, theme.cardBackHeroSprite != null ? theme.cardBackHeroSprite : theme.softPanelSprite, Image.Type.Sliced, Color.white);
             refs.OpeningStackText = CreateText("Opening Stack Label", refs.OpeningStackImage.transform, "52\nCARDS", 24, FontStyle.Bold, theme.gold, TextAnchor.MiddleCenter, new Vector2(0.18f, 0.18f), new Vector2(0.82f, 0.82f));
@@ -160,6 +162,7 @@ namespace BackyardLegends.Editor
             refs.BannerText = CreateText("Banner", tablePanel.transform, string.Empty, 32, FontStyle.Bold, theme.gold, TextAnchor.MiddleCenter, new Vector2(0.18f, 0.58f), new Vector2(0.82f, 0.7f));
             refs.DealButton = CreateButton("Deal Button", tablePanel.transform, "DEAL", theme.green, new Vector2(0.34f, 0.25f), new Vector2(0.66f, 0.34f));
             ApplySprite(refs.DealButton.image, theme.buttonSprite, Image.Type.Sliced, theme.green);
+            refs.DealButton.gameObject.SetActive(false);
 
             refs.TopSeat = InstantiateSeat(seatPrefab, tablePanel.transform, new Vector2(0.35f, 0.81f), new Vector2(0.65f, 0.95f), "Top Seat");
             refs.LeftSeat = InstantiateSeat(seatPrefab, tablePanel.transform, new Vector2(0.02f, 0.50f), new Vector2(0.28f, 0.69f), "Left Seat");
@@ -202,19 +205,19 @@ namespace BackyardLegends.Editor
 
         private static void BuildGameplaySheets(Transform parent, BackyardLegendsSceneRefs refs, ThemeConfig theme)
         {
-            refs.BidSheetImage = CreatePanel("Bid Sheet", parent, new Vector2(0.04f, 0.56f), new Vector2(0.96f, 0.82f), theme.panelColor);
+            refs.BidSheetImage = CreatePanel("Bid Sheet", parent, new Vector2(0.04f, 0.29f), new Vector2(0.96f, 0.50f), theme.panelColor);
             refs.BidSheet = refs.BidSheetImage.rectTransform;
             ApplySprite(refs.BidSheetImage, theme.sheetSprite, Image.Type.Sliced, new Color(0.15f, 0.16f, 0.18f, 0.98f));
-            CreateText("Bid Title", refs.BidSheet, "CALL YOUR BID", 34, FontStyle.Bold, theme.gold, TextAnchor.UpperCenter, new Vector2(0.08f, 0.8f), new Vector2(0.92f, 0.96f));
+            CreateText("Bid Title", refs.BidSheet, "CALL YOUR BID", 24, FontStyle.Bold, theme.gold, TextAnchor.MiddleLeft, new Vector2(0.04f, 0.72f), new Vector2(0.28f, 0.96f));
             var bidGrid = new GameObject("Bid Grid", typeof(RectTransform), typeof(GridLayoutGroup));
             bidGrid.transform.SetParent(refs.BidSheet, false);
             var bidGridRect = bidGrid.GetComponent<RectTransform>();
-            SetAnchors(bidGridRect, new Vector2(0.07f, 0.08f), new Vector2(0.93f, 0.74f));
+            SetAnchors(bidGridRect, new Vector2(0.30f, 0.12f), new Vector2(0.96f, 0.90f));
             var grid = bidGrid.GetComponent<GridLayoutGroup>();
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-            grid.constraintCount = 4;
-            grid.spacing = new Vector2(14f, 14f);
-            grid.cellSize = new Vector2(140f, 88f);
+            grid.constraintCount = 7;
+            grid.spacing = new Vector2(8f, 8f);
+            grid.cellSize = new Vector2(76f, 58f);
             refs.BidButtons = new Button[14];
             for (var bid = 0; bid <= 13; bid++)
             {
@@ -474,7 +477,7 @@ namespace BackyardLegends.Editor
         private static Text CreateChipLabel(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, string text, Color accent, Color labelColor)
         {
             var chip = CreatePanel(name, parent, anchorMin, anchorMax, accent);
-            var label = CreateText("Label", chip.transform, text, 17, FontStyle.Bold, labelColor, TextAnchor.MiddleCenter, Vector2.zero, Vector2.one);
+            var label = CreateText("Label", chip.transform, text, 14, FontStyle.Bold, labelColor, TextAnchor.MiddleCenter, Vector2.zero, Vector2.one);
             Stretch(label.rectTransform, 8f);
             return label;
         }
