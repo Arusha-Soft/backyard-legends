@@ -212,12 +212,14 @@ namespace BackyardLegends.Editor
             var bidGrid = new GameObject("Bid Grid", typeof(RectTransform), typeof(GridLayoutGroup));
             bidGrid.transform.SetParent(refs.BidSheet, false);
             var bidGridRect = bidGrid.GetComponent<RectTransform>();
-            SetAnchors(bidGridRect, new Vector2(0.30f, 0.12f), new Vector2(0.96f, 0.90f));
+            SetAnchors(bidGridRect, new Vector2(0.30f, 0.30f), new Vector2(0.96f, 0.90f));
             var grid = bidGrid.GetComponent<GridLayoutGroup>();
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             grid.constraintCount = 7;
             grid.spacing = new Vector2(8f, 8f);
             grid.cellSize = new Vector2(76f, 58f);
+            refs.ConfirmBidButton = CreateButton("Confirm Bid", refs.BidSheet, "CONFIRM BID", theme.green, new Vector2(0.36f, 0.05f), new Vector2(0.64f, 0.26f));
+            ApplySprite(refs.ConfirmBidButton.image, theme.buttonSprite, Image.Type.Sliced, theme.green);
             refs.BidButtons = new Button[14];
             for (var bid = 0; bid <= 13; bid++)
             {
@@ -311,7 +313,7 @@ namespace BackyardLegends.Editor
             var bubbleGo = new GameObject("Bid Callout", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
             bubbleGo.transform.SetParent(root.transform, false);
             var bubbleRect = bubbleGo.GetComponent<RectTransform>();
-            SetAnchors(bubbleRect, new Vector2(0.16f, 1.02f), new Vector2(0.84f, 1.32f));
+            SetAnchors(bubbleRect, new Vector2(0.08f, 1.00f), new Vector2(0.92f, 1.42f));
             var bubbleImage = bubbleGo.GetComponent<Image>();
             ConfigureImage(bubbleImage, new Color(0.15f, 0.16f, 0.18f, 0.95f));
             ApplySprite(bubbleImage, theme.buttonSprite, Image.Type.Sliced, new Color(0.15f, 0.16f, 0.18f, 0.95f));
@@ -321,7 +323,10 @@ namespace BackyardLegends.Editor
             bubbleGroup.interactable = false;
             view.BidCalloutPanel = bubbleImage;
             view.BidCalloutGroup = bubbleGroup;
-            view.BidCalloutText = CreateText("Bubble Label", bubbleGo.transform, "I BID 3", 18, FontStyle.Bold, theme.primaryText, TextAnchor.MiddleCenter, new Vector2(0.08f, 0.12f), new Vector2(0.92f, 0.88f));
+            view.BidCalloutText = CreateText("Bubble Label", bubbleGo.transform, "I BID 3", 46, FontStyle.Bold, theme.primaryText, TextAnchor.MiddleCenter, new Vector2(0.02f, 0.06f), new Vector2(0.98f, 0.94f));
+            view.BidCalloutText.resizeTextForBestFit = true;
+            view.BidCalloutText.resizeTextMinSize = 34;
+            view.BidCalloutText.resizeTextMaxSize = 46;
             return SavePrefab(path, root);
         }
 

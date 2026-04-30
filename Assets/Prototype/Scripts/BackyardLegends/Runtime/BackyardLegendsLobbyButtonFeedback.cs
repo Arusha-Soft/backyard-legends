@@ -1,5 +1,5 @@
 using System;
-using System.Collections;
+using System.Linq;
 using BackyardLegends.Core;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -19,11 +19,15 @@ namespace BackyardLegends.Runtime
         private Button button;
         private Image image;
         private Text label;
+        private CanvasGroup selectedIndicatorGroup;
+        private Image selectedFrameImage;
+        private Text selectedCheckmarkText;
         private ThemeConfig theme;
         private Action hoverCallback;
         private Action selectCallback;
         private Color baseImageColor;
         private Color baseLabelColor;
+        private Color selectedImageColor;
         private Color selectedLabelColor;
         private FontStyle baseLabelStyle;
         private bool initialized;
@@ -35,7 +39,7 @@ namespace BackyardLegends.Runtime
         {
             button = button != null ? button : GetComponent<Button>();
             image = image != null ? image : GetComponent<Image>();
-            label = label != null ? label : GetComponentInChildren<Text>(true);
+            label = label != null ? label : ResolveLabel();
             theme = themeConfig;
 
             if (!initialized)
@@ -46,6 +50,9 @@ namespace BackyardLegends.Runtime
                 initialized = true;
             }
 
+            EnsureButtonSprite();
+            EnsureSelectedIndicator();
+            selectedImageColor = ResolveSelectedImageColor();
             selectedLabelColor = ResolveReadableSelectedLabelColor();
             ApplyVisualState(true);
         }
@@ -133,6 +140,7 @@ namespace BackyardLegends.Runtime
 
             if (image != null)
             {
+                EnsureButtonSprite();
                 image.color = ResolveImageColor();
             }
 
@@ -140,6 +148,29 @@ namespace BackyardLegends.Runtime
             {
                 label.color = selected ? selectedLabelColor : baseLabelColor;
                 label.fontStyle = selected || hovered ? FontStyle.Bold : baseLabelStyle;
+            }
+
+            if (selectedIndicatorGroup != null)
+            {
+                selectedIndicatorGroup.alpha = selected ? 1f : 0f;
+                selectedIndicatorGroup.gameObject.SetActive(selected);
+            }
+
+            if (selectedFrameImage != null)
+            {
+                if (selected && selectedFrameImage.sprite == null)
+                {
+                    selectedFrameImage.sprite = ResolveSelectedFrameSprite();
+                }
+
+                var canShowFrame = selected && selectedFrameImage.sprite != null;
+                selectedFrameImage.enabled = canShowFrame;
+                selectedFrameImage.color = canShowFrame ? Color.white : Color.clear;
+            }
+
+            if (selectedCheckmarkText != null)
+            {
+                selectedCheckmarkText.gameObject.SetActive(selected);
             }
         }
 
@@ -151,6 +182,11 @@ namespace BackyardLegends.Runtime
             }
 
             var resolved = baseImageColor;
+            if (selected)
+            {
+                resolved = selectedImageColor;
+            }
+
             if (hovered)
             {
                 resolved = Color.Lerp(resolved, Color.white, 0.05f);
@@ -164,9 +200,117 @@ namespace BackyardLegends.Runtime
             return resolved;
         }
 
+        private void EnsureSelectedIndicator()
+        {
+            if (selectedIndicatorGroup != null)
+            {
+                if (selectedFrameImage == null)
+                {
+                    selectedFrameImage = selectedIndicatorGroup.GetComponent<Image>();
+                }
+
+                if (selectedFrameImage != null && selectedFrameImage.sprite == null)
+                {
+                    selectedFrameImage.sprite = ResolveSelectedFrameSprite();
+                }
+
+                return;
+            }
+
+            var indicator = transform.Find("Selected Indicator");
+            GameObject indicatorObject;
+            if (indicator != null)
+            {
+                indicatorObject = indicator.gameObject;
+            }
+            else
+            {
+                indicatorObject = new GameObject("Selected Indicator", typeof(RectTransform), typeof(CanvasGroup), typeof(Image));
+                indicatorObject.transform.SetParent(transform, false);
+            }
+
+            var indicatorRect = indicatorObject.GetComponent<RectTransform>();
+            Stretch(indicatorRect, -4f);
+            indicatorRect.SetAsFirstSibling();
+
+            selectedIndicatorGroup = indicatorObject.GetComponent<CanvasGroup>();
+            selectedIndicatorGroup.blocksRaycasts = false;
+            selectedIndicatorGroup.interactable = false;
+
+            selectedFrameImage = indicatorObject.GetComponent<Image>();
+            selectedFrameImage.raycastTarget = false;
+            selectedFrameImage.type = Image.Type.Simple;
+            selectedFrameImage.sprite = ResolveSelectedFrameSprite();
+
+            selectedCheckmarkText = selectedCheckmarkText != null
+                ? selectedCheckmarkText
+                : transform.Find("Selected Checkmark")?.GetComponent<Text>();
+            if (selectedCheckmarkText == null)
+            {
+                var checkmarkObject = new GameObject("Selected Checkmark", typeof(RectTransform), typeof(Text));
+                checkmarkObject.transform.SetParent(transform, false);
+                selectedCheckmarkText = checkmarkObject.GetComponent<Text>();
+            }
+
+            selectedCheckmarkText.raycastTarget = false;
+            selectedCheckmarkText.text = "\u2713";
+            selectedCheckmarkText.alignment = TextAnchor.MiddleCenter;
+            selectedCheckmarkText.fontStyle = FontStyle.Bold;
+            selectedCheckmarkText.fontSize = 24;
+            selectedCheckmarkText.font = label != null && label.font != null
+                ? label.font
+                : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            selectedCheckmarkText.color = theme != null ? theme.backgroundColor : new Color(0.05f, 0.05f, 0.05f, 1f);
+            selectedCheckmarkText.transform.SetAsLastSibling();
+            SetAnchors(selectedCheckmarkText.rectTransform, new Vector2(0.76f, 0.54f), new Vector2(0.98f, 0.96f));
+        }
+
+        private void EnsureButtonSprite()
+        {
+            if (image == null || image.sprite != null)
+            {
+                return;
+            }
+
+            image.sprite = theme != null && theme.buttonSprite != null
+                ? theme.buttonSprite
+                : ThemeSpriteFactory.CreateRoundedRectSprite(
+                    baseImageColor,
+                    theme != null ? theme.panelStroke : new Color(0.68f, 0.61f, 0.52f, 1f),
+                    256,
+                    96,
+                    22);
+            image.type = Image.Type.Sliced;
+        }
+
+        private Sprite ResolveSelectedFrameSprite()
+        {
+            return ThemeSpriteFactory.CreateRoundedRectSprite(
+                new Color(1f, 0.84f, 0.38f, 0.18f),
+                theme != null ? theme.highlight : new Color(1f, 0.84f, 0.38f, 1f),
+                192,
+                96,
+                20);
+        }
+
+        private Text ResolveLabel()
+        {
+            var labelTransform = transform.Find("Label");
+            return labelTransform != null
+                ? labelTransform.GetComponent<Text>()
+                : GetComponentsInChildren<Text>(true).FirstOrDefault(text => text.name != "Selected Checkmark");
+        }
+
+        private Color ResolveSelectedImageColor()
+        {
+            var accent = theme != null ? theme.highlight : new Color(1f, 0.84f, 0.38f, 1f);
+            accent.a = baseImageColor.a;
+            return Color.Lerp(baseImageColor, accent, 0.82f);
+        }
+
         private Color ResolveReadableSelectedLabelColor()
         {
-            var imageColor = image != null ? image.color : Color.white;
+            var imageColor = selectedImageColor;
             var darkCandidate = theme != null
                 ? Color.Lerp(theme.backgroundColor, Color.black, 0.45f)
                 : new Color(0.03f, 0.03f, 0.03f, 1f);
@@ -204,6 +348,22 @@ namespace BackyardLegends.Runtime
         private static float RelativeLuminance(Color color)
         {
             return 0.2126f * color.r + 0.7152f * color.g + 0.0722f * color.b;
+        }
+
+        private static void Stretch(RectTransform rectTransform, float inset)
+        {
+            rectTransform.anchorMin = Vector2.zero;
+            rectTransform.anchorMax = Vector2.one;
+            rectTransform.offsetMin = new Vector2(inset, inset);
+            rectTransform.offsetMax = new Vector2(-inset, -inset);
+        }
+
+        private static void SetAnchors(RectTransform rectTransform, Vector2 anchorMin, Vector2 anchorMax)
+        {
+            rectTransform.anchorMin = anchorMin;
+            rectTransform.anchorMax = anchorMax;
+            rectTransform.offsetMin = Vector2.zero;
+            rectTransform.offsetMax = Vector2.zero;
         }
     }
 }

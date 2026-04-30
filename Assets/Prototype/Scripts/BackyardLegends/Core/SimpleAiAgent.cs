@@ -30,7 +30,7 @@ namespace BackyardLegends.Core
         public int ChooseBid(AiBidContext context)
         {
             var estimatedTricks = EstimateTricks(context.Hand);
-            if (context.LegalBids.Contains(0) && estimatedTricks <= 2)
+            if (context.LegalBids.Contains(0) && IsNilCandidate(context.Hand, estimatedTricks))
             {
                 return 0;
             }
@@ -45,6 +45,11 @@ namespace BackyardLegends.Core
         public Card ChooseCard(AiPlayContext context)
         {
             var legalCards = context.LegalCards.ToList();
+            if (IsNilBid(context))
+            {
+                return ChooseNilCard(context, legalCards);
+            }
+
             var trick = context.MatchState.RoundState.TrickState;
             if (trick.Plays.Count == 0)
             {
@@ -70,6 +75,44 @@ namespace BackyardLegends.Core
             }
 
             return legalCards.OrderBy(card => card.Rank).ThenBy(card => card.Suit).First();
+        }
+
+        private static Card ChooseNilCard(AiPlayContext context, List<Card> legalCards)
+        {
+            var trick = context.MatchState.RoundState.TrickState;
+            if (trick.Plays.Count == 0)
+            {
+                return LowestNonSpadeFirst(legalCards).First();
+            }
+
+            var currentWinningSeat = new SpadesRuleEngine().ResolveTrickWinner(trick);
+            var currentWinningCard = trick.Plays.First(play => play.Seat == currentWinningSeat).Card;
+            var leadSuit = trick.LeadSuit ?? trick.Plays[0].Card.Suit;
+            var followSuitCards = legalCards.Where(card => card.Suit == leadSuit).ToList();
+            var candidates = followSuitCards.Count > 0
+                ? followSuitCards
+                : legalCards.Where(card => card.Suit != Suit.Spades).ToList();
+
+            if (candidates.Count == 0)
+            {
+                candidates = legalCards;
+            }
+
+            var losingCards = candidates
+                .Where(card => !Beats(card, currentWinningCard, leadSuit))
+                .OrderBy(card => card.Rank)
+                .ThenBy(card => card.Suit)
+                .ToList();
+
+            if (losingCards.Count > 0)
+            {
+                return losingCards.First();
+            }
+
+            return candidates
+                .OrderBy(card => card.Rank)
+                .ThenBy(card => card.Suit)
+                .First();
         }
 
         private static int EstimateTricks(IEnumerable<Card> hand)
@@ -106,6 +149,51 @@ namespace BackyardLegends.Core
             }
 
             return System.Math.Clamp(bid, 1, 7);
+        }
+
+        private static bool IsNilCandidate(IEnumerable<Card> hand, int estimatedTricks)
+        {
+            var cards = hand.ToList();
+            if (estimatedTricks > 1)
+            {
+                return false;
+            }
+
+            if (cards.Any(card => card.Suit == Suit.Spades && card.Rank >= 12))
+            {
+                return false;
+            }
+
+            if (cards.Any(card => card.Rank == 14))
+            {
+                return false;
+            }
+
+            if (cards.Count(card => card.Rank >= 12) >= 2)
+            {
+                return false;
+            }
+
+            if (cards.Count(card => card.Suit == Suit.Spades && card.Rank >= 10) >= 2)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool IsNilBid(AiPlayContext context)
+        {
+            return context.MatchState.RoundState.BidState.BidsBySeat.TryGetValue(context.Seat, out var bid) &&
+                   bid == 0;
+        }
+
+        private static IOrderedEnumerable<Card> LowestNonSpadeFirst(IEnumerable<Card> cards)
+        {
+            return cards
+                .OrderBy(card => card.Suit == Suit.Spades)
+                .ThenBy(card => card.Rank)
+                .ThenBy(card => card.Suit);
         }
 
         private static bool Beats(Card challenger, Card currentWinner, Suit leadSuit)

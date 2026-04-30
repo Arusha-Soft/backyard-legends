@@ -83,7 +83,7 @@ namespace BackyardLegends.Runtime
 
         private static Sprite GetOrCreate(string key, System.Func<Sprite> builder)
         {
-            if (SpriteCache.TryGetValue(key, out var sprite))
+            if (SpriteCache.TryGetValue(key, out var sprite) && sprite != null && sprite.texture != null)
             {
                 return sprite;
             }

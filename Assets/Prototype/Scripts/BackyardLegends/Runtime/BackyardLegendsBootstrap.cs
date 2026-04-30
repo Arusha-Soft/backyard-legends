@@ -10,7 +10,12 @@ namespace BackyardLegends.Runtime
 {
     public sealed class BackyardLegendsBootstrap : MonoBehaviour
     {
-        private const float BottomHandCardSizeMultiplier = 2.25f;
+        private const float BottomHandCardSizeMultiplier = 2.68f;
+        private const int BidCalloutFontSize = 46;
+        private static readonly Vector2 BidCalloutAnchorMin = new(0.08f, 1.00f);
+        private static readonly Vector2 BidCalloutAnchorMax = new(0.92f, 1.42f);
+        private static readonly Vector2 ConfirmBidAnchorMin = new(0.36f, 0.05f);
+        private static readonly Vector2 ConfirmBidAnchorMax = new(0.64f, 0.26f);
 
         [SerializeField] private BackyardLegendsSceneRefs sceneRefs;
         [SerializeField] private ThemeConfig themeOverride;
@@ -26,6 +31,7 @@ namespace BackyardLegends.Runtime
         [SerializeField] private AudioClip invalidClipAsset;
         [SerializeField] private AudioClip roundScoreClipAsset;
         [SerializeField] private AudioClip matchEndClipAsset;
+        [SerializeField] private AudioClip setBookClipAsset;
 
         private readonly Dictionary<SeatId, SeatPanelView> seatViews = new();
         private readonly Dictionary<SeatId, TrickSlotView> trickSlots = new();
@@ -37,6 +43,7 @@ namespace BackyardLegends.Runtime
         private readonly Dictionary<SeatId, Coroutine> bidBubbleLoops = new();
         private readonly Queue<string> recentFeed = new();
         private readonly Queue<IEnumerator> queuedAnimations = new();
+        private readonly Queue<TeamId> pendingSetBookMoments = new();
         private readonly HashSet<Card> lastRenderedHand = new();
         private readonly HashSet<SeatId> hiddenTrickSlots = new();
         private readonly Dictionary<SeatId, Card> resolvedTrickCards = new();
@@ -48,9 +55,11 @@ namespace BackyardLegends.Runtime
         private ThemeConfig theme;
         private RuleSetDefinition selectedRule;
         private Card? selectedCard;
+        private int? pendingBidSelection;
         private Coroutine aiLoop;
         private Coroutine animationQueueLoop;
         private Coroutine openingStackIntroLoop;
+        private Coroutine deferredSheetStateLoop;
         private Coroutine bannerLoop;
         private Coroutine flashLoop;
         private Coroutine homeDeltaLoop;
@@ -73,19 +82,29 @@ namespace BackyardLegends.Runtime
         private AudioClip invalidClip;
         private AudioClip roundScoreClip;
         private AudioClip matchEndClip;
+        private AudioClip setBookClip;
+        private int bannerDefaultFontSize;
+        private FontStyle bannerDefaultFontStyle;
+        private TextAnchor bannerDefaultAlignment;
+        private Color bannerDefaultColor;
+        private Vector2 bannerDefaultPosition;
+        private Vector3 bannerDefaultScale;
+        private bool bannerDefaultsCaptured;
         private bool pendingRoundSheetOpen;
         private bool pendingEndSheetOpen;
+        private bool setBookMomentRunning;
         private bool openingDealPending;
         private bool openingDealRunning;
         private bool handReviewPending;
         private bool bidTurnDelayPending;
         private bool openingStackIntroRunning;
         private bool suppressNextHandEntryAnimation;
-        private bool dealButtonDismissRunning;
         private bool exitPromptOpen;
 
         private RectTransform AnimationRoot => (RectTransform)transform;
-        private bool HasVisualMotionPending => openingDealRunning || animationQueueLoop != null || queuedAnimations.Count > 0 || floatingCards.Count > 0;
+        private bool HasCardMotionPending => openingDealRunning || animationQueueLoop != null || queuedAnimations.Count > 0 || floatingCards.Count > 0;
+
+        private bool HasVisualMotionPending => HasCardMotionPending || setBookMomentRunning || pendingSetBookMoments.Count > 0;
 
         private enum FeedbackCue
         {
@@ -97,7 +116,8 @@ namespace BackyardLegends.Runtime
             Deal,
             Invalid,
             RoundScore,
-            MatchEnd
+            MatchEnd,
+            SetBook
         }
 
         private readonly struct CardMotionSnapshot
@@ -195,6 +215,7 @@ namespace BackyardLegends.Runtime
 
             EnsureRuntimeOpeningWidgets();
             EnsureRuntimeBackNavigationWidgets();
+            EnsureRuntimeBidConfirmationWidgets();
             EnsureRuntimeSeatCallouts();
 
             var handLayoutGroup = sceneRefs.HandContent != null ? sceneRefs.HandContent.GetComponent<LayoutGroup>() : null;
@@ -250,6 +271,22 @@ namespace BackyardLegends.Runtime
             }
         }
 
+        private void EnsureRuntimeBidConfirmationWidgets()
+        {
+            if (sceneRefs.BidSheet == null || sceneRefs.ConfirmBidButton != null)
+            {
+                return;
+            }
+
+            sceneRefs.ConfirmBidButton = CreateRuntimeButton(
+                "Confirm Bid",
+                sceneRefs.BidSheet,
+                "CONFIRM BID",
+                theme.green,
+                ConfirmBidAnchorMin,
+                ConfirmBidAnchorMax);
+        }
+
         private void EnsureRuntimeSeatCallouts()
         {
             EnsureSeatCallout(sceneRefs.BottomSeat);
@@ -267,13 +304,14 @@ namespace BackyardLegends.Runtime
 
             if (view.BidCalloutPanel != null && view.BidCalloutText != null && view.BidCalloutGroup != null)
             {
+                ConfigureSeatCalloutLayout(view);
                 return;
             }
 
             var bubble = new GameObject("Bid Callout Runtime", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
             bubble.transform.SetParent(view.transform, false);
             var bubbleRect = bubble.GetComponent<RectTransform>();
-            SetAnchors(bubbleRect, new Vector2(0.16f, 1.02f), new Vector2(0.84f, 1.32f));
+            SetAnchors(bubbleRect, BidCalloutAnchorMin, BidCalloutAnchorMax);
             var bubbleImage = bubble.GetComponent<Image>();
             bubbleImage.sprite = theme.buttonSprite != null ? theme.buttonSprite : ResolveSoftPanelSprite();
             bubbleImage.type = Image.Type.Sliced;
@@ -284,7 +322,8 @@ namespace BackyardLegends.Runtime
             bubbleGroup.interactable = false;
             view.BidCalloutPanel = bubbleImage;
             view.BidCalloutGroup = bubbleGroup;
-            view.BidCalloutText = CreateRuntimeText("Label", bubble.transform, "I BID 3", 18, FontStyle.Bold, theme.primaryText, TextAnchor.MiddleCenter, new Vector2(0.08f, 0.12f), new Vector2(0.92f, 0.88f));
+            view.BidCalloutText = CreateRuntimeText("Label", bubble.transform, "I BID 3", BidCalloutFontSize, FontStyle.Bold, theme.primaryText, TextAnchor.MiddleCenter, new Vector2(0.02f, 0.06f), new Vector2(0.98f, 0.94f));
+            ConfigureSeatCalloutLayout(view);
         }
 
         private void Update()
@@ -592,6 +631,12 @@ namespace BackyardLegends.Runtime
 
             sceneRefs.PlaySelectedButton.onClick.RemoveAllListeners();
             sceneRefs.PlaySelectedButton.onClick.AddListener(OnPlaySelected);
+            if (sceneRefs.ConfirmBidButton != null)
+            {
+                sceneRefs.ConfirmBidButton.onClick.RemoveAllListeners();
+                sceneRefs.ConfirmBidButton.onClick.AddListener(ConfirmSelectedBid);
+            }
+
             if (sceneRefs.DealButton != null)
             {
                 sceneRefs.DealButton.onClick.RemoveAllListeners();
@@ -602,7 +647,7 @@ namespace BackyardLegends.Runtime
             {
                 var localBid = pair.Key;
                 pair.Value.onClick.RemoveAllListeners();
-                pair.Value.onClick.AddListener(() => SubmitBid(localBid));
+                pair.Value.onClick.AddListener(() => SelectBid(localBid));
             }
         }
 
@@ -628,6 +673,7 @@ namespace BackyardLegends.Runtime
             invalidClip = invalidClipAsset != null ? invalidClipAsset : CreateToneClip("Invalid Cue", 240f, 160f, 0.1f, 0.16f);
             roundScoreClip = roundScoreClipAsset != null ? roundScoreClipAsset : CreateToneClip("Round Score Cue", 560f, 820f, 0.2f, 0.18f);
             matchEndClip = matchEndClipAsset != null ? matchEndClipAsset : CreateToneClip("Match End Cue", 460f, 920f, 0.28f, 0.22f);
+            setBookClip = setBookClipAsset != null ? setBookClipAsset : CreateSetBookImpactClip();
         }
 
         private static AudioClip CreateToneClip(string clipName, float frequencyA, float frequencyB, float duration, float volume)
@@ -645,6 +691,31 @@ namespace BackyardLegends.Runtime
             }
 
             var clip = AudioClip.Create(clipName, sampleCount, 1, sampleRate, false);
+            clip.SetData(samples, 0);
+            return clip;
+        }
+
+        private static AudioClip CreateSetBookImpactClip()
+        {
+            const int sampleRate = 22050;
+            const float duration = 0.36f;
+            var sampleCount = Mathf.CeilToInt(duration * sampleRate);
+            var samples = new float[sampleCount];
+            for (var i = 0; i < sampleCount; i++)
+            {
+                var t = i / (float)sampleRate;
+                var normalized = t / duration;
+                var thumpFrequency = Mathf.Lerp(120f, 48f, normalized);
+                var thump = Mathf.Sin(2f * Mathf.PI * thumpFrequency * t) * Mathf.Exp(-8f * normalized);
+                var crack = Mathf.Sin(2f * Mathf.PI * 940f * t) * Mathf.Exp(-24f * normalized);
+                var afterHitTime = Mathf.Max(0f, t - 0.12f);
+                var afterHit = t >= 0.12f
+                    ? Mathf.Sin(2f * Mathf.PI * 420f * afterHitTime) * Mathf.Exp(-18f * afterHitTime)
+                    : 0f;
+                samples[i] = Mathf.Clamp((thump * 0.95f + crack * 0.38f + afterHit * 0.42f) * 0.34f, -1f, 1f);
+            }
+
+            var clip = AudioClip.Create("Set Book Impact Cue", sampleCount, 1, sampleRate, false);
             clip.SetData(samples, 0);
             return clip;
         }
@@ -667,6 +738,7 @@ namespace BackyardLegends.Runtime
                 FeedbackCue.Invalid => invalidClip,
                 FeedbackCue.RoundScore => roundScoreClip,
                 FeedbackCue.MatchEnd => matchEndClip,
+                FeedbackCue.SetBook => setBookClip,
                 _ => null
             };
 
@@ -739,7 +811,7 @@ namespace BackyardLegends.Runtime
 
                 if (view?.BidCalloutText != null)
                 {
-                    ApplyThemeText(view.BidCalloutText, theme.primaryText, 18, FontStyle.Bold);
+                    ApplyThemeText(view.BidCalloutText, theme.primaryText, BidCalloutFontSize, FontStyle.Bold);
                 }
 
                 if (view?.BidCalloutGroup != null)
@@ -763,6 +835,7 @@ namespace BackyardLegends.Runtime
             TintButton(sceneRefs.ReturnToLobbyButton, theme.panelStroke);
             TintButton(sceneRefs.DealButton, theme.green);
             TintButton(sceneRefs.PlaySelectedButton, theme.gold);
+            TintButton(sceneRefs.ConfirmBidButton, theme.green);
             foreach (var pair in bidButtons)
             {
                 TintButton(pair.Value, theme.panelStroke);
@@ -783,6 +856,7 @@ namespace BackyardLegends.Runtime
             ClearTransientMotionState(true);
             recentFeed.Clear();
             selectedCard = null;
+            pendingBidSelection = null;
             lastRenderedHand.Clear();
             HideAllBidBubbles(true);
             openingDealPending = true;
@@ -790,7 +864,6 @@ namespace BackyardLegends.Runtime
             handReviewPending = false;
             bidTurnDelayPending = false;
             suppressNextHandEntryAnimation = false;
-            dealButtonDismissRunning = false;
             exitPromptOpen = false;
             if (handReviewLoop != null)
             {
@@ -872,38 +945,23 @@ namespace BackyardLegends.Runtime
                     QueueTrickCollectionAnimation(trickEvent);
                     break;
                 case SetBookReachedEvent setBook:
-                    ShowBanner(setBook.Team == TeamId.Home ? "HOME SET BOOK" : "RIVALS SET BOOK", setBook.Team == TeamId.Home ? theme.green : theme.red);
+                    QueueSetBookMoment(setBook.Team);
                     AddFeedMessage(setBook.Team == TeamId.Home ? "Home team missed its contract." : "Rivals missed their contract.");
                     break;
                 case RoundScoredEvent:
                     sceneRefs.RoundSummaryText.text = BuildRoundSummaryText();
                     AddFeedMessage("Round scored and wrapped.");
                     PlayFeedback(FeedbackCue.RoundScore, 0.2f);
-                    if (HasVisualMotionPending)
-                    {
-                        pendingRoundSheetOpen = true;
-                    }
-                    else
-                    {
-                        AnimateScoreDelta(TeamId.Home);
-                        AnimateScoreDelta(TeamId.Away);
-                        SetSheetVisible(sceneRefs.RoundSheet, true);
-                    }
+                    pendingRoundSheetOpen = true;
+                    ScheduleDeferredSheetState();
                     break;
                 case MatchEndedEvent ended:
                     sceneRefs.EndSummaryText.text = BuildMatchSummaryText(ended.WinningTeam);
                     AddFeedMessage(ended.WinningTeam == TeamId.Home ? "Home team closed the match." : "Rivals closed the match.");
                     PlayFeedback(FeedbackCue.MatchEnd, 0.24f);
                     pendingRoundSheetOpen = false;
-                    if (HasVisualMotionPending)
-                    {
-                        pendingEndSheetOpen = true;
-                    }
-                    else
-                    {
-                        SetSheetVisible(sceneRefs.RoundSheet, false);
-                        SetSheetVisible(sceneRefs.EndSheet, true);
-                    }
+                    pendingEndSheetOpen = true;
+                    ScheduleDeferredSheetState();
                     break;
             }
 
@@ -946,7 +1004,7 @@ namespace BackyardLegends.Runtime
                     ? $"{controller.State.SeatNames[controller.State.RoundState.BidState.CurrentBidder]} is counting books."
                 : controller.State.Phase switch
             {
-                MatchPhase.Bidding => controller.State.RoundState.BidState.CurrentBidder == SeatId.Bottom ? "Tap a bid to lock your contract." : $"{controller.State.SeatNames[controller.State.RoundState.BidState.CurrentBidder]} is bidding.",
+                MatchPhase.Bidding => controller.State.RoundState.BidState.CurrentBidder == SeatId.Bottom ? "Choose a bid, then confirm it." : $"{controller.State.SeatNames[controller.State.RoundState.BidState.CurrentBidder]} is bidding.",
                 MatchPhase.TrickPlay => controller.State.RoundState.TrickState.CurrentTurn == SeatId.Bottom ? "Tap a card once to select, tap again to play." : $"{controller.State.SeatNames[controller.State.RoundState.TrickState.CurrentTurn]} is on the clock.",
                 MatchPhase.RoundSummary => "Round scored. Review the wrap and continue.",
                 MatchPhase.MatchEnded => "Match complete. Run it back or head to the lobby.",
@@ -1068,7 +1126,7 @@ namespace BackyardLegends.Runtime
                     view.gameObject.SetActive(false);
                 }
 
-                sceneRefs.PlaySelectedButton.interactable = false;
+                SyncPlaySelectedButton(false);
                 return;
             }
 
@@ -1135,7 +1193,7 @@ namespace BackyardLegends.Runtime
             }
 
             suppressNextHandEntryAnimation = false;
-            sceneRefs.PlaySelectedButton.interactable = selectedCard.HasValue && legalCards.Contains(selectedCard.Value);
+            SyncPlaySelectedButton(selectedCard.HasValue && legalCards.Contains(selectedCard.Value));
         }
 
         private void EnsureCardPoolSize(int count)
@@ -1331,6 +1389,8 @@ namespace BackyardLegends.Runtime
             if (openingDealPending || openingDealRunning || handReviewPending || bidTurnDelayPending)
             {
                 SetSheetVisible(sceneRefs.BidSheet, false);
+                pendingBidSelection = null;
+                SyncConfirmBidButton(false, null);
                 return;
             }
 
@@ -1339,16 +1399,106 @@ namespace BackyardLegends.Runtime
             SetSheetVisible(sceneRefs.BidSheet, shouldShow);
             if (!shouldShow)
             {
+                pendingBidSelection = null;
+                SyncConfirmBidButton(false, null);
                 return;
             }
 
-            ConfigureBidSheetForHandVisibility();
             var legal = controller.GetLegalBidsForSeat(SeatId.Bottom).ToHashSet();
+            if (pendingBidSelection.HasValue && !legal.Contains(pendingBidSelection.Value))
+            {
+                pendingBidSelection = null;
+            }
+
             foreach (var pair in bidButtons)
             {
-                pair.Value.interactable = legal.Contains(pair.Key);
-                pair.Value.image.color = legal.Contains(pair.Key) ? theme.gold : theme.panelStroke;
+                var isLegal = legal.Contains(pair.Key);
+                var isSelected = pendingBidSelection == pair.Key;
+                pair.Value.interactable = isLegal;
+                ApplyBidButtonVisual(pair.Value, isLegal, isSelected);
             }
+
+            SyncConfirmBidButton(true, pendingBidSelection);
+        }
+
+        private void SelectBid(int bid)
+        {
+            if (exitPromptOpen || controller == null || controller.State.Phase != MatchPhase.Bidding ||
+                controller.State.RoundState.BidState.CurrentBidder != SeatId.Bottom)
+            {
+                return;
+            }
+
+            if (!controller.GetLegalBidsForSeat(SeatId.Bottom).Contains(bid))
+            {
+                PlayFeedback(FeedbackCue.Invalid, 0.16f);
+                FlashStatus("That bid is not available right now.", theme.red);
+                return;
+            }
+
+            pendingBidSelection = bid;
+            PlayFeedback(FeedbackCue.Select, 0.2f);
+            FlashStatus($"Bid {BidSelectionLabel(bid)} selected. Confirm to lock it.", theme.gold);
+            RenderAll();
+        }
+
+        private void ConfirmSelectedBid()
+        {
+            if (!pendingBidSelection.HasValue)
+            {
+                PlayFeedback(FeedbackCue.Invalid, 0.16f);
+                FlashStatus("Select a bid first.", theme.red);
+                return;
+            }
+
+            SubmitBid(pendingBidSelection.Value);
+        }
+
+        private void ApplyBidButtonVisual(Button button, bool isLegal, bool isSelected)
+        {
+            if (button == null || button.image == null)
+            {
+                return;
+            }
+
+            var selectedTint = Color.Lerp(theme.green, theme.highlight, 0.35f);
+            button.image.color = isSelected ? selectedTint : isLegal ? theme.gold : theme.panelStroke;
+
+            var label = button.GetComponentInChildren<Text>();
+            if (label != null)
+            {
+                label.color = isLegal ? theme.backgroundColor : theme.mutedText;
+                label.fontStyle = isSelected ? FontStyle.Bold : FontStyle.Normal;
+            }
+        }
+
+        private void SyncConfirmBidButton(bool visible, int? selectedBid)
+        {
+            if (sceneRefs.ConfirmBidButton == null)
+            {
+                return;
+            }
+
+            sceneRefs.ConfirmBidButton.gameObject.SetActive(visible);
+            sceneRefs.ConfirmBidButton.interactable = visible && selectedBid.HasValue;
+            if (sceneRefs.ConfirmBidButton.image != null)
+            {
+                sceneRefs.ConfirmBidButton.image.color = selectedBid.HasValue ? theme.green : theme.panelStroke;
+            }
+
+            var label = sceneRefs.ConfirmBidButton.GetComponentInChildren<Text>();
+            if (label != null)
+            {
+                label.text = selectedBid.HasValue ? $"CONFIRM {BidSelectionLabel(selectedBid.Value)}" : "SELECT BID";
+                label.color = selectedBid.HasValue ? theme.backgroundColor : theme.mutedText;
+                label.fontStyle = FontStyle.Bold;
+                label.fontSize = selectedBid.HasValue ? 20 : 18;
+            }
+        }
+
+        private static string BidSelectionLabel(int bid)
+        {
+            return bid == 0 ? "NIL" : bid.ToString();
         }
 
         private void OnDealPressed()
@@ -1492,14 +1642,12 @@ namespace BackyardLegends.Runtime
 
             sceneRefs.DealButton.interactable = false;
             sceneRefs.DealButton.gameObject.SetActive(false);
-            dealButtonDismissRunning = false;
         }
 
         private IEnumerator FadeDealButtonOut()
         {
             if (sceneRefs.DealButton == null)
             {
-                dealButtonDismissRunning = false;
                 dealButtonFadeLoop = null;
                 yield break;
             }
@@ -1519,7 +1667,6 @@ namespace BackyardLegends.Runtime
             canvasGroup.alpha = 0f;
             sceneRefs.DealButton.gameObject.SetActive(false);
             canvasGroup.alpha = 1f;
-            dealButtonDismissRunning = false;
             dealButtonFadeLoop = null;
         }
 
@@ -1728,7 +1875,9 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
+            pendingBidSelection = null;
             SetSheetVisible(sceneRefs.BidSheet, false);
+            SyncConfirmBidButton(false, null);
             RenderAll();
             ScheduleAiLoop();
         }
@@ -1757,6 +1906,15 @@ namespace BackyardLegends.Runtime
             {
                 PlayFeedback(FeedbackCue.Invalid, 0.16f);
                 FlashStatus("Wait for your turn.", theme.red);
+                return;
+            }
+
+            if (selectedCard.HasValue && selectedCard.Value.Equals(card))
+            {
+                selectedCard = null;
+                PlayFeedback(FeedbackCue.Select, 0.12f);
+                FlashStatus("Card deselected.", theme.mutedText);
+                RenderHand();
                 return;
             }
 
@@ -1798,7 +1956,7 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
-            TryPlaySelected();
+            RenderHand();
         }
 
         private void OnPlaySelected()
@@ -1841,6 +1999,29 @@ namespace BackyardLegends.Runtime
             selectedCard = null;
             RenderAll();
             ScheduleAiLoop();
+        }
+
+        private void SyncPlaySelectedButton(bool canPlaySelected)
+        {
+            if (sceneRefs.PlaySelectedButton == null)
+            {
+                return;
+            }
+
+            sceneRefs.PlaySelectedButton.gameObject.SetActive(canPlaySelected);
+            sceneRefs.PlaySelectedButton.interactable = canPlaySelected;
+            if (sceneRefs.PlaySelectedButton.image != null)
+            {
+                sceneRefs.PlaySelectedButton.image.color = canPlaySelected ? theme.gold : theme.panelStroke;
+            }
+
+            var label = sceneRefs.PlaySelectedButton.GetComponentInChildren<Text>();
+            if (label != null)
+            {
+                label.text = "PLAY SELECTED";
+                label.color = canPlaySelected ? theme.backgroundColor : theme.mutedText;
+                label.fontStyle = FontStyle.Bold;
+            }
         }
 
         private void ScheduleAiLoop()
@@ -2250,13 +2431,20 @@ namespace BackyardLegends.Runtime
         {
             hiddenTrickSlots.Clear();
             resolvedTrickCards.Clear();
+            pendingSetBookMoments.Clear();
             pendingRoundSheetOpen = false;
             pendingEndSheetOpen = false;
+            setBookMomentRunning = false;
             StopOpeningStackIntro();
             ClearOpeningStackPreviewCards();
             ClearFloatingCards();
             ClearTransientFx();
             HideAllBidBubbles(true);
+            if (deferredSheetStateLoop != null)
+            {
+                StopCoroutine(deferredSheetStateLoop);
+                deferredSheetStateLoop = null;
+            }
 
             if (!stopQueue)
             {
@@ -2477,6 +2665,19 @@ namespace BackyardLegends.Runtime
 
         private void ApplyDeferredSheetState()
         {
+            if (HasCardMotionPending || setBookMomentRunning)
+            {
+                return;
+            }
+
+            while (pendingSetBookMoments.Count > 0)
+            {
+                if (ShowSetBookMoment(pendingSetBookMoments.Dequeue()))
+                {
+                    return;
+                }
+            }
+
             if (pendingEndSheetOpen)
             {
                 pendingEndSheetOpen = false;
@@ -2495,6 +2696,29 @@ namespace BackyardLegends.Runtime
             AnimateScoreDelta(TeamId.Home);
             AnimateScoreDelta(TeamId.Away);
             SetSheetVisible(sceneRefs.RoundSheet, true);
+        }
+
+        private void ScheduleDeferredSheetState()
+        {
+            if (deferredSheetStateLoop != null)
+            {
+                return;
+            }
+
+            deferredSheetStateLoop = StartCoroutine(DeferredSheetStateRoutine());
+        }
+
+        private IEnumerator DeferredSheetStateRoutine()
+        {
+            yield return null;
+            deferredSheetStateLoop = null;
+            ApplyDeferredSheetState();
+        }
+
+        private void QueueSetBookMoment(TeamId team)
+        {
+            pendingSetBookMoments.Enqueue(team);
+            ApplyDeferredSheetState();
         }
 
         private void ShowBidCallout(SeatId seat, int bid)
@@ -2857,11 +3081,39 @@ namespace BackyardLegends.Runtime
             if (bannerLoop != null)
             {
                 StopCoroutine(bannerLoop);
+                bannerLoop = null;
             }
 
+            setBookMomentRunning = false;
+            RestoreBannerVisualDefaults(false);
             PlayFeedback(FeedbackCue.Banner, 0.24f);
             SpawnImpactBurst(GetAnchoredPoint(sceneRefs.BannerText.rectTransform, new Vector2(0.5f, 0.5f)), color, 42f, 5);
             bannerLoop = StartCoroutine(BannerRoutine(message, color));
+        }
+
+        private bool ShowSetBookMoment(TeamId team)
+        {
+            if (sceneRefs.BannerText == null)
+            {
+                return false;
+            }
+
+            if (bannerLoop != null)
+            {
+                StopCoroutine(bannerLoop);
+                bannerLoop = null;
+            }
+
+            RestoreBannerVisualDefaults(false);
+            var color = team == TeamId.Home ? theme.green : theme.red;
+            PlayFeedback(FeedbackCue.SetBook, 0.95f);
+            TriggerSetBookHaptic();
+            var center = GetAnchoredPoint(sceneRefs.BannerText.rectTransform, new Vector2(0.5f, 0.5f));
+            SpawnImpactBurst(center, color, 88f, 10);
+            SpawnImpactBurst(center + new Vector2(0f, -18f), theme.gold, 56f, 7);
+            setBookMomentRunning = true;
+            bannerLoop = StartCoroutine(SetBookMomentRoutine(color));
+            return true;
         }
 
         private IEnumerator FlashStatusColor(Color color)
@@ -2873,11 +3125,116 @@ namespace BackyardLegends.Runtime
 
         private IEnumerator BannerRoutine(string message, Color color)
         {
+            RestoreBannerVisualDefaults(false);
             sceneRefs.BannerText.text = message;
             sceneRefs.BannerText.color = color;
             sceneRefs.BannerText.CrossFadeAlpha(1f, 0.08f, true);
             yield return new WaitForSecondsRealtime(theme.bannerDuration);
             sceneRefs.BannerText.CrossFadeAlpha(0f, 0.28f, true);
+        }
+
+        private IEnumerator SetBookMomentRoutine(Color color)
+        {
+            CaptureBannerVisualDefaults();
+            var target = sceneRefs.BannerText;
+            var rectTransform = target.rectTransform;
+            var startPosition = bannerDefaultPosition;
+            target.text = "SET BOOK";
+            target.color = color;
+            target.fontSize = 74;
+            target.fontStyle = FontStyle.Bold;
+            target.alignment = TextAnchor.MiddleCenter;
+            target.canvasRenderer.SetAlpha(1f);
+            SetGraphicAlpha(target, 0f);
+            rectTransform.localScale = bannerDefaultScale * 0.58f;
+            rectTransform.anchoredPosition = startPosition + new Vector2(0f, 20f);
+
+            const float slamDuration = 0.26f;
+            var elapsed = 0f;
+            while (elapsed < slamDuration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(elapsed / slamDuration);
+                var eased = Mathf.SmoothStep(0f, 1f, t);
+                var overshoot = t < 0.68f
+                    ? Mathf.Lerp(0.58f, 1.28f, Mathf.Clamp01(t / 0.68f))
+                    : Mathf.Lerp(1.28f, 1f, Mathf.Clamp01((t - 0.68f) / 0.32f));
+                var shake = Mathf.Sin(elapsed * 92f) * Mathf.Lerp(18f, 0f, eased);
+                SetGraphicAlpha(target, Mathf.Clamp01(t * 3.8f));
+                rectTransform.localScale = bannerDefaultScale * overshoot;
+                rectTransform.anchoredPosition = startPosition + new Vector2(shake, Mathf.Lerp(20f, 0f, eased));
+                yield return null;
+            }
+
+            rectTransform.localScale = bannerDefaultScale;
+            rectTransform.anchoredPosition = startPosition;
+            SetGraphicAlpha(target, 1f);
+            yield return new WaitForSecondsRealtime(0.7f);
+
+            const float fadeDuration = 0.22f;
+            elapsed = 0f;
+            while (elapsed < fadeDuration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(elapsed / fadeDuration);
+                SetGraphicAlpha(target, 1f - t);
+                rectTransform.localScale = bannerDefaultScale * Mathf.Lerp(1f, 1.08f, t);
+                yield return null;
+            }
+
+            RestoreBannerVisualDefaults(true);
+            setBookMomentRunning = false;
+            bannerLoop = null;
+            ApplyDeferredSheetState();
+            RenderAll();
+            ScheduleAiLoop();
+        }
+
+        private void CaptureBannerVisualDefaults()
+        {
+            if (bannerDefaultsCaptured || sceneRefs.BannerText == null)
+            {
+                return;
+            }
+
+            var target = sceneRefs.BannerText;
+            bannerDefaultFontSize = target.fontSize;
+            bannerDefaultFontStyle = target.fontStyle;
+            bannerDefaultAlignment = target.alignment;
+            bannerDefaultColor = target.color;
+            bannerDefaultPosition = target.rectTransform.anchoredPosition;
+            bannerDefaultScale = target.rectTransform.localScale;
+            bannerDefaultsCaptured = true;
+        }
+
+        private void RestoreBannerVisualDefaults(bool clearText)
+        {
+            CaptureBannerVisualDefaults();
+            if (sceneRefs.BannerText == null)
+            {
+                return;
+            }
+
+            var target = sceneRefs.BannerText;
+            target.fontSize = bannerDefaultFontSize;
+            target.fontStyle = bannerDefaultFontStyle;
+            target.alignment = bannerDefaultAlignment;
+            target.color = bannerDefaultColor;
+            target.rectTransform.anchoredPosition = bannerDefaultPosition;
+            target.rectTransform.localScale = bannerDefaultScale;
+            if (clearText)
+            {
+                target.text = string.Empty;
+                target.canvasRenderer.SetAlpha(0f);
+                SetGraphicAlpha(target, 0f);
+            }
+        }
+
+        private static void TriggerSetBookHaptic()
+        {
+#if UNITY_IOS || UNITY_ANDROID
+            Handheld.Vibrate();
+#endif
         }
 
         private IEnumerator Shake(RectTransform rectTransform)
@@ -3079,49 +3436,6 @@ namespace BackyardLegends.Runtime
             label.verticalOverflow = VerticalWrapMode.Truncate;
         }
 
-        private void ConfigureBidSheetForHandVisibility()
-        {
-            if (sceneRefs.BidSheet == null)
-            {
-                return;
-            }
-
-            sceneRefs.BidSheet.anchorMin = new Vector2(0.04f, 0.29f);
-            sceneRefs.BidSheet.anchorMax = new Vector2(0.96f, 0.50f);
-            sceneRefs.BidSheet.offsetMin = Vector2.zero;
-            sceneRefs.BidSheet.offsetMax = Vector2.zero;
-
-            var title = sceneRefs.BidSheet.Find("Bid Title") as RectTransform;
-            if (title != null)
-            {
-                SetAnchors(title, new Vector2(0.04f, 0.72f), new Vector2(0.28f, 0.96f));
-                var titleText = title.GetComponent<Text>();
-                if (titleText != null)
-                {
-                    titleText.fontSize = 24;
-                    titleText.alignment = TextAnchor.MiddleLeft;
-                }
-            }
-
-            var bidGrid = sceneRefs.BidSheet.Find("Bid Grid") as RectTransform;
-            if (bidGrid == null)
-            {
-                return;
-            }
-
-            SetAnchors(bidGrid, new Vector2(0.30f, 0.12f), new Vector2(0.96f, 0.90f));
-            var grid = bidGrid.GetComponent<GridLayoutGroup>();
-            if (grid != null)
-            {
-                grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-                grid.constraintCount = 7;
-                grid.spacing = new Vector2(8f, 8f);
-                var width = Mathf.Max(420f, sceneRefs.BidSheet.rect.width * 0.62f);
-                var height = Mathf.Max(118f, sceneRefs.BidSheet.rect.height * 0.78f);
-                grid.cellSize = new Vector2((width - grid.spacing.x * 6f) / 7f, (height - grid.spacing.y) / 2f);
-            }
-        }
-
         private void AnimateScoreDelta(TeamId team)
         {
             var score = controller.State.Scores[team];
@@ -3196,10 +3510,35 @@ namespace BackyardLegends.Runtime
             }
 
             label.color = color;
+            label.fontSize = fontSize;
+            label.fontStyle = style;
             if (label.font == null)
             {
                 label.font = theme.ResolveFont();
             }
+        }
+
+        private void ConfigureSeatCalloutLayout(SeatPanelView view)
+        {
+            if (view?.BidCalloutGroup != null)
+            {
+                SetAnchors((RectTransform)view.BidCalloutGroup.transform, BidCalloutAnchorMin, BidCalloutAnchorMax);
+            }
+
+            if (view?.BidCalloutText == null)
+            {
+                return;
+            }
+
+            SetAnchors(view.BidCalloutText.rectTransform, new Vector2(0.02f, 0.06f), new Vector2(0.98f, 0.94f));
+            view.BidCalloutText.fontSize = BidCalloutFontSize;
+            view.BidCalloutText.fontStyle = FontStyle.Bold;
+            view.BidCalloutText.alignment = TextAnchor.MiddleCenter;
+            view.BidCalloutText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            view.BidCalloutText.verticalOverflow = VerticalWrapMode.Truncate;
+            view.BidCalloutText.resizeTextForBestFit = true;
+            view.BidCalloutText.resizeTextMinSize = 34;
+            view.BidCalloutText.resizeTextMaxSize = BidCalloutFontSize;
         }
 
         private void EnsureFallbackFont(Text label)
@@ -3235,31 +3574,27 @@ namespace BackyardLegends.Runtime
             }
 
             var span = Mathf.Max(1, count - 1);
-            var t = count == 1 ? 0f : (index / (float)span) * 2f - 1f;
             var containerWidth = sceneRefs.HandContent != null ? sceneRefs.HandContent.rect.width : 720f;
-            var maxSpread = Mathf.Clamp((containerWidth - 120f) / Mathf.Max(1, count), 28f, 52f);
-            var x = t * span * 0.5f * maxSpread;
+            var cardWidth = ResolveBottomHandCardSize().x;
+            var fitSpacing = count <= 1 ? 0f : (containerWidth - cardWidth) / span;
+            var preferredSpread = cardWidth * 0.30f;
+            var maxSpread = count <= 1 ? 0f : Mathf.Max(16f, Mathf.Min(preferredSpread, fitSpacing));
+            var x = (index - span * 0.5f) * maxSpread;
             if (selectedIndex >= 0 && selectedIndex < count && index != selectedIndex)
             {
                 var delta = index - selectedIndex;
-                var pushBase = Mathf.Clamp(ResolveBottomHandCardSize().x * 0.16f, 18f, 34f);
+                var pushBase = Mathf.Clamp(cardWidth * 0.12f, 18f, 32f);
                 var falloff = Mathf.Pow(0.72f, Mathf.Abs(delta) - 1);
                 x += Mathf.Sign(delta) * pushBase * falloff;
             }
 
-            var y = -Mathf.Abs(t) * 20f + 8f + (isSelected ? theme.cardLiftAmount : 0f);
+            var y = 8f + (isSelected ? theme.cardLiftAmount : 0f);
             return new Vector2(x, y);
         }
 
         private Quaternion GetFanTargetRotation(int index, int count)
         {
-            if (count <= 1)
-            {
-                return Quaternion.identity;
-            }
-
-            var t = (index / (float)(count - 1)) * 2f - 1f;
-            return Quaternion.Euler(0f, 0f, -t * 10f);
+            return Quaternion.identity;
         }
 
         private Vector2 ResolveCardButtonBaseSize()

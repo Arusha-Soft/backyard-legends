@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using BackyardLegends.Core;
+using BackyardLegends.Runtime;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace BackyardLegends.Tests
 {
@@ -77,6 +79,78 @@ namespace BackyardLegends.Tests
             controller.State.Scores[TeamId.Away].Score = 180;
             legal = controller.GetLegalBidsForSeat(SeatId.Bottom);
             Assert.That(legal.Contains(0), Is.False);
+        }
+
+        [Test]
+        public void SimpleAiAvoidsNilWithHighSpadesWhenNilIsLegal()
+        {
+            var bid = ChooseSimpleAiBid(
+                new List<Card>
+                {
+                    new(Suit.Spades, 14),
+                    new(Suit.Spades, 13),
+                    new(Suit.Hearts, 2),
+                    new(Suit.Hearts, 5),
+                    new(Suit.Hearts, 8),
+                    new(Suit.Clubs, 3),
+                    new(Suit.Clubs, 6),
+                    new(Suit.Clubs, 9),
+                    new(Suit.Diamonds, 2),
+                    new(Suit.Diamonds, 4),
+                    new(Suit.Diamonds, 7),
+                    new(Suit.Diamonds, 9),
+                    new(Suit.Spades, 3)
+                });
+
+            Assert.That(bid, Is.Not.EqualTo(0));
+        }
+
+        [Test]
+        public void SimpleAiAvoidsNilWithMultipleHighCardsWhenNilIsLegal()
+        {
+            var bid = ChooseSimpleAiBid(
+                new List<Card>
+                {
+                    new(Suit.Hearts, 13),
+                    new(Suit.Clubs, 12),
+                    new(Suit.Spades, 2),
+                    new(Suit.Spades, 5),
+                    new(Suit.Hearts, 3),
+                    new(Suit.Hearts, 6),
+                    new(Suit.Clubs, 4),
+                    new(Suit.Clubs, 8),
+                    new(Suit.Diamonds, 2),
+                    new(Suit.Diamonds, 4),
+                    new(Suit.Diamonds, 7),
+                    new(Suit.Diamonds, 9),
+                    new(Suit.Spades, 8)
+                });
+
+            Assert.That(bid, Is.Not.EqualTo(0));
+        }
+
+        [Test]
+        public void SimpleAiCanBidNilWithWeakHandWhenNilIsLegal()
+        {
+            var bid = ChooseSimpleAiBid(
+                new List<Card>
+                {
+                    new(Suit.Spades, 2),
+                    new(Suit.Spades, 4),
+                    new(Suit.Spades, 6),
+                    new(Suit.Spades, 8),
+                    new(Suit.Hearts, 2),
+                    new(Suit.Hearts, 4),
+                    new(Suit.Hearts, 8),
+                    new(Suit.Clubs, 3),
+                    new(Suit.Clubs, 6),
+                    new(Suit.Clubs, 9),
+                    new(Suit.Diamonds, 2),
+                    new(Suit.Diamonds, 5),
+                    new(Suit.Diamonds, 7)
+                });
+
+            Assert.That(bid, Is.EqualTo(0));
         }
 
         [Test]
@@ -194,6 +268,99 @@ namespace BackyardLegends.Tests
             var topPlay = round.TrickState.Plays.Single(play => play.Seat == SeatId.Top);
             Assert.That(topPlay.Card.Suit, Is.EqualTo(Suit.Hearts));
             Assert.That(round.HandsBySeat[SeatId.Top].Contains(new Card(Suit.Spades, 2)), Is.True);
+        }
+
+        [Test]
+        public void SimpleAiNilFollowsSuitWithLowestLosingCard()
+        {
+            var state = CreateScoringState();
+            state.RoundState.TrickState.LeadSuit = Suit.Hearts;
+            state.RoundState.TrickState.Plays.Add(new TrickPlay { Seat = SeatId.Left, Card = new Card(Suit.Hearts, 8) });
+
+            var card = ChooseSimpleAiCard(
+                SeatId.Top,
+                state,
+                new List<Card>
+                {
+                    new(Suit.Hearts, 6),
+                    new(Suit.Hearts, 10),
+                    new(Suit.Spades, 2)
+                });
+
+            Assert.That(card, Is.EqualTo(new Card(Suit.Hearts, 6)));
+        }
+
+        [Test]
+        public void SimpleAiNilSloughsNonSpadeInsteadOfCuttingWhenVoid()
+        {
+            var state = CreateScoringState();
+            state.RoundState.TrickState.LeadSuit = Suit.Hearts;
+            state.RoundState.TrickState.Plays.Add(new TrickPlay { Seat = SeatId.Left, Card = new Card(Suit.Hearts, 8) });
+
+            var card = ChooseSimpleAiCard(
+                SeatId.Top,
+                state,
+                new List<Card>
+                {
+                    new(Suit.Spades, 2),
+                    new(Suit.Clubs, 3),
+                    new(Suit.Diamonds, 4)
+                });
+
+            Assert.That(card, Is.EqualTo(new Card(Suit.Clubs, 3)));
+        }
+
+        [Test]
+        public void SimpleAiNilUsesLowestSpadeOnlyWhenNoNonSpadeOption()
+        {
+            var state = CreateScoringState();
+            state.RoundState.TrickState.LeadSuit = Suit.Hearts;
+            state.RoundState.TrickState.Plays.Add(new TrickPlay { Seat = SeatId.Left, Card = new Card(Suit.Hearts, 8) });
+
+            var card = ChooseSimpleAiCard(
+                SeatId.Top,
+                state,
+                new List<Card>
+                {
+                    new(Suit.Spades, 9),
+                    new(Suit.Spades, 2)
+                });
+
+            Assert.That(card, Is.EqualTo(new Card(Suit.Spades, 2)));
+        }
+
+        [Test]
+        public void SimpleAiNilLeadsLowestNonSpadeBeforeSpade()
+        {
+            var state = CreateScoringState();
+
+            var card = ChooseSimpleAiCard(
+                SeatId.Top,
+                state,
+                new List<Card>
+                {
+                    new(Suit.Spades, 2),
+                    new(Suit.Clubs, 4),
+                    new(Suit.Diamonds, 3)
+                });
+
+            Assert.That(card, Is.EqualTo(new Card(Suit.Diamonds, 3)));
+        }
+
+        [Test]
+        public void ThemeSpriteFactoryRebuildsDestroyedCachedRoundedRectSprite()
+        {
+            var fill = new Color(0.14f, 0.22f, 0.31f, 0.73f);
+            var stroke = new Color(0.91f, 0.74f, 0.18f, 1f);
+            var first = ThemeSpriteFactory.CreateRoundedRectSprite(fill, stroke, 47, 31, 7);
+
+            Assert.That(first, Is.Not.Null);
+            Object.DestroyImmediate(first);
+
+            var rebuilt = ThemeSpriteFactory.CreateRoundedRectSprite(fill, stroke, 47, 31, 7);
+
+            Assert.That(rebuilt, Is.Not.Null);
+            Assert.That(rebuilt.texture, Is.Not.Null);
         }
 
         [Test]
@@ -345,6 +512,26 @@ namespace BackyardLegends.Tests
 
             Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.MatchEnded));
             Assert.That(guard, Is.LessThan(500));
+        }
+
+        private static int ChooseSimpleAiBid(IReadOnlyList<Card> hand)
+        {
+            return new SimpleAiAgent().ChooseBid(new AiBidContext
+            {
+                Hand = hand,
+                LegalBids = Enumerable.Range(0, 14).ToList()
+            });
+        }
+
+        private static Card ChooseSimpleAiCard(SeatId seat, MatchState state, IReadOnlyList<Card> legalCards)
+        {
+            return new SimpleAiAgent().ChooseCard(new AiPlayContext
+            {
+                Seat = seat,
+                MatchState = state,
+                Hand = legalCards,
+                LegalCards = legalCards
+            });
         }
 
         private static void ForceBids(SpadesMatchController controller, int bottom, int left, int top, int right)

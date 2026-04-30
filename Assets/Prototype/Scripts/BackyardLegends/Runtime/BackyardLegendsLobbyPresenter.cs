@@ -213,7 +213,7 @@ namespace BackyardLegends.Runtime
             var labels = session.GetModeLabels();
             for (var i = 0; i < modeButtons.Count; i++)
             {
-                var label = modeButtons[i].GetComponentInChildren<Text>();
+                var label = GetButtonLabel(modeButtons[i]);
                 if (label != null)
                 {
                     label.text = i < labels.Length ? labels[i].ToUpperInvariant() : $"MODE {i + 1}";
@@ -230,7 +230,7 @@ namespace BackyardLegends.Runtime
                     continue;
                 }
 
-                var label = button.GetComponentInChildren<Text>();
+                var label = GetButtonLabel(button);
                 if (label != null)
                 {
                     label.text = targetOptions[i].ToString();
@@ -273,7 +273,7 @@ namespace BackyardLegends.Runtime
 
             foreach (var button in targetButtons)
             {
-                var label = button.GetComponentInChildren<Text>();
+                var label = GetButtonLabel(button);
                 var isSelected = label != null && int.TryParse(label.text, out var score) && score == session.SelectedTargetScore;
                 SyncButtonFeedback(button, isSelected);
             }
@@ -300,7 +300,7 @@ namespace BackyardLegends.Runtime
             }
 
             button.transition = Selectable.Transition.None;
-            EnsureFont(button.GetComponentInChildren<Text>());
+            EnsureFont(GetButtonLabel(button));
         }
 
         private void ConfigureButtonFeedback(Button button, bool isConfirmButton = false)
@@ -364,6 +364,19 @@ namespace BackyardLegends.Runtime
             }
 
             modeSelectionMarkers[index].gameObject.SetActive(isSelected);
+        }
+
+        private static Text GetButtonLabel(Button button)
+        {
+            if (button == null)
+            {
+                return null;
+            }
+
+            var label = button.transform.Find("Label");
+            return label != null
+                ? label.GetComponent<Text>()
+                : button.GetComponentsInChildren<Text>(true).FirstOrDefault(text => text.name != "Selected Checkmark");
         }
 
         private void PlayFeedback(FeedbackCue cue, float volumeScale = 1f)

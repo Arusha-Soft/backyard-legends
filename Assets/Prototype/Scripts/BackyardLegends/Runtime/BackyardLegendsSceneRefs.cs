@@ -54,6 +54,7 @@ namespace BackyardLegends.Runtime
         public Button ReturnToLobbyButton;
         public Button DealButton;
         public Button PlaySelectedButton;
+        public Button ConfirmBidButton;
         public Button ExitPromptCancelButton;
         public Button ExitPromptConfirmButton;
         public Button[] BidButtons;
