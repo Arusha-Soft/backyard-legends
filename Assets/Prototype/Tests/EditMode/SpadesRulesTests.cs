@@ -173,7 +173,38 @@ namespace BackyardLegends.Tests
             var result = engine.ScoreRound(state);
 
             Assert.That(result.TeamScores[TeamId.Home].RoundDelta, Is.EqualTo(-49));
+            Assert.That(result.TeamScores[TeamId.Home].BagsEarned, Is.EqualTo(1));
+            Assert.That(result.TeamScores[TeamId.Home].BagPenaltyDelta, Is.EqualTo(-100));
+            Assert.That(result.Summary, Does.Contain("bag penalty -100"));
             Assert.That(state.Scores[TeamId.Home].Bags, Is.EqualTo(0));
+            Assert.That(state.Scores[TeamId.Home].BagsEarned, Is.EqualTo(1));
+            Assert.That(state.Scores[TeamId.Home].BagPenaltyDelta, Is.EqualTo(-100));
+        }
+
+        [Test]
+        public void ScoreRoundExplainsBidSixTakingEightWithBagPenalty()
+        {
+            var engine = new SpadesRuleEngine();
+            var state = CreateScoringState();
+            state.Scores[TeamId.Home].Bags = 8;
+            state.RoundState.BidState.BidsBySeat[SeatId.Bottom] = 3;
+            state.RoundState.BidState.BidsBySeat[SeatId.Top] = 3;
+            state.RoundState.BidState.BidsBySeat[SeatId.Left] = 3;
+            state.RoundState.BidState.BidsBySeat[SeatId.Right] = 2;
+            state.RoundState.TricksWonBySeat[SeatId.Bottom] = 4;
+            state.RoundState.TricksWonBySeat[SeatId.Top] = 4;
+            state.RoundState.TricksWonBySeat[SeatId.Left] = 3;
+            state.RoundState.TricksWonBySeat[SeatId.Right] = 2;
+
+            var result = engine.ScoreRound(state);
+            var home = result.TeamScores[TeamId.Home];
+
+            Assert.That(home.ContractBid, Is.EqualTo(6));
+            Assert.That(home.TricksWon, Is.EqualTo(8));
+            Assert.That(home.BagsEarned, Is.EqualTo(2));
+            Assert.That(home.BagPenaltyDelta, Is.EqualTo(-100));
+            Assert.That(home.RoundDelta, Is.EqualTo(-38));
+            Assert.That(home.BagsAfterRound, Is.EqualTo(0));
         }
 
         [Test]

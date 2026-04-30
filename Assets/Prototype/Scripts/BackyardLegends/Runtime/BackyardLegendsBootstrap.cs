@@ -763,8 +763,10 @@ namespace BackyardLegends.Runtime
             EnsureFallbackFont(sceneRefs.DeckAnchorText);
             EnsureFallbackFont(sceneRefs.DiscardAnchorText);
             ApplyThemeText(sceneRefs.OpeningStackText, theme.gold, 24, FontStyle.Bold);
-            ApplyThemeText(sceneRefs.RoundSummaryText, theme.primaryText, 24, FontStyle.Normal);
-            ApplyThemeText(sceneRefs.EndSummaryText, theme.primaryText, 24, FontStyle.Normal);
+            ApplyThemeText(sceneRefs.RoundSummaryText, theme.primaryText, 20, FontStyle.Normal);
+            ApplyThemeText(sceneRefs.EndSummaryText, theme.primaryText, 20, FontStyle.Normal);
+            ConfigureWrapSummaryText(sceneRefs.RoundSummaryText, new Vector2(0.08f, 0.18f), new Vector2(0.92f, 0.76f), 20, 16);
+            ConfigureWrapSummaryText(sceneRefs.EndSummaryText, new Vector2(0.08f, 0.20f), new Vector2(0.92f, 0.78f), 20, 14);
             ApplyThemeText(sceneRefs.BannerText, theme.gold, 32, FontStyle.Bold);
             if (sceneRefs.BackgroundImage != null)
             {
@@ -1878,6 +1880,7 @@ namespace BackyardLegends.Runtime
             pendingBidSelection = null;
             SetSheetVisible(sceneRefs.BidSheet, false);
             SyncConfirmBidButton(false, null);
+            HideAllBidBubbles(true);
             RenderAll();
             ScheduleAiLoop();
         }
@@ -2723,10 +2726,27 @@ namespace BackyardLegends.Runtime
 
         private void ShowBidCallout(SeatId seat, int bid)
         {
-            ShowSeatCallout(seat, bid == 0 ? "I BID NIL" : $"I BID {bid}", 1.3f, new Color(0.15f, 0.16f, 0.18f, 0.96f), theme.primaryText);
+            var holdForPlayerDecision = ShouldHoldBidCalloutForPlayerDecision(seat);
+            ShowSeatCallout(
+                seat,
+                bid == 0 ? "I BID NIL" : $"I BID {bid}",
+                1.3f,
+                new Color(0.15f, 0.16f, 0.18f, 0.96f),
+                theme.primaryText,
+                holdForPlayerDecision);
         }
 
-        private void ShowSeatCallout(SeatId seat, string text, float holdSeconds, Color panelColor, Color textColor)
+        private bool ShouldHoldBidCalloutForPlayerDecision(SeatId seat)
+        {
+            if (seat == SeatId.Bottom || controller == null || controller.State.Phase != MatchPhase.Bidding || controller.State.RoundState == null)
+            {
+                return false;
+            }
+
+            return controller.State.RoundState.BidState.BidsBySeat.TryGetValue(SeatId.Bottom, out var playerBid) && !playerBid.HasValue;
+        }
+
+        private void ShowSeatCallout(SeatId seat, string text, float holdSeconds, Color panelColor, Color textColor, bool holdVisible = false)
         {
             if (!seatViews.TryGetValue(seat, out var view) || view?.BidCalloutGroup == null || view.BidCalloutText == null || view.BidCalloutPanel == null)
             {
@@ -2742,10 +2762,10 @@ namespace BackyardLegends.Runtime
             view.BidCalloutText.color = textColor;
             view.BidCalloutText.text = text;
             SpawnImpactBurst(GetAnchoredPoint(view.BidCalloutGroup.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f)), textColor, 24f, 3);
-            bidBubbleLoops[seat] = StartCoroutine(BidCalloutRoutine(view, seat, holdSeconds));
+            bidBubbleLoops[seat] = StartCoroutine(BidCalloutRoutine(view, seat, holdSeconds, holdVisible));
         }
 
-        private IEnumerator BidCalloutRoutine(SeatPanelView view, SeatId seat, float holdSeconds)
+        private IEnumerator BidCalloutRoutine(SeatPanelView view, SeatId seat, float holdSeconds, bool holdVisible)
         {
             view.BidCalloutGroup.alpha = 0f;
             yield return PulseRect(view.BidCalloutGroup.GetComponent<RectTransform>(), 1.05f, Mathf.Max(0.1f, theme.pulseDuration * 0.85f));
@@ -2759,6 +2779,12 @@ namespace BackyardLegends.Runtime
             }
 
             view.BidCalloutGroup.alpha = 1f;
+            if (holdVisible)
+            {
+                bidBubbleLoops.Remove(seat);
+                yield break;
+            }
+
             yield return new WaitForSecondsRealtime(Mathf.Max(0.05f, holdSeconds));
             elapsed = 0f;
             var fadeOut = Mathf.Max(0.18f, theme.modalDuration * 0.9f);
@@ -3481,15 +3507,46 @@ namespace BackyardLegends.Runtime
         {
             var home = controller.State.Scores[TeamId.Home];
             var away = controller.State.Scores[TeamId.Away];
+            var rules = selectedRule ?? controller.State.RuleSet;
+            var bagTarget = rules.BagPenaltyThreshold;
             var reneges = controller.State.RoundState.RenegeSeats.Count == 0
                 ? "None"
                 : string.Join(", ", controller.State.RoundState.RenegeSeats.Select(seat => controller.State.SeatNames[seat]));
 
             return
-                $"Home: {home.Score} total | bid {home.ContractBid} | books {home.TricksWon} | round {home.RoundDelta:+#;-#;0} | nil {home.NilDelta:+#;-#;0}\n" +
-                $"Away: {away.Score} total | bid {away.ContractBid} | books {away.TricksWon} | round {away.RoundDelta:+#;-#;0} | nil {away.NilDelta:+#;-#;0}\n\n" +
+                $"{BuildTeamRoundSummary("Home", home, bagTarget)}\n" +
+                $"{BuildTeamRoundSummary("Away", away, bagTarget)}\n\n" +
                 $"Reneges: {reneges}\n" +
-                $"Target: {selectedRule.TargetScore}";
+                $"Target: {rules.TargetScore}";
+        }
+
+        private static string BuildTeamRoundSummary(string label, ScoreSnapshot score, int bagTarget)
+        {
+            return
+                $"{label}\n" +
+                $"Bid: {score.ContractBid} | Books: {score.TricksWon} | Bags gained: {score.BagsEarned} | Bags now: {score.Bags}/{bagTarget}\n" +
+                $"Bag penalty: {FormatSigned(score.BagPenaltyDelta)} | Round score: {FormatSigned(score.RoundDelta)} | Nil: {FormatSigned(score.NilDelta)} | Total: {score.Score}";
+        }
+
+        private static string FormatSigned(int value)
+        {
+            return value.ToString("+#;-#;0");
+        }
+
+        private static void ConfigureWrapSummaryText(Text label, Vector2 anchorMin, Vector2 anchorMax, int maxFontSize, int minFontSize)
+        {
+            if (label == null)
+            {
+                return;
+            }
+
+            SetAnchors(label.rectTransform, anchorMin, anchorMax);
+            label.alignment = TextAnchor.UpperLeft;
+            label.horizontalOverflow = HorizontalWrapMode.Wrap;
+            label.verticalOverflow = VerticalWrapMode.Truncate;
+            label.resizeTextForBestFit = true;
+            label.resizeTextMinSize = minFontSize;
+            label.resizeTextMaxSize = maxFontSize;
         }
 
         private string BuildMatchSummaryText(TeamId winningTeam)

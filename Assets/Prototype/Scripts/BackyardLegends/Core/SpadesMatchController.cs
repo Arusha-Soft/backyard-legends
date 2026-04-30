@@ -376,7 +376,9 @@ namespace BackyardLegends.Core
                     ContractBid = score.Value.ContractBid,
                     TricksWon = score.Value.TricksWon,
                     RoundDelta = score.Value.RoundDelta,
-                    NilDelta = score.Value.NilDelta
+                    NilDelta = score.Value.NilDelta,
+                    BagsEarned = score.Value.BagsEarned,
+                    BagPenaltyDelta = score.Value.BagPenaltyDelta
                 };
             }
 

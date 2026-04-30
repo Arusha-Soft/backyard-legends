@@ -231,7 +231,7 @@ namespace BackyardLegends.Editor
             refs.RoundSheet = refs.RoundSheetImage.rectTransform;
             ApplySprite(refs.RoundSheetImage, theme.sheetSprite, Image.Type.Sliced, new Color(0.15f, 0.16f, 0.18f, 0.98f));
             CreateText("Round Title", refs.RoundSheet, "ROUND WRAP", 36, FontStyle.Bold, theme.gold, TextAnchor.UpperCenter, new Vector2(0.08f, 0.78f), new Vector2(0.92f, 0.95f));
-            refs.RoundSummaryText = CreateText("Round Summary", refs.RoundSheet, "Round summary goes here.", 24, FontStyle.Normal, theme.primaryText, TextAnchor.UpperLeft, new Vector2(0.08f, 0.22f), new Vector2(0.92f, 0.74f));
+            refs.RoundSummaryText = CreateText("Round Summary", refs.RoundSheet, "Round summary goes here.", 20, FontStyle.Normal, theme.primaryText, TextAnchor.UpperLeft, new Vector2(0.08f, 0.18f), new Vector2(0.92f, 0.76f));
             refs.NextRoundButton = CreateButton("Next Round", refs.RoundSheet, "NEXT ROUND", theme.green, new Vector2(0.18f, 0.04f), new Vector2(0.82f, 0.16f));
             ApplySprite(refs.NextRoundButton.image, theme.buttonSprite, Image.Type.Sliced, theme.green);
 
@@ -239,7 +239,7 @@ namespace BackyardLegends.Editor
             refs.EndSheet = refs.EndSheetImage.rectTransform;
             ApplySprite(refs.EndSheetImage, theme.sheetSprite, Image.Type.Sliced, new Color(0.15f, 0.16f, 0.18f, 0.98f));
             CreateText("End Title", refs.EndSheet, "MATCH COMPLETE", 36, FontStyle.Bold, theme.gold, TextAnchor.UpperCenter, new Vector2(0.08f, 0.8f), new Vector2(0.92f, 0.95f));
-            refs.EndSummaryText = CreateText("End Summary", refs.EndSheet, "Winner info", 24, FontStyle.Normal, theme.primaryText, TextAnchor.UpperLeft, new Vector2(0.08f, 0.28f), new Vector2(0.92f, 0.76f));
+            refs.EndSummaryText = CreateText("End Summary", refs.EndSheet, "Winner info", 20, FontStyle.Normal, theme.primaryText, TextAnchor.UpperLeft, new Vector2(0.08f, 0.20f), new Vector2(0.92f, 0.78f));
             refs.ReturnToLobbyButton = CreateButton("Back To Lobby", refs.EndSheet, "BACK TO LOBBY", theme.panelStroke, new Vector2(0.08f, 0.06f), new Vector2(0.44f, 0.18f));
             refs.RematchButton = CreateButton("Rematch", refs.EndSheet, "RUN IT BACK", theme.green, new Vector2(0.56f, 0.06f), new Vector2(0.92f, 0.18f));
             ApplySprite(refs.ReturnToLobbyButton.image, theme.buttonSprite, Image.Type.Sliced, theme.panelStroke);

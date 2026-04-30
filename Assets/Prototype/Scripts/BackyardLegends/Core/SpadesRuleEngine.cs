@@ -21,6 +21,7 @@ namespace BackyardLegends.Core
         public int NilDelta;
         public int RenegeDelta;
         public int BagsEarned;
+        public int BagPenaltyDelta;
         public int BagsAfterRound;
     }
 
@@ -147,6 +148,7 @@ namespace BackyardLegends.Core
 
                 var score = matchState.Scores[team];
                 var bagsEarned = 0;
+                var bagPenaltyDelta = 0;
                 var roundDelta = 0;
                 var renegeDelta = 0;
                 if (tricksWon >= teamBid)
@@ -164,7 +166,8 @@ namespace BackyardLegends.Core
                 if (score.Bags >= rules.BagPenaltyThreshold)
                 {
                     var penalties = score.Bags / rules.BagPenaltyThreshold;
-                    roundDelta += penalties * rules.BagPenaltyPoints;
+                    bagPenaltyDelta = penalties * rules.BagPenaltyPoints;
+                    roundDelta += bagPenaltyDelta;
                     score.Bags %= rules.BagPenaltyThreshold;
                 }
 
@@ -182,6 +185,8 @@ namespace BackyardLegends.Core
                 score.TricksWon = tricksWon;
                 score.RoundDelta = roundDelta;
                 score.NilDelta = nilDelta;
+                score.BagsEarned = bagsEarned;
+                score.BagPenaltyDelta = bagPenaltyDelta;
                 score.Score += roundDelta + nilDelta;
 
                 result.TeamScores[team] = new TeamRoundScore
@@ -193,10 +198,11 @@ namespace BackyardLegends.Core
                     NilDelta = nilDelta,
                     RenegeDelta = renegeDelta,
                     BagsEarned = bagsEarned,
+                    BagPenaltyDelta = bagPenaltyDelta,
                     BagsAfterRound = score.Bags
                 };
 
-                summaryLines.Add($"{team}: bid {teamBid}, took {tricksWon}, round {roundDelta:+#;-#;0}, nil {nilDelta:+#;-#;0}, renege {renegeDelta:+#;-#;0}");
+                summaryLines.Add($"{team}: bid {teamBid}, took {tricksWon}, bags +{bagsEarned}, bag penalty {bagPenaltyDelta:+#;-#;0}, round {roundDelta:+#;-#;0}, nil {nilDelta:+#;-#;0}, renege {renegeDelta:+#;-#;0}");
             }
 
             var homeScore = matchState.Scores[TeamId.Home].Score;
