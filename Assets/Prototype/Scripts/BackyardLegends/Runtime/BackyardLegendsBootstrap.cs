@@ -14,8 +14,6 @@ namespace BackyardLegends.Runtime
         private const int BidCalloutFontSize = 46;
         private static readonly Vector2 BidCalloutAnchorMin = new(0.08f, 1.00f);
         private static readonly Vector2 BidCalloutAnchorMax = new(0.92f, 1.42f);
-        private static readonly Vector2 ConfirmBidAnchorMin = new(0.36f, 0.05f);
-        private static readonly Vector2 ConfirmBidAnchorMax = new(0.64f, 0.26f);
 
         [SerializeField] private BackyardLegendsSceneRefs sceneRefs;
         [SerializeField] private ThemeConfig themeOverride;
@@ -41,6 +39,8 @@ namespace BackyardLegends.Runtime
         private readonly Dictionary<CardButtonView, Coroutine> openingStackPreviewAnimations = new();
         private readonly Dictionary<int, Button> bidButtons = new();
         private readonly Dictionary<SeatId, Coroutine> bidBubbleLoops = new();
+        private readonly Dictionary<SeatId, Coroutine> bookTextLoops = new();
+        private readonly Dictionary<SeatId, BookTextVisualState> bookTextDefaults = new();
         private readonly Queue<string> recentFeed = new();
         private readonly Queue<IEnumerator> queuedAnimations = new();
         private readonly Queue<TeamId> pendingSetBookMoments = new();
@@ -83,6 +83,8 @@ namespace BackyardLegends.Runtime
         private AudioClip roundScoreClip;
         private AudioClip matchEndClip;
         private AudioClip setBookClip;
+        private Sprite bidButtonDefaultSprite;
+        private Sprite bidButtonSelectedSprite;
         private int bannerDefaultFontSize;
         private FontStyle bannerDefaultFontStyle;
         private TextAnchor bannerDefaultAlignment;
@@ -104,7 +106,7 @@ namespace BackyardLegends.Runtime
         private RectTransform AnimationRoot => (RectTransform)transform;
         private bool HasCardMotionPending => openingDealRunning || animationQueueLoop != null || queuedAnimations.Count > 0 || floatingCards.Count > 0;
 
-        private bool HasVisualMotionPending => HasCardMotionPending || setBookMomentRunning || pendingSetBookMoments.Count > 0;
+        private bool HasVisualMotionPending => HasCardMotionPending || setBookMomentRunning || pendingSetBookMoments.Count > 0 || bookTextLoops.Count > 0;
 
         private enum FeedbackCue
         {
@@ -193,6 +195,28 @@ namespace BackyardLegends.Runtime
             public Color SuitColor { get; }
         }
 
+        private readonly struct BookTextVisualState
+        {
+            public BookTextVisualState(Color color, int fontSize, FontStyle fontStyle, TextAnchor alignment, Vector3 scale, Vector2 position, float alpha)
+            {
+                Color = color;
+                FontSize = fontSize;
+                FontStyle = fontStyle;
+                Alignment = alignment;
+                Scale = scale;
+                Position = position;
+                Alpha = alpha;
+            }
+
+            public Color Color { get; }
+            public int FontSize { get; }
+            public FontStyle FontStyle { get; }
+            public TextAnchor Alignment { get; }
+            public Vector3 Scale { get; }
+            public Vector2 Position { get; }
+            public float Alpha { get; }
+        }
+
         private void Awake()
         {
             Screen.orientation = ScreenOrientation.Portrait;
@@ -215,7 +239,7 @@ namespace BackyardLegends.Runtime
 
             EnsureRuntimeOpeningWidgets();
             EnsureRuntimeBackNavigationWidgets();
-            EnsureRuntimeBidConfirmationWidgets();
+            BindAuthoredBidConfirmationWidget();
             EnsureRuntimeSeatCallouts();
 
             var handLayoutGroup = sceneRefs.HandContent != null ? sceneRefs.HandContent.GetComponent<LayoutGroup>() : null;
@@ -271,20 +295,18 @@ namespace BackyardLegends.Runtime
             }
         }
 
-        private void EnsureRuntimeBidConfirmationWidgets()
+        private void BindAuthoredBidConfirmationWidget()
         {
             if (sceneRefs.BidSheet == null || sceneRefs.ConfirmBidButton != null)
             {
                 return;
             }
 
-            sceneRefs.ConfirmBidButton = CreateRuntimeButton(
-                "Confirm Bid",
-                sceneRefs.BidSheet,
-                "CONFIRM BID",
-                theme.green,
-                ConfirmBidAnchorMin,
-                ConfirmBidAnchorMax);
+            var confirmTransform = sceneRefs.BidSheet.Find("Confirm Bid");
+            if (confirmTransform != null)
+            {
+                sceneRefs.ConfirmBidButton = confirmTransform.GetComponent<Button>();
+            }
         }
 
         private void EnsureRuntimeSeatCallouts()
@@ -836,11 +858,10 @@ namespace BackyardLegends.Runtime
             TintButton(sceneRefs.BackButton, theme.panelStroke);
             TintButton(sceneRefs.ReturnToLobbyButton, theme.panelStroke);
             TintButton(sceneRefs.DealButton, theme.green);
-            TintButton(sceneRefs.PlaySelectedButton, theme.gold);
-            TintButton(sceneRefs.ConfirmBidButton, theme.green);
+            CacheBidButtonSprites();
             foreach (var pair in bidButtons)
             {
-                TintButton(pair.Value, theme.panelStroke);
+                ApplyBidButtonVisual(pair.Value, true, false);
             }
 
             sceneRefs.HomeDeltaText.canvasRenderer.SetAlpha(0f);
@@ -1128,7 +1149,7 @@ namespace BackyardLegends.Runtime
                     view.gameObject.SetActive(false);
                 }
 
-                SyncPlaySelectedButton(false);
+                SetPlaySelectedButtonActive(false);
                 return;
             }
 
@@ -1195,7 +1216,7 @@ namespace BackyardLegends.Runtime
             }
 
             suppressNextHandEntryAnimation = false;
-            SyncPlaySelectedButton(selectedCard.HasValue && legalCards.Contains(selectedCard.Value));
+            SetPlaySelectedButtonActive(selectedCard.HasValue && legalCards.Contains(selectedCard.Value));
         }
 
         private void EnsureCardPoolSize(int count)
@@ -1392,7 +1413,6 @@ namespace BackyardLegends.Runtime
             {
                 SetSheetVisible(sceneRefs.BidSheet, false);
                 pendingBidSelection = null;
-                SyncConfirmBidButton(false, null);
                 return;
             }
 
@@ -1402,7 +1422,6 @@ namespace BackyardLegends.Runtime
             if (!shouldShow)
             {
                 pendingBidSelection = null;
-                SyncConfirmBidButton(false, null);
                 return;
             }
 
@@ -1420,7 +1439,6 @@ namespace BackyardLegends.Runtime
                 ApplyBidButtonVisual(pair.Value, isLegal, isSelected);
             }
 
-            SyncConfirmBidButton(true, pendingBidSelection);
         }
 
         private void SelectBid(int bid)
@@ -1463,39 +1481,53 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
-            var selectedTint = Color.Lerp(theme.green, theme.highlight, 0.35f);
-            button.image.color = isSelected ? selectedTint : isLegal ? theme.gold : theme.panelStroke;
+            CacheBidButtonSprites();
+            button.image.sprite = isSelected && bidButtonSelectedSprite != null
+                ? bidButtonSelectedSprite
+                : bidButtonDefaultSprite != null
+                    ? bidButtonDefaultSprite
+                    : button.image.sprite;
+            button.image.type = Image.Type.Simple;
+            button.image.color = isLegal
+                ? Color.white
+                : new Color(0.42f, 0.42f, 0.42f, 0.72f);
 
             var label = button.GetComponentInChildren<Text>();
             if (label != null)
             {
-                label.color = isLegal ? theme.backgroundColor : theme.mutedText;
+                label.color = isLegal ? theme.primaryText : theme.mutedText;
                 label.fontStyle = isSelected ? FontStyle.Bold : FontStyle.Normal;
             }
         }
 
-        private void SyncConfirmBidButton(bool visible, int? selectedBid)
+        private void CacheBidButtonSprites()
         {
-            if (sceneRefs.ConfirmBidButton == null)
+            if (bidButtonDefaultSprite != null && bidButtonSelectedSprite != null)
             {
                 return;
             }
 
-            sceneRefs.ConfirmBidButton.gameObject.SetActive(visible);
-            sceneRefs.ConfirmBidButton.interactable = visible && selectedBid.HasValue;
-            if (sceneRefs.ConfirmBidButton.image != null)
+            foreach (var button in bidButtons.Values)
             {
-                sceneRefs.ConfirmBidButton.image.color = selectedBid.HasValue ? theme.green : theme.panelStroke;
+                var sprite = button != null && button.image != null ? button.image.sprite : null;
+                if (sprite == null)
+                {
+                    continue;
+                }
+
+                if (bidButtonDefaultSprite == null || sprite.name.EndsWith("_1", System.StringComparison.Ordinal))
+                {
+                    bidButtonDefaultSprite = sprite;
+                }
+
+                if (sprite.name.EndsWith("_2", System.StringComparison.Ordinal))
+                {
+                    bidButtonSelectedSprite = sprite;
+                }
             }
 
-            var label = sceneRefs.ConfirmBidButton.GetComponentInChildren<Text>();
-            if (label != null)
-            {
-                label.text = selectedBid.HasValue ? $"CONFIRM {BidSelectionLabel(selectedBid.Value)}" : "SELECT BID";
-                label.color = selectedBid.HasValue ? theme.backgroundColor : theme.mutedText;
-                label.fontStyle = FontStyle.Bold;
-                label.fontSize = selectedBid.HasValue ? 20 : 18;
-            }
+            bidButtonDefaultSprite ??= theme.buttonSprite;
+            bidButtonSelectedSprite ??= bidButtonDefaultSprite;
         }
 
         private static string BidSelectionLabel(int bid)
@@ -1879,7 +1911,6 @@ namespace BackyardLegends.Runtime
 
             pendingBidSelection = null;
             SetSheetVisible(sceneRefs.BidSheet, false);
-            SyncConfirmBidButton(false, null);
             HideAllBidBubbles(true);
             RenderAll();
             ScheduleAiLoop();
@@ -2004,27 +2035,14 @@ namespace BackyardLegends.Runtime
             ScheduleAiLoop();
         }
 
-        private void SyncPlaySelectedButton(bool canPlaySelected)
+        private void SetPlaySelectedButtonActive(bool active)
         {
             if (sceneRefs.PlaySelectedButton == null)
             {
                 return;
             }
 
-            sceneRefs.PlaySelectedButton.gameObject.SetActive(canPlaySelected);
-            sceneRefs.PlaySelectedButton.interactable = canPlaySelected;
-            if (sceneRefs.PlaySelectedButton.image != null)
-            {
-                sceneRefs.PlaySelectedButton.image.color = canPlaySelected ? theme.gold : theme.panelStroke;
-            }
-
-            var label = sceneRefs.PlaySelectedButton.GetComponentInChildren<Text>();
-            if (label != null)
-            {
-                label.text = "PLAY SELECTED";
-                label.color = canPlaySelected ? theme.backgroundColor : theme.mutedText;
-                label.fontStyle = FontStyle.Bold;
-            }
+            sceneRefs.PlaySelectedButton.gameObject.SetActive(active);
         }
 
         private void ScheduleAiLoop()
@@ -2196,6 +2214,7 @@ namespace BackyardLegends.Runtime
             PlayFeedback(FeedbackCue.Collect, 0.22f);
             SpawnImpactBurst(GetAnchoredPoint(seatViews[winner].Root, GetSeatInnerAnchor(winner)), winner.ToTeam() == TeamId.Home ? theme.green : theme.red, 42f, 5);
             SpawnImpactBurst(GetAnchoredPoint(sceneRefs.DiscardAnchorImage.rectTransform, new Vector2(0.5f, 0.5f)), theme.gold, 28f, 3);
+            StartBookTextImpact(winner, null, winner.ToTeam() == TeamId.Home ? theme.green : theme.red, false);
             yield return PulseRect(sceneRefs.DiscardAnchorImage.rectTransform, 1.07f, Mathf.Max(0.12f, theme.pulseDuration * 0.8f));
         }
 
@@ -2438,6 +2457,7 @@ namespace BackyardLegends.Runtime
             pendingRoundSheetOpen = false;
             pendingEndSheetOpen = false;
             setBookMomentRunning = false;
+            ClearBookTextAnimations();
             StopOpeningStackIntro();
             ClearOpeningStackPreviewCards();
             ClearFloatingCards();
@@ -2904,6 +2924,160 @@ namespace BackyardLegends.Runtime
             }
         }
 
+        private void StartBookTextImpact(SeatId seat, string overrideText, Color color, bool setBookSlam)
+        {
+            if (!seatViews.TryGetValue(seat, out var view) || view?.TricksText == null)
+            {
+                return;
+            }
+
+            if (bookTextLoops.TryGetValue(seat, out var existing) && existing != null)
+            {
+                StopCoroutine(existing);
+            }
+
+            bookTextLoops[seat] = StartCoroutine(BookTextImpactRoutine(seat, view.TricksText, overrideText, color, setBookSlam));
+        }
+
+        private IEnumerator BookTextImpactRoutine(SeatId seat, Text text, string overrideText, Color color, bool setBookSlam)
+        {
+            if (text == null)
+            {
+                bookTextLoops.Remove(seat);
+                yield break;
+            }
+
+            var rectTransform = text.rectTransform;
+            var defaultText = BuildBooksText(seat);
+            var defaults = CaptureBookTextDefaults(seat, text);
+            var center = GetAnchoredPoint(rectTransform, new Vector2(0.5f, 0.5f));
+
+            text.text = string.IsNullOrEmpty(overrideText) ? defaultText : overrideText;
+            text.color = color;
+            text.fontStyle = FontStyle.Bold;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.fontSize = setBookSlam
+                ? Mathf.Max(defaults.FontSize + 14, Mathf.RoundToInt(defaults.FontSize * 1.75f))
+                : Mathf.Max(defaults.FontSize + 5, Mathf.RoundToInt(defaults.FontSize * 1.2f));
+            SetGraphicAlpha(text, 0f);
+            rectTransform.localScale = defaults.Scale * (setBookSlam ? 0.48f : 0.82f);
+            rectTransform.anchoredPosition = defaults.Position + Vector2.up * (setBookSlam ? 9f : 3f);
+
+            SpawnImpactBurst(center, color, setBookSlam ? 52f : 28f, setBookSlam ? 6 : 3);
+
+            var slamDuration = setBookSlam ? 0.28f : 0.18f;
+            var elapsed = 0f;
+            while (elapsed < slamDuration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(elapsed / slamDuration);
+                var eased = Mathf.SmoothStep(0f, 1f, t);
+                var peak = setBookSlam ? 1.7f : 1.26f;
+                var overshoot = t < 0.62f
+                    ? Mathf.Lerp(setBookSlam ? 0.48f : 0.82f, peak, Mathf.Clamp01(t / 0.62f))
+                    : Mathf.Lerp(peak, 1f, Mathf.Clamp01((t - 0.62f) / 0.38f));
+                var shake = setBookSlam ? Mathf.Sin(elapsed * 98f) * Mathf.Lerp(7f, 0f, eased) : 0f;
+                SetGraphicAlpha(text, Mathf.Clamp01(t * 4.5f));
+                rectTransform.localScale = defaults.Scale * overshoot;
+                rectTransform.anchoredPosition = defaults.Position + new Vector2(shake, Mathf.Lerp(setBookSlam ? 9f : 3f, 0f, eased));
+                yield return null;
+            }
+
+            rectTransform.localScale = defaults.Scale;
+            rectTransform.anchoredPosition = defaults.Position;
+            SetGraphicAlpha(text, 1f);
+
+            if (setBookSlam)
+            {
+                yield return new WaitForSecondsRealtime(0.45f);
+                elapsed = 0f;
+                const float fadeDuration = 0.16f;
+                while (elapsed < fadeDuration)
+                {
+                    elapsed += Time.unscaledDeltaTime;
+                    var t = Mathf.Clamp01(elapsed / fadeDuration);
+                    SetGraphicAlpha(text, 1f - t);
+                    rectTransform.localScale = defaults.Scale * Mathf.Lerp(1f, 1.08f, t);
+                    yield return null;
+                }
+            }
+            else
+            {
+                yield return new WaitForSecondsRealtime(0.08f);
+            }
+
+            text.text = BuildBooksText(seat);
+            RestoreBookTextVisual(seat, text);
+            bookTextLoops.Remove(seat);
+            ApplyDeferredSheetState();
+            ScheduleAiLoop();
+        }
+
+        private BookTextVisualState CaptureBookTextDefaults(SeatId seat, Text text)
+        {
+            if (bookTextDefaults.TryGetValue(seat, out var defaults))
+            {
+                return defaults;
+            }
+
+            var rectTransform = text.rectTransform;
+            defaults = new BookTextVisualState(
+                text.color,
+                text.fontSize,
+                text.fontStyle,
+                text.alignment,
+                rectTransform.localScale,
+                rectTransform.anchoredPosition,
+                text.canvasRenderer.GetAlpha());
+            bookTextDefaults[seat] = defaults;
+            return defaults;
+        }
+
+        private void RestoreBookTextVisual(SeatId seat, Text text)
+        {
+            var defaults = CaptureBookTextDefaults(seat, text);
+            text.color = defaults.Color;
+            text.fontSize = defaults.FontSize;
+            text.fontStyle = defaults.FontStyle;
+            text.alignment = defaults.Alignment;
+            text.rectTransform.localScale = defaults.Scale;
+            text.rectTransform.anchoredPosition = defaults.Position;
+            SetGraphicAlpha(text, defaults.Alpha);
+        }
+
+        private void ClearBookTextAnimations()
+        {
+            foreach (var loop in bookTextLoops.Values.ToArray())
+            {
+                if (loop != null)
+                {
+                    StopCoroutine(loop);
+                }
+            }
+
+            bookTextLoops.Clear();
+            foreach (var pair in seatViews)
+            {
+                if (pair.Value?.TricksText == null)
+                {
+                    continue;
+                }
+
+                var text = pair.Value.TricksText;
+                text.text = BuildBooksText(pair.Key);
+                RestoreBookTextVisual(pair.Key, text);
+            }
+        }
+
+        private string BuildBooksText(SeatId seat)
+        {
+            var tricks = controller?.State?.RoundState?.TricksWonBySeat != null &&
+                         controller.State.RoundState.TricksWonBySeat.TryGetValue(seat, out var count)
+                ? count
+                : 0;
+            return $"Books: {tricks}";
+        }
+
         private IEnumerator PulseRect(RectTransform rectTransform, float peakScale, float duration)
         {
             if (rectTransform == null)
@@ -3137,6 +3311,11 @@ namespace BackyardLegends.Runtime
             var center = GetAnchoredPoint(sceneRefs.BannerText.rectTransform, new Vector2(0.5f, 0.5f));
             SpawnImpactBurst(center, color, 88f, 10);
             SpawnImpactBurst(center + new Vector2(0f, -18f), theme.gold, 56f, 7);
+            foreach (var seat in SpadesSeatUtility.TurnOrder.Where(seat => seat.ToTeam() == team))
+            {
+                StartBookTextImpact(seat, "SET BOOK", color, true);
+            }
+
             setBookMomentRunning = true;
             bannerLoop = StartCoroutine(SetBookMomentRoutine(color));
             return true;
@@ -3838,24 +4017,6 @@ namespace BackyardLegends.Runtime
             image.type = Image.Type.Simple;
             image.color = Color.white;
             return image;
-        }
-
-        private Button CreateRuntimeButton(string name, Transform parent, string label, Color tint, Vector2 anchorMin, Vector2 anchorMax)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
-            go.transform.SetParent(parent, false);
-            var rect = (RectTransform)go.transform;
-            SetAnchors(rect, anchorMin, anchorMax);
-            var image = go.GetComponent<Image>();
-            image.sprite = theme.buttonSprite != null ? theme.buttonSprite : ResolvePanelSprite();
-            image.type = Image.Type.Sliced;
-            image.color = tint;
-            var button = go.GetComponent<Button>();
-            button.targetGraphic = image;
-            var text = CreateRuntimeText("Label", go.transform, label, 22, FontStyle.Bold, theme.backgroundColor, TextAnchor.MiddleCenter, Vector2.zero, Vector2.one);
-            text.rectTransform.offsetMin = new Vector2(8f, 8f);
-            text.rectTransform.offsetMax = new Vector2(-8f, -8f);
-            return button;
         }
 
         private Text CreateRuntimeText(string name, Transform parent, string value, int fontSize, FontStyle style, Color color, TextAnchor anchor, Vector2 anchorMin, Vector2 anchorMax)
