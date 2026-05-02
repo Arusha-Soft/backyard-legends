@@ -69,5 +69,7 @@ namespace BackyardLegends.Runtime
         public TrickSlotView TopTrick;
         public TrickSlotView RightTrick;
         public CardButtonView CardButtonPrefab;
+        public EndOfHandScoreboardView RoundScoreboardView;
+        public EndOfHandScoreboardView EndScoreboardView;
     }
 }

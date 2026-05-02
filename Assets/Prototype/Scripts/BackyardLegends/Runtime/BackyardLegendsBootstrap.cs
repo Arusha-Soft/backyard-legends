@@ -785,10 +785,18 @@ namespace BackyardLegends.Runtime
             EnsureFallbackFont(sceneRefs.DeckAnchorText);
             EnsureFallbackFont(sceneRefs.DiscardAnchorText);
             ApplyThemeText(sceneRefs.OpeningStackText, theme.gold, 24, FontStyle.Bold);
-            ApplyThemeText(sceneRefs.RoundSummaryText, theme.primaryText, 20, FontStyle.Normal);
-            ApplyThemeText(sceneRefs.EndSummaryText, theme.primaryText, 20, FontStyle.Normal);
-            ConfigureWrapSummaryText(sceneRefs.RoundSummaryText, new Vector2(0.08f, 0.18f), new Vector2(0.92f, 0.76f), 20, 16);
-            ConfigureWrapSummaryText(sceneRefs.EndSummaryText, new Vector2(0.08f, 0.20f), new Vector2(0.92f, 0.78f), 20, 14);
+            if (sceneRefs.RoundScoreboardView == null)
+            {
+                ApplyThemeText(sceneRefs.RoundSummaryText, theme.primaryText, 20, FontStyle.Normal);
+                ConfigureWrapSummaryText(sceneRefs.RoundSummaryText, new Vector2(0.08f, 0.18f), new Vector2(0.92f, 0.76f), 20, 16);
+            }
+
+            if (sceneRefs.EndScoreboardView == null)
+            {
+                ApplyThemeText(sceneRefs.EndSummaryText, theme.primaryText, 20, FontStyle.Normal);
+                ConfigureWrapSummaryText(sceneRefs.EndSummaryText, new Vector2(0.08f, 0.20f), new Vector2(0.92f, 0.78f), 20, 14);
+            }
+
             ApplyThemeText(sceneRefs.BannerText, theme.gold, 32, FontStyle.Bold);
             if (sceneRefs.BackgroundImage != null)
             {
@@ -809,8 +817,15 @@ namespace BackyardLegends.Runtime
             ApplyThemedImage(sceneRefs.OpeningStackImage, Color.white, ResolveCardBackSprite());
             var sheetTint = new Color(0.15f, 0.16f, 0.18f, 0.98f);
             ApplyThemedImage(sceneRefs.BidSheetImage, sheetTint, ResolveSheetSprite());
-            ApplyThemedImage(sceneRefs.RoundSheetImage, sheetTint, ResolveSheetSprite());
-            ApplyThemedImage(sceneRefs.EndSheetImage, sheetTint, ResolveSheetSprite());
+            if (sceneRefs.RoundScoreboardView == null)
+            {
+                ApplyThemedImage(sceneRefs.RoundSheetImage, sheetTint, ResolveSheetSprite());
+            }
+
+            if (sceneRefs.EndScoreboardView == null)
+            {
+                ApplyThemedImage(sceneRefs.EndSheetImage, sheetTint, ResolveSheetSprite());
+            }
             ConfigureChipImage(sceneRefs.HomeScoreText, theme.green);
             ConfigureChipImage(sceneRefs.AwayScoreText, theme.red);
             ConfigureScoreboardLayout();
@@ -853,10 +868,10 @@ namespace BackyardLegends.Runtime
                 }
             }
 
-            TintButton(sceneRefs.NextRoundButton, theme.green);
-            TintButton(sceneRefs.RematchButton, theme.green);
+            TintButtonIfNotScoreboard(sceneRefs.NextRoundButton, theme.green);
+            TintButtonIfNotScoreboard(sceneRefs.RematchButton, theme.green);
             TintButton(sceneRefs.BackButton, theme.panelStroke);
-            TintButton(sceneRefs.ReturnToLobbyButton, theme.panelStroke);
+            TintButtonIfNotScoreboard(sceneRefs.ReturnToLobbyButton, theme.panelStroke);
             TintButton(sceneRefs.DealButton, theme.green);
             CacheBidButtonSprites();
             foreach (var pair in bidButtons)
@@ -973,6 +988,7 @@ namespace BackyardLegends.Runtime
                     break;
                 case RoundScoredEvent:
                     sceneRefs.RoundSummaryText.text = BuildRoundSummaryText();
+                    RenderScoreboard(sceneRefs.RoundScoreboardView, false, null);
                     AddFeedMessage("Round scored and wrapped.");
                     PlayFeedback(FeedbackCue.RoundScore, 0.2f);
                     pendingRoundSheetOpen = true;
@@ -980,6 +996,7 @@ namespace BackyardLegends.Runtime
                     break;
                 case MatchEndedEvent ended:
                     sceneRefs.EndSummaryText.text = BuildMatchSummaryText(ended.WinningTeam);
+                    RenderScoreboard(sceneRefs.EndScoreboardView, true, ended.WinningTeam);
                     AddFeedMessage(ended.WinningTeam == TeamId.Home ? "Home team closed the match." : "Rivals closed the match.");
                     PlayFeedback(FeedbackCue.MatchEnd, 0.24f);
                     pendingRoundSheetOpen = false;
@@ -1074,6 +1091,16 @@ namespace BackyardLegends.Runtime
             RenderTrickArea();
             RenderHand();
             RenderBidSheet();
+        }
+
+        private void RenderScoreboard(EndOfHandScoreboardView view, bool matchComplete, TeamId? winningTeam)
+        {
+            if (view == null || controller == null)
+            {
+                return;
+            }
+
+            view.Render(controller.State, selectedRule ?? controller.State.RuleSet, matchComplete, winningTeam);
         }
 
         private void RenderSeatPanels()
@@ -4057,6 +4084,23 @@ namespace BackyardLegends.Runtime
                     label.font = theme.ResolveFont();
                 }
             }
+        }
+
+        private void TintButtonIfNotScoreboard(Button button, Color tint)
+        {
+            if (button == null || IsScoreboardChild(button.transform))
+            {
+                return;
+            }
+
+            TintButton(button, tint);
+        }
+
+        private bool IsScoreboardChild(Transform target)
+        {
+            return target != null &&
+                   ((sceneRefs.RoundScoreboardView != null && target.IsChildOf(sceneRefs.RoundScoreboardView.transform)) ||
+                    (sceneRefs.EndScoreboardView != null && target.IsChildOf(sceneRefs.EndScoreboardView.transform)));
         }
 
         private static void SetSheetVisible(RectTransform sheet, bool visible)
