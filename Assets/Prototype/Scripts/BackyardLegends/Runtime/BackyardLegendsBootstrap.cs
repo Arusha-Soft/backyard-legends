@@ -12,6 +12,7 @@ namespace BackyardLegends.Runtime
     {
         private const float BottomHandCardSizeMultiplier = 2.68f;
         private const int BidCalloutFontSize = 46;
+        private const float BookImpactExaggeration = 3f;
         private static readonly Vector2 BidCalloutAnchorMin = new(0.08f, 1.00f);
         private static readonly Vector2 BidCalloutAnchorMax = new(0.92f, 1.42f);
 
@@ -987,7 +988,11 @@ namespace BackyardLegends.Runtime
                     AddFeedMessage(setBook.Team == TeamId.Home ? "Home team missed its contract." : "Rivals missed their contract.");
                     break;
                 case RoundScoredEvent:
-                    sceneRefs.RoundSummaryText.text = BuildRoundSummaryText();
+                    if (sceneRefs.RoundSummaryText != null)
+                    {
+                        sceneRefs.RoundSummaryText.text = BuildRoundSummaryText();
+                    }
+
                     RenderScoreboard(sceneRefs.RoundScoreboardView, false, null);
                     AddFeedMessage("Round scored and wrapped.");
                     PlayFeedback(FeedbackCue.RoundScore, 0.2f);
@@ -995,7 +1000,11 @@ namespace BackyardLegends.Runtime
                     ScheduleDeferredSheetState();
                     break;
                 case MatchEndedEvent ended:
-                    sceneRefs.EndSummaryText.text = BuildMatchSummaryText(ended.WinningTeam);
+                    if (sceneRefs.EndSummaryText != null)
+                    {
+                        sceneRefs.EndSummaryText.text = BuildMatchSummaryText(ended.WinningTeam);
+                    }
+
                     RenderScoreboard(sceneRefs.EndScoreboardView, true, ended.WinningTeam);
                     AddFeedMessage(ended.WinningTeam == TeamId.Home ? "Home team closed the match." : "Rivals closed the match.");
                     PlayFeedback(FeedbackCue.MatchEnd, 0.24f);
@@ -2983,30 +2992,39 @@ namespace BackyardLegends.Runtime
             text.color = color;
             text.fontStyle = FontStyle.Bold;
             text.alignment = TextAnchor.MiddleCenter;
+            var baseFontScale = setBookSlam ? 1.75f : 1.2f;
+            var exaggeratedFontScale = 1f + (baseFontScale - 1f) * BookImpactExaggeration;
             text.fontSize = setBookSlam
-                ? Mathf.Max(defaults.FontSize + 14, Mathf.RoundToInt(defaults.FontSize * 1.75f))
-                : Mathf.Max(defaults.FontSize + 5, Mathf.RoundToInt(defaults.FontSize * 1.2f));
+                ? Mathf.Max(defaults.FontSize + Mathf.RoundToInt(14f * BookImpactExaggeration), Mathf.RoundToInt(defaults.FontSize * exaggeratedFontScale))
+                : Mathf.Max(defaults.FontSize + Mathf.RoundToInt(5f * BookImpactExaggeration), Mathf.RoundToInt(defaults.FontSize * exaggeratedFontScale));
             SetGraphicAlpha(text, 0f);
-            rectTransform.localScale = defaults.Scale * (setBookSlam ? 0.48f : 0.82f);
-            rectTransform.anchoredPosition = defaults.Position + Vector2.up * (setBookSlam ? 9f : 3f);
+            var entryScale = setBookSlam ? 0.18f : 0.46f;
+            var lift = (setBookSlam ? 9f : 3f) * BookImpactExaggeration;
+            rectTransform.localScale = defaults.Scale * entryScale;
+            rectTransform.anchoredPosition = defaults.Position + Vector2.up * lift;
 
-            SpawnImpactBurst(center, color, setBookSlam ? 52f : 28f, setBookSlam ? 6 : 3);
+            SpawnImpactBurst(
+                center,
+                color,
+                (setBookSlam ? 52f : 28f) * BookImpactExaggeration,
+                Mathf.RoundToInt((setBookSlam ? 6f : 3f) * BookImpactExaggeration));
 
-            var slamDuration = setBookSlam ? 0.28f : 0.18f;
+            var slamDuration = (setBookSlam ? 0.28f : 0.18f) * 1.2f;
             var elapsed = 0f;
             while (elapsed < slamDuration)
             {
                 elapsed += Time.unscaledDeltaTime;
                 var t = Mathf.Clamp01(elapsed / slamDuration);
                 var eased = Mathf.SmoothStep(0f, 1f, t);
-                var peak = setBookSlam ? 1.7f : 1.26f;
+                var basePeak = setBookSlam ? 1.7f : 1.26f;
+                var peak = 1f + (basePeak - 1f) * BookImpactExaggeration;
                 var overshoot = t < 0.62f
-                    ? Mathf.Lerp(setBookSlam ? 0.48f : 0.82f, peak, Mathf.Clamp01(t / 0.62f))
+                    ? Mathf.Lerp(entryScale, peak, Mathf.Clamp01(t / 0.62f))
                     : Mathf.Lerp(peak, 1f, Mathf.Clamp01((t - 0.62f) / 0.38f));
-                var shake = setBookSlam ? Mathf.Sin(elapsed * 98f) * Mathf.Lerp(7f, 0f, eased) : 0f;
+                var shake = Mathf.Sin(elapsed * 98f) * Mathf.Lerp((setBookSlam ? 7f : 3f) * BookImpactExaggeration, 0f, eased);
                 SetGraphicAlpha(text, Mathf.Clamp01(t * 4.5f));
                 rectTransform.localScale = defaults.Scale * overshoot;
-                rectTransform.anchoredPosition = defaults.Position + new Vector2(shake, Mathf.Lerp(setBookSlam ? 9f : 3f, 0f, eased));
+                rectTransform.anchoredPosition = defaults.Position + new Vector2(shake, Mathf.Lerp(lift, 0f, eased));
                 yield return null;
             }
 
@@ -3016,21 +3034,21 @@ namespace BackyardLegends.Runtime
 
             if (setBookSlam)
             {
-                yield return new WaitForSecondsRealtime(0.45f);
+                yield return new WaitForSecondsRealtime(0.65f);
                 elapsed = 0f;
-                const float fadeDuration = 0.16f;
+                const float fadeDuration = 0.2f;
                 while (elapsed < fadeDuration)
                 {
                     elapsed += Time.unscaledDeltaTime;
                     var t = Mathf.Clamp01(elapsed / fadeDuration);
                     SetGraphicAlpha(text, 1f - t);
-                    rectTransform.localScale = defaults.Scale * Mathf.Lerp(1f, 1.08f, t);
+                    rectTransform.localScale = defaults.Scale * Mathf.Lerp(1f, 1f + 0.08f * BookImpactExaggeration, t);
                     yield return null;
                 }
             }
             else
             {
-                yield return new WaitForSecondsRealtime(0.08f);
+                yield return new WaitForSecondsRealtime(0.16f);
             }
 
             text.text = BuildBooksText(seat);

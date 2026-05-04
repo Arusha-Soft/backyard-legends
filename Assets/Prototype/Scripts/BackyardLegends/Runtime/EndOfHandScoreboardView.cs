@@ -18,6 +18,10 @@ namespace BackyardLegends.Runtime
         [Header("Hero")]
         public Text HomeOutcomeText;
         public Text AwayOutcomeText;
+        public Image HomeMadeOutcomeImage;
+        public Image HomeSetOutcomeImage;
+        public Image AwayMadeOutcomeImage;
+        public Image AwaySetOutcomeImage;
         public Text HomeRoundDeltaText;
         public Text AwayRoundDeltaText;
         public Image HomeHeroIcon;
@@ -31,6 +35,8 @@ namespace BackyardLegends.Runtime
         public Text HomeBooksText;
         public Text HomeResultText;
         public Text HomeScoreText;
+        public Image HomeMadeResultImage;
+        public Image HomeSetResultImage;
         public Image HomeResultIcon;
         public Text AwayTeamText;
         public Text AwayTeamSubText;
@@ -38,6 +44,8 @@ namespace BackyardLegends.Runtime
         public Text AwayBooksText;
         public Text AwayResultText;
         public Text AwayScoreText;
+        public Image AwayMadeResultImage;
+        public Image AwaySetResultImage;
         public Image AwayResultIcon;
 
         [Header("Totals")]
@@ -87,8 +95,8 @@ namespace BackyardLegends.Runtime
         {
             var homeMade = MadeContract(home);
             var awayMade = MadeContract(away);
-            SetText(HomeOutcomeText, homeMade ? "WE MADE IT" : "WE GOT SET");
-            SetText(AwayOutcomeText, awayMade ? "THEY MADE IT" : "THEY GOT SET");
+            SetOutcome(HomeOutcomeText, HomeMadeOutcomeImage, HomeSetOutcomeImage, homeMade ? "WE MADE IT" : "WE GOT SET", homeMade);
+            SetOutcome(AwayOutcomeText, AwayMadeOutcomeImage, AwaySetOutcomeImage, awayMade ? "THEY MADE IT" : "THEY GOT SET", awayMade);
             SetText(HomeRoundDeltaText, FormatSigned(home.RoundDelta));
             SetText(AwayRoundDeltaText, FormatSigned(away.RoundDelta));
             SetImageVisible(HomeHeroIcon, homeMade);
@@ -101,7 +109,7 @@ namespace BackyardLegends.Runtime
             SetText(HomeTeamSubText, "GOLD TEAM");
             SetText(HomeBidText, home.ContractBid.ToString());
             SetText(HomeBooksText, home.TricksWon.ToString());
-            SetText(HomeResultText, BuildResultText(home));
+            SetResult(HomeResultText, HomeMadeResultImage, HomeSetResultImage, home);
             SetText(HomeScoreText, FormatSigned(home.RoundDelta));
             SetImageVisible(HomeResultIcon, MadeContract(home));
 
@@ -109,15 +117,27 @@ namespace BackyardLegends.Runtime
             SetText(AwayTeamSubText, "RED TEAM");
             SetText(AwayBidText, away.ContractBid.ToString());
             SetText(AwayBooksText, away.TricksWon.ToString());
-            SetText(AwayResultText, BuildResultText(away));
+            SetResult(AwayResultText, AwayMadeResultImage, AwaySetResultImage, away);
             SetText(AwayScoreText, FormatSigned(away.RoundDelta));
             SetImageVisible(AwayResultIcon, MadeContract(away));
         }
 
-        private static string BuildResultText(ScoreSnapshot score)
+        private static void SetOutcome(Text text, Image madeImage, Image setImage, string fallbackText, bool made)
         {
-            var madeLabel = MadeContract(score) ? "MADE IT" : "SET";
-            return $"{madeLabel}\nBags +{score.BagsEarned} | Penalty {FormatSigned(score.BagPenaltyDelta)}";
+            var selectedImage = made ? madeImage : setImage;
+            SetImageVisible(madeImage, made && madeImage != null);
+            SetImageVisible(setImage, !made && setImage != null);
+            SetTextVisible(text, selectedImage == null);
+            SetText(text, fallbackText);
+        }
+
+        private static void SetResult(Text text, Image madeImage, Image setImage, ScoreSnapshot score)
+        {
+            var made = MadeContract(score);
+            SetImageVisible(madeImage, made && madeImage != null);
+            SetImageVisible(setImage, !made && setImage != null);
+            SetText(text, $"Bags +{score.BagsEarned}\nPenalty {FormatSigned(score.BagPenaltyDelta)}");
+            SetTextVisible(text, true);
         }
 
         private static string FormatTeamNames(MatchState state, SeatId first, SeatId second)
@@ -142,6 +162,14 @@ namespace BackyardLegends.Runtime
             if (target != null)
             {
                 target.text = value;
+            }
+        }
+
+        private static void SetTextVisible(Text target, bool visible)
+        {
+            if (target != null)
+            {
+                target.gameObject.SetActive(visible);
             }
         }
 
