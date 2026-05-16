@@ -75,6 +75,18 @@ namespace BackyardLegends.Core
         public string RoundSummary { get; }
     }
 
+    public sealed class RemainingBooksClaimedEvent : SpadesMatchEvent
+    {
+        public RemainingBooksClaimedEvent(MatchState snapshot, TeamId team, int claimedBooks) : base(snapshot)
+        {
+            Team = team;
+            ClaimedBooks = claimedBooks;
+        }
+
+        public TeamId Team { get; }
+        public int ClaimedBooks { get; }
+    }
+
     public sealed class MatchEndedEvent : SpadesMatchEvent
     {
         public MatchEndedEvent(MatchState snapshot, TeamId winningTeam) : base(snapshot)

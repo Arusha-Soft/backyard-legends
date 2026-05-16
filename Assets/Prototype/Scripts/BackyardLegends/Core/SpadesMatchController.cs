@@ -163,6 +163,40 @@ namespace BackyardLegends.Core
             return true;
         }
 
+        public bool TryClaimRemainingBooks(TeamId claimingTeam, out string error)
+        {
+            error = string.Empty;
+            if (State.Phase != MatchPhase.TrickPlay)
+            {
+                error = "You can only claim the rest while cards are live.";
+                return false;
+            }
+
+            var remainingBooks = GetRemainingBookCount();
+            if (remainingBooks <= 0)
+            {
+                error = "There are no books left to claim.";
+                return false;
+            }
+
+            var awardSeat = ChooseClaimAwardSeat(claimingTeam);
+            State.RoundState.TricksWonBySeat[awardSeat] += remainingBooks;
+            foreach (var seat in SpadesSeatUtility.TurnOrder)
+            {
+                State.RoundState.HandsBySeat[seat].Clear();
+            }
+
+            State.RoundState.TrickState.Plays.Clear();
+            State.RoundState.TrickState.LeadSuit = null;
+            State.RoundState.TrickState.Leader = awardSeat;
+            State.RoundState.TrickState.CurrentTurn = awardSeat;
+            State.RoundState.LastStatusMessage = $"{TeamLabel(claimingTeam)} claimed the remaining {remainingBooks} {BookLabel(remainingBooks)}.";
+            State.Phase = MatchPhase.RoundSummary;
+            Raise(new RemainingBooksClaimedEvent(CreateSnapshot(), claimingTeam, remainingBooks));
+            ScoreCurrentRound();
+            return true;
+        }
+
         private void MaybeRecordRenege(SeatId seat, Card card)
         {
             if (!State.RuleSet.RenegePenaltyEnabled)
@@ -237,6 +271,16 @@ namespace BackyardLegends.Core
                 .Sum(entry => entry.Value);
         }
 
+        public int GetRemainingBookCount()
+        {
+            if (State.RoundState == null || State.RoundState.HandsBySeat.Count == 0)
+            {
+                return 0;
+            }
+
+            return State.RoundState.HandsBySeat.Values.Max(hand => hand.Count);
+        }
+
         public string DescribeLastTrick()
         {
             var lastTrick = State.RoundState.CompletedTricks.LastOrDefault();
@@ -301,6 +345,25 @@ namespace BackyardLegends.Core
         private bool AllBidsSubmitted()
         {
             return State.RoundState.BidState.BidsBySeat.All(entry => entry.Value.HasValue);
+        }
+
+        private SeatId ChooseClaimAwardSeat(TeamId claimingTeam)
+        {
+            return SpadesSeatUtility.TurnOrder
+                .Where(seat => seat.ToTeam() == claimingTeam)
+                .OrderBy(seat => State.RoundState.BidState.BidsBySeat.TryGetValue(seat, out var bid) && bid == 0 ? 1 : 0)
+                .ThenBy(seat => seat)
+                .First();
+        }
+
+        private static string TeamLabel(TeamId team)
+        {
+            return team == TeamId.Home ? "Home team" : "Away team";
+        }
+
+        private static string BookLabel(int count)
+        {
+            return count == 1 ? "book" : "books";
         }
 
         private void ResolveCurrentTrick()

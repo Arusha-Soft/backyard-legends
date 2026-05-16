@@ -17,6 +17,7 @@ namespace BackyardLegends.Runtime
         public Image BidSheetImage;
         public Image RoundSheetImage;
         public Image EndSheetImage;
+        public Image OptionsMenuImage;
         public Image ExitPromptOverlayImage;
         public Image ExitPromptPanelImage;
 
@@ -37,6 +38,7 @@ namespace BackyardLegends.Runtime
         public Text RoundSummaryText;
         public Text EndSummaryText;
         public Text BannerText;
+        public Text OptionsMenuTitleText;
         public Text ExitPromptTitleText;
         public Text ExitPromptBodyText;
 
@@ -44,11 +46,15 @@ namespace BackyardLegends.Runtime
         public RectTransform BidSheet;
         public RectTransform RoundSheet;
         public RectTransform EndSheet;
+        public RectTransform OptionsMenu;
         public RectTransform ExitPromptOverlay;
         public RectTransform HandContent;
 
         [Header("Buttons")]
         public Button BackButton;
+        public Button ClaimTheRestButton;
+        public Button LeaveTableButton;
+        public Button CloseOptionsMenuButton;
         public Button NextRoundButton;
         public Button RematchButton;
         public Button ReturnToLobbyButton;

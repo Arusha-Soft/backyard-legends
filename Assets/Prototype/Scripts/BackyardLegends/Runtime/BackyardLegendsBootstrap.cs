@@ -102,7 +102,9 @@ namespace BackyardLegends.Runtime
         private bool bidTurnDelayPending;
         private bool openingStackIntroRunning;
         private bool suppressNextHandEntryAnimation;
+        private bool optionsMenuOpen;
         private bool exitPromptOpen;
+        private ConfirmationPromptType activePrompt;
 
         private RectTransform AnimationRoot => (RectTransform)transform;
         private bool HasCardMotionPending => openingDealRunning || animationQueueLoop != null || queuedAnimations.Count > 0 || floatingCards.Count > 0;
@@ -121,6 +123,13 @@ namespace BackyardLegends.Runtime
             RoundScore,
             MatchEnd,
             SetBook
+        }
+
+        private enum ConfirmationPromptType
+        {
+            None,
+            ReturnToLobby,
+            ClaimRest
         }
 
         private readonly struct CardMotionSnapshot
@@ -240,6 +249,7 @@ namespace BackyardLegends.Runtime
 
             EnsureRuntimeOpeningWidgets();
             EnsureRuntimeBackNavigationWidgets();
+            EnsureRuntimeOptionsMenuWidgets();
             BindAuthoredBidConfirmationWidget();
             EnsureRuntimeSeatCallouts();
 
@@ -294,6 +304,42 @@ namespace BackyardLegends.Runtime
             {
                 sceneRefs.ExitPromptOverlay.SetAsLastSibling();
             }
+        }
+
+        private void EnsureRuntimeOptionsMenuWidgets()
+        {
+            if (sceneRefs.BackButton != null)
+            {
+                SetButtonLabel(sceneRefs.BackButton, "MENU");
+            }
+
+            if (sceneRefs.OptionsMenuImage == null)
+            {
+                sceneRefs.OptionsMenuImage = CreateRuntimePanel("Options Menu Runtime", transform, new Vector2(0.04f, 0.61f), new Vector2(0.50f, 0.84f));
+            }
+
+            sceneRefs.OptionsMenu = sceneRefs.OptionsMenuImage.rectTransform;
+            if (sceneRefs.OptionsMenuTitleText == null)
+            {
+                sceneRefs.OptionsMenuTitleText = CreateRuntimeText("Title", sceneRefs.OptionsMenu, "OPTIONS", 22, FontStyle.Bold, theme.gold, TextAnchor.MiddleCenter, new Vector2(0.08f, 0.78f), new Vector2(0.92f, 0.96f));
+            }
+
+            if (sceneRefs.ClaimTheRestButton == null)
+            {
+                sceneRefs.ClaimTheRestButton = CreateRuntimeButton("Claim The Rest", sceneRefs.OptionsMenu, "CLAIM REST", theme.gold, new Vector2(0.08f, 0.53f), new Vector2(0.92f, 0.74f));
+            }
+
+            if (sceneRefs.LeaveTableButton == null)
+            {
+                sceneRefs.LeaveTableButton = CreateRuntimeButton("Leave Table", sceneRefs.OptionsMenu, "LEAVE TABLE", theme.panelStroke, new Vector2(0.08f, 0.30f), new Vector2(0.92f, 0.51f));
+            }
+
+            if (sceneRefs.CloseOptionsMenuButton == null)
+            {
+                sceneRefs.CloseOptionsMenuButton = CreateRuntimeButton("Resume", sceneRefs.OptionsMenu, "RESUME", theme.green, new Vector2(0.08f, 0.07f), new Vector2(0.92f, 0.28f));
+            }
+
+            SetSheetVisible(sceneRefs.OptionsMenu, false);
         }
 
         private void BindAuthoredBidConfirmationWidget()
@@ -357,9 +403,13 @@ namespace BackyardLegends.Runtime
                 {
                     CloseBackWarning();
                 }
+                else if (optionsMenuOpen)
+                {
+                    CloseOptionsMenu();
+                }
                 else
                 {
-                    OpenBackWarning();
+                    OpenOptionsMenu();
                 }
             }
 
@@ -637,7 +687,25 @@ namespace BackyardLegends.Runtime
             if (sceneRefs.BackButton != null)
             {
                 sceneRefs.BackButton.onClick.RemoveAllListeners();
-                sceneRefs.BackButton.onClick.AddListener(OpenBackWarning);
+                sceneRefs.BackButton.onClick.AddListener(ToggleOptionsMenu);
+            }
+
+            if (sceneRefs.ClaimTheRestButton != null)
+            {
+                sceneRefs.ClaimTheRestButton.onClick.RemoveAllListeners();
+                sceneRefs.ClaimTheRestButton.onClick.AddListener(OpenClaimRestWarning);
+            }
+
+            if (sceneRefs.LeaveTableButton != null)
+            {
+                sceneRefs.LeaveTableButton.onClick.RemoveAllListeners();
+                sceneRefs.LeaveTableButton.onClick.AddListener(OpenBackWarning);
+            }
+
+            if (sceneRefs.CloseOptionsMenuButton != null)
+            {
+                sceneRefs.CloseOptionsMenuButton.onClick.RemoveAllListeners();
+                sceneRefs.CloseOptionsMenuButton.onClick.AddListener(CloseOptionsMenu);
             }
 
             if (sceneRefs.ExitPromptCancelButton != null)
@@ -649,7 +717,7 @@ namespace BackyardLegends.Runtime
             if (sceneRefs.ExitPromptConfirmButton != null)
             {
                 sceneRefs.ExitPromptConfirmButton.onClick.RemoveAllListeners();
-                sceneRefs.ExitPromptConfirmButton.onClick.AddListener(ConfirmReturnToLobby);
+                sceneRefs.ExitPromptConfirmButton.onClick.AddListener(ConfirmActivePrompt);
             }
 
             sceneRefs.PlaySelectedButton.onClick.RemoveAllListeners();
@@ -799,6 +867,7 @@ namespace BackyardLegends.Runtime
             }
 
             ApplyThemeText(sceneRefs.BannerText, theme.gold, 32, FontStyle.Bold);
+            ApplyThemeText(sceneRefs.OptionsMenuTitleText, theme.gold, 22, FontStyle.Bold);
             if (sceneRefs.BackgroundImage != null)
             {
                 ApplyFallbackSprite(
@@ -818,6 +887,7 @@ namespace BackyardLegends.Runtime
             ApplyThemedImage(sceneRefs.OpeningStackImage, Color.white, ResolveCardBackSprite());
             var sheetTint = new Color(0.15f, 0.16f, 0.18f, 0.98f);
             ApplyThemedImage(sceneRefs.BidSheetImage, sheetTint, ResolveSheetSprite());
+            ApplyThemedImage(sceneRefs.OptionsMenuImage, sheetTint, ResolveSheetSprite());
             if (sceneRefs.RoundScoreboardView == null)
             {
                 ApplyThemedImage(sceneRefs.RoundSheetImage, sheetTint, ResolveSheetSprite());
@@ -872,6 +942,9 @@ namespace BackyardLegends.Runtime
             TintButtonIfNotScoreboard(sceneRefs.NextRoundButton, theme.green);
             TintButtonIfNotScoreboard(sceneRefs.RematchButton, theme.green);
             TintButton(sceneRefs.BackButton, theme.panelStroke);
+            TintButton(sceneRefs.ClaimTheRestButton, theme.gold);
+            TintButton(sceneRefs.LeaveTableButton, theme.panelStroke);
+            TintButton(sceneRefs.CloseOptionsMenuButton, theme.green);
             TintButtonIfNotScoreboard(sceneRefs.ReturnToLobbyButton, theme.panelStroke);
             TintButton(sceneRefs.DealButton, theme.green);
             CacheBidButtonSprites();
@@ -903,7 +976,9 @@ namespace BackyardLegends.Runtime
             handReviewPending = false;
             bidTurnDelayPending = false;
             suppressNextHandEntryAnimation = false;
+            optionsMenuOpen = false;
             exitPromptOpen = false;
+            activePrompt = ConfirmationPromptType.None;
             if (handReviewLoop != null)
             {
                 StopCoroutine(handReviewLoop);
@@ -941,6 +1016,7 @@ namespace BackyardLegends.Runtime
             SetSheetVisible(sceneRefs.BidSheet, false);
             SetSheetVisible(sceneRefs.RoundSheet, false);
             SetSheetVisible(sceneRefs.EndSheet, false);
+            SetSheetVisible(sceneRefs.OptionsMenu, false);
             SetSheetVisible(sceneRefs.ExitPromptOverlay, false);
             ResetExitPromptVisualState();
             ShowSeatCallout(SeatId.Top, "HEY PARTNER !", 999f, new Color(theme.green.r, theme.green.g, theme.green.b, 0.95f), theme.backgroundColor);
@@ -986,6 +1062,13 @@ namespace BackyardLegends.Runtime
                 case SetBookReachedEvent setBook:
                     QueueSetBookMoment(setBook.Team);
                     AddFeedMessage(setBook.Team == TeamId.Home ? "Home team missed its contract." : "Rivals missed their contract.");
+                    break;
+                case RemainingBooksClaimedEvent claimedEvent:
+                    AddFeedMessage(claimedEvent.Team == TeamId.Home
+                        ? $"Home claimed the final {claimedEvent.ClaimedBooks} {BookLabel(claimedEvent.ClaimedBooks)}."
+                        : $"Rivals claimed the final {claimedEvent.ClaimedBooks} {BookLabel(claimedEvent.ClaimedBooks)}.");
+                    ShowBanner("CLAIMED", claimedEvent.Team == TeamId.Home ? theme.green : theme.red);
+                    PlayFeedback(FeedbackCue.RoundScore, 0.22f);
                     break;
                 case RoundScoredEvent:
                     if (sceneRefs.RoundSummaryText != null)
@@ -1100,6 +1183,7 @@ namespace BackyardLegends.Runtime
             RenderTrickArea();
             RenderHand();
             RenderBidSheet();
+            RenderOptionsMenu();
         }
 
         private void RenderScoreboard(EndOfHandScoreboardView view, bool matchComplete, TeamId? winningTeam)
@@ -1477,9 +1561,30 @@ namespace BackyardLegends.Runtime
 
         }
 
+        private void RenderOptionsMenu()
+        {
+            SetSheetVisible(sceneRefs.OptionsMenu, optionsMenuOpen);
+            if (sceneRefs.OptionsMenu != null && optionsMenuOpen)
+            {
+                sceneRefs.OptionsMenu.SetAsLastSibling();
+            }
+
+            if (sceneRefs.ClaimTheRestButton == null)
+            {
+                return;
+            }
+
+            var canClaim = CanClaimRemainingBooks();
+            sceneRefs.ClaimTheRestButton.interactable = canClaim;
+            if (sceneRefs.ClaimTheRestButton.image != null)
+            {
+                sceneRefs.ClaimTheRestButton.image.color = canClaim ? theme.gold : new Color(0.35f, 0.36f, 0.38f, 0.92f);
+            }
+        }
+
         private void SelectBid(int bid)
         {
-            if (exitPromptOpen || controller == null || controller.State.Phase != MatchPhase.Bidding ||
+            if (IsGameplayInputBlocked() || controller == null || controller.State.Phase != MatchPhase.Bidding ||
                 controller.State.RoundState.BidState.CurrentBidder != SeatId.Bottom)
             {
                 return;
@@ -1571,9 +1676,31 @@ namespace BackyardLegends.Runtime
             return bid == 0 ? "NIL" : bid.ToString();
         }
 
+        private static string BookLabel(int count)
+        {
+            return count == 1 ? "book" : "books";
+        }
+
+        private bool IsGameplayInputBlocked()
+        {
+            return exitPromptOpen || optionsMenuOpen;
+        }
+
+        private bool CanClaimRemainingBooks()
+        {
+            return controller != null &&
+                   controller.State.Phase == MatchPhase.TrickPlay &&
+                   !openingDealPending &&
+                   !openingDealRunning &&
+                   !handReviewPending &&
+                   !bidTurnDelayPending &&
+                   !HasVisualMotionPending &&
+                   controller.GetRemainingBookCount() > 0;
+        }
+
         private void OnDealPressed()
         {
-            if (exitPromptOpen || !openingDealPending || openingDealRunning || controller == null || controller.State.RoundState == null)
+            if (IsGameplayInputBlocked() || !openingDealPending || openingDealRunning || controller == null || controller.State.RoundState == null)
             {
                 return;
             }
@@ -1846,6 +1973,7 @@ namespace BackyardLegends.Runtime
             canvasGroup.blocksRaycasts = false;
             canvasGroup.interactable = false;
             overlayObject.SetActive(false);
+            activePrompt = ConfirmationPromptType.None;
         }
 
         private IEnumerator AnimateOpeningDealGhost(CardButtonView ghost, CardMotionSnapshot motion, float delay, bool revealToHand, float duration, bool playLaunchSound)
@@ -1933,7 +2061,7 @@ namespace BackyardLegends.Runtime
 
         private void SubmitBid(int bid)
         {
-            if (exitPromptOpen || controller == null || openingDealPending || openingDealRunning)
+            if (IsGameplayInputBlocked() || controller == null || openingDealPending || openingDealRunning)
             {
                 return;
             }
@@ -1954,7 +2082,7 @@ namespace BackyardLegends.Runtime
 
         private void OnCardTapped(Card card)
         {
-            if (exitPromptOpen)
+            if (IsGameplayInputBlocked())
             {
                 return;
             }
@@ -2031,7 +2159,7 @@ namespace BackyardLegends.Runtime
 
         private void OnPlaySelected()
         {
-            if (exitPromptOpen)
+            if (IsGameplayInputBlocked())
             {
                 return;
             }
@@ -2041,7 +2169,7 @@ namespace BackyardLegends.Runtime
 
         private void TryPlaySelected()
         {
-            if (exitPromptOpen)
+            if (IsGameplayInputBlocked())
             {
                 return;
             }
@@ -2089,7 +2217,7 @@ namespace BackyardLegends.Runtime
                 aiLoop = null;
             }
 
-            if (exitPromptOpen || openingDealPending || handReviewPending || bidTurnDelayPending || HasVisualMotionPending)
+            if (exitPromptOpen || optionsMenuOpen || openingDealPending || handReviewPending || bidTurnDelayPending || HasVisualMotionPending)
             {
                 return;
             }
@@ -2104,14 +2232,14 @@ namespace BackyardLegends.Runtime
         {
             while (controller != null && controller.NeedsAiTurn)
             {
-                if (exitPromptOpen)
+                if (exitPromptOpen || optionsMenuOpen)
                 {
                     aiLoop = null;
                     yield break;
                 }
 
                 yield return new WaitForSecondsRealtime(0.55f);
-                if (exitPromptOpen || handReviewPending || bidTurnDelayPending || controller == null || HasVisualMotionPending)
+                if (exitPromptOpen || optionsMenuOpen || handReviewPending || bidTurnDelayPending || controller == null || HasVisualMotionPending)
                 {
                     aiLoop = null;
                     yield break;
@@ -3502,6 +3630,61 @@ namespace BackyardLegends.Runtime
             rectTransform.anchoredPosition = start;
         }
 
+        private void ToggleOptionsMenu()
+        {
+            if (optionsMenuOpen)
+            {
+                CloseOptionsMenu();
+                return;
+            }
+
+            OpenOptionsMenu();
+        }
+
+        private void OpenOptionsMenu()
+        {
+            if (exitPromptOpen)
+            {
+                return;
+            }
+
+            optionsMenuOpen = true;
+            if (aiLoop != null)
+            {
+                StopCoroutine(aiLoop);
+                aiLoop = null;
+            }
+
+            if (sceneRefs.OptionsMenu != null)
+            {
+                sceneRefs.OptionsMenu.SetAsLastSibling();
+            }
+
+            RenderAll();
+            PlayFeedback(FeedbackCue.Select, 0.12f);
+        }
+
+        private void CloseOptionsMenu()
+        {
+            CloseOptionsMenu(true);
+        }
+
+        private void CloseOptionsMenu(bool resumeAi)
+        {
+            if (!optionsMenuOpen)
+            {
+                return;
+            }
+
+            optionsMenuOpen = false;
+            SetSheetVisible(sceneRefs.OptionsMenu, false);
+            RenderOptionsMenu();
+            if (resumeAi)
+            {
+                ScheduleAiLoop();
+            }
+        }
+
         private void OpenBackWarning()
         {
             if (sceneRefs.ExitPromptOverlay == null)
@@ -3515,6 +3698,8 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
+            CloseOptionsMenu(false);
+            activePrompt = ConfirmationPromptType.ReturnToLobby;
             exitPromptOpen = true;
             if (aiLoop != null)
             {
@@ -3536,10 +3721,65 @@ namespace BackyardLegends.Runtime
                     : "Current match progress will be lost if you go back to the lobby now.";
             }
 
+            SetButtonLabel(sceneRefs.ExitPromptCancelButton, "STAY HERE");
+            SetButtonLabel(sceneRefs.ExitPromptConfirmButton, "GO TO LOBBY");
+            TintButton(sceneRefs.ExitPromptCancelButton, theme.green);
+            TintButton(sceneRefs.ExitPromptConfirmButton, theme.red);
             sceneRefs.ExitPromptOverlay.SetAsLastSibling();
             StartExitPromptVisibility(true);
             PlayFeedback(FeedbackCue.Select, 0.16f);
             SpawnImpactBurst(GetAnchoredPoint(sceneRefs.ExitPromptOverlay, new Vector2(0.5f, 0.5f)), theme.red, 32f, 4);
+        }
+
+        private void OpenClaimRestWarning()
+        {
+            if (!CanClaimRemainingBooks())
+            {
+                PlayFeedback(FeedbackCue.Invalid, 0.16f);
+                FlashStatus("Claim is available once live cards are settled.", theme.red);
+                RenderOptionsMenu();
+                return;
+            }
+
+            if (sceneRefs.ExitPromptOverlay == null)
+            {
+                ConfirmClaimRest();
+                return;
+            }
+
+            if (exitPromptOpen)
+            {
+                return;
+            }
+
+            CloseOptionsMenu(false);
+            activePrompt = ConfirmationPromptType.ClaimRest;
+            exitPromptOpen = true;
+            if (aiLoop != null)
+            {
+                StopCoroutine(aiLoop);
+                aiLoop = null;
+            }
+
+            var remainingBooks = controller.GetRemainingBookCount();
+            if (sceneRefs.ExitPromptTitleText != null)
+            {
+                sceneRefs.ExitPromptTitleText.text = "CLAIM THE REST?";
+            }
+
+            if (sceneRefs.ExitPromptBodyText != null)
+            {
+                sceneRefs.ExitPromptBodyText.text = $"Your team will take the remaining {remainingBooks} {BookLabel(remainingBooks)} and score this hand now.";
+            }
+
+            SetButtonLabel(sceneRefs.ExitPromptCancelButton, "KEEP PLAYING");
+            SetButtonLabel(sceneRefs.ExitPromptConfirmButton, "CLAIM BOOKS");
+            TintButton(sceneRefs.ExitPromptCancelButton, theme.panelStroke);
+            TintButton(sceneRefs.ExitPromptConfirmButton, theme.green);
+            sceneRefs.ExitPromptOverlay.SetAsLastSibling();
+            StartExitPromptVisibility(true);
+            PlayFeedback(FeedbackCue.Select, 0.16f);
+            SpawnImpactBurst(GetAnchoredPoint(sceneRefs.ExitPromptOverlay, new Vector2(0.5f, 0.5f)), theme.gold, 32f, 4);
         }
 
         private void CloseBackWarning()
@@ -3550,13 +3790,55 @@ namespace BackyardLegends.Runtime
             }
 
             exitPromptOpen = false;
+            activePrompt = ConfirmationPromptType.None;
             StartExitPromptVisibility(false, ScheduleAiLoop);
         }
 
-        private void ConfirmReturnToLobby()
+        private void ConfirmActivePrompt()
+        {
+            switch (activePrompt)
+            {
+                case ConfirmationPromptType.ClaimRest:
+                    ConfirmClaimRest();
+                    break;
+                case ConfirmationPromptType.ReturnToLobby:
+                    exitPromptOpen = false;
+                    activePrompt = ConfirmationPromptType.None;
+                    StartExitPromptVisibility(false, ReturnToLobby);
+                    break;
+                default:
+                    CloseBackWarning();
+                    break;
+            }
+        }
+
+        private void ConfirmClaimRest()
         {
             exitPromptOpen = false;
-            StartExitPromptVisibility(false, ReturnToLobby);
+            activePrompt = ConfirmationPromptType.None;
+            StartExitPromptVisibility(false, ClaimRemainingBooks);
+        }
+
+        private void ClaimRemainingBooks()
+        {
+            if (controller == null)
+            {
+                ScheduleAiLoop();
+                return;
+            }
+
+            if (!controller.TryClaimRemainingBooks(TeamId.Home, out var error))
+            {
+                PlayFeedback(FeedbackCue.Invalid, 0.18f);
+                FlashStatus(error, theme.red);
+                ScheduleAiLoop();
+                return;
+            }
+
+            selectedCard = null;
+            pendingBidSelection = null;
+            lastRenderedHand.Clear();
+            RenderAll();
         }
 
         private void ReturnToLobby()
@@ -4079,6 +4361,35 @@ namespace BackyardLegends.Runtime
             text.verticalOverflow = VerticalWrapMode.Overflow;
             SetAnchors(text.rectTransform, anchorMin, anchorMax);
             return text;
+        }
+
+        private Button CreateRuntimeButton(string name, Transform parent, string label, Color tint, Vector2 anchorMin, Vector2 anchorMax)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var button = go.GetComponent<Button>();
+            SetAnchors((RectTransform)go.transform, anchorMin, anchorMax);
+            button.transition = Selectable.Transition.ColorTint;
+            TintButton(button, tint);
+            var buttonText = CreateRuntimeText("Label", go.transform, label, 18, FontStyle.Bold, theme.backgroundColor, TextAnchor.MiddleCenter, new Vector2(0.08f, 0.12f), new Vector2(0.92f, 0.88f));
+            buttonText.resizeTextForBestFit = true;
+            buttonText.resizeTextMinSize = 12;
+            buttonText.resizeTextMaxSize = 18;
+            return button;
+        }
+
+        private static void SetButtonLabel(Button button, string label)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            var text = button.GetComponentInChildren<Text>();
+            if (text != null)
+            {
+                text.text = label;
+            }
         }
 
         private void TintButton(Button button, Color tint)

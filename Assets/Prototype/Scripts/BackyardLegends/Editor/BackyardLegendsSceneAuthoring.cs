@@ -126,7 +126,7 @@ namespace BackyardLegends.Editor
             var hudPanel = CreatePanel("HUD", appRoot.transform, new Vector2(0.03f, 0.86f), new Vector2(0.97f, 0.985f), theme.panelColor);
             refs.HudPanel = hudPanel;
             ApplySprite(hudPanel, theme.panelSprite, Image.Type.Sliced, theme.panelColor);
-            refs.BackButton = CreateButton("Back Button", hudPanel.transform, "BACK", theme.panelStroke, new Vector2(0.04f, 0.60f), new Vector2(0.18f, 0.92f));
+            refs.BackButton = CreateButton("Back Button", hudPanel.transform, "MENU", theme.panelStroke, new Vector2(0.04f, 0.60f), new Vector2(0.18f, 0.92f));
             ApplySprite(refs.BackButton.image, theme.buttonSprite, Image.Type.Sliced, theme.panelStroke);
             refs.HudModeText = CreateText("Mode", hudPanel.transform, "CLASSIC | 100", 22, FontStyle.Bold, theme.primaryText, TextAnchor.UpperRight, new Vector2(0.66f, 0.60f), new Vector2(0.96f, 0.94f));
             refs.StatusText = CreateText("Status", hudPanel.transform, "Preparing the table.", 18, FontStyle.Normal, theme.mutedText, TextAnchor.MiddleLeft, new Vector2(0.04f, 0.46f), new Vector2(0.62f, 0.66f));

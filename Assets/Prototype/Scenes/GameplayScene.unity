@@ -6277,7 +6277,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &904323453
 RectTransform:
   m_ObjectHideFlags: 0
@@ -9876,6 +9876,7 @@ MonoBehaviour:
   BidSheetImage: {fileID: 1695855334}
   RoundSheetImage: {fileID: 1597089768}
   EndSheetImage: {fileID: 333322564}
+  OptionsMenuImage: {fileID: 0}
   ExitPromptOverlayImage: {fileID: 702503651}
   ExitPromptPanelImage: {fileID: 482763508}
   StatusText: {fileID: 904323454}
@@ -9894,14 +9895,19 @@ MonoBehaviour:
   RoundSummaryText: {fileID: 0}
   EndSummaryText: {fileID: 0}
   BannerText: {fileID: 762621262}
+  OptionsMenuTitleText: {fileID: 0}
   ExitPromptTitleText: {fileID: 969180558}
   ExitPromptBodyText: {fileID: 1411928284}
   BidSheet: {fileID: 1695855333}
   RoundSheet: {fileID: 1597089764}
   EndSheet: {fileID: 333322559}
+  OptionsMenu: {fileID: 0}
   ExitPromptOverlay: {fileID: 702503650}
   HandContent: {fileID: 1149544835}
   BackButton: {fileID: 546723242}
+  ClaimTheRestButton: {fileID: 0}
+  LeaveTableButton: {fileID: 0}
+  CloseOptionsMenuButton: {fileID: 0}
   NextRoundButton: {fileID: 1597089766}
   RematchButton: {fileID: 333322562}
   ReturnToLobbyButton: {fileID: 333322561}

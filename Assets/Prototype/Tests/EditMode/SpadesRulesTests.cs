@@ -513,6 +513,51 @@ namespace BackyardLegends.Tests
         }
 
         [Test]
+        public void ClaimRemainingBooksAwardsUnplayedBooksAndScoresRound()
+        {
+            var controller = CreateController();
+            controller.StartMatch();
+            ForceBids(controller, 3, 4, 3, 4);
+            var claimedEvents = new List<RemainingBooksClaimedEvent>();
+            controller.EventRaised += matchEvent =>
+            {
+                if (matchEvent is RemainingBooksClaimedEvent claimed)
+                {
+                    claimedEvents.Add(claimed);
+                }
+            };
+
+            var round = controller.State.RoundState;
+            round.TricksWonBySeat[SeatId.Bottom] = 2;
+            round.TricksWonBySeat[SeatId.Top] = 2;
+            round.TricksWonBySeat[SeatId.Left] = 3;
+            round.TricksWonBySeat[SeatId.Right] = 2;
+            round.TrickState.Plays.Clear();
+            SetClaimHands(round, 4);
+
+            Assert.That(controller.TryClaimRemainingBooks(TeamId.Home, out var error), Is.True, error);
+
+            Assert.That(claimedEvents, Has.Count.EqualTo(1));
+            Assert.That(claimedEvents[0].Team, Is.EqualTo(TeamId.Home));
+            Assert.That(claimedEvents[0].ClaimedBooks, Is.EqualTo(4));
+            Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.RoundSummary));
+            Assert.That(controller.GetTeamTricks(TeamId.Home), Is.EqualTo(8));
+            Assert.That(controller.GetTeamTricks(TeamId.Away), Is.EqualTo(5));
+            Assert.That(controller.State.Scores[TeamId.Home].RoundDelta, Is.EqualTo(62));
+            Assert.That(controller.State.RoundState.HandsBySeat.Values.All(hand => hand.Count == 0), Is.True);
+        }
+
+        [Test]
+        public void ClaimRemainingBooksIsOnlyAvailableDuringLiveCardPlay()
+        {
+            var controller = CreateController();
+            controller.StartMatch();
+
+            Assert.That(controller.TryClaimRemainingBooks(TeamId.Home, out var error), Is.False);
+            Assert.That(error, Does.Contain("cards are live"));
+        }
+
+        [Test]
         public void MatchCanAdvanceEndToEndWithoutSoftLock()
         {
             var controller = CreateController();
@@ -581,6 +626,14 @@ namespace BackyardLegends.Tests
                 var card = controller.GetLegalCardsForSeat(seat).First();
                 Assert.That(controller.TryPlayCard(seat, card, out _), Is.True);
             }
+        }
+
+        private static void SetClaimHands(RoundState round, int count)
+        {
+            round.HandsBySeat[SeatId.Bottom] = Enumerable.Range(2, count).Select(rank => new Card(Suit.Hearts, rank)).ToList();
+            round.HandsBySeat[SeatId.Left] = Enumerable.Range(2, count).Select(rank => new Card(Suit.Clubs, rank)).ToList();
+            round.HandsBySeat[SeatId.Top] = Enumerable.Range(2, count).Select(rank => new Card(Suit.Diamonds, rank)).ToList();
+            round.HandsBySeat[SeatId.Right] = Enumerable.Range(2, count).Select(rank => new Card(Suit.Spades, rank)).ToList();
         }
 
         private static SpadesMatchController CreateController()
