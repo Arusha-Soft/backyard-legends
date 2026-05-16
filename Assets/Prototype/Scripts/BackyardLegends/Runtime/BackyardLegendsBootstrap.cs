@@ -11,6 +11,7 @@ namespace BackyardLegends.Runtime
     public sealed class BackyardLegendsBootstrap : MonoBehaviour
     {
         private const float BottomHandCardSizeMultiplier = 2.68f;
+        private const float LastTrickCardSizeMultiplier = 0.54f;
         private const int BidCalloutFontSize = 46;
         private const float BookImpactExaggeration = 3f;
         private static readonly Vector2 BidCalloutAnchorMin = new(0.08f, 1.00f);
@@ -35,6 +36,7 @@ namespace BackyardLegends.Runtime
         private readonly Dictionary<SeatId, SeatPanelView> seatViews = new();
         private readonly Dictionary<SeatId, TrickSlotView> trickSlots = new();
         private readonly List<CardButtonView> handPool = new();
+        private readonly List<CardButtonView> lastTrickCardViews = new();
         private readonly Dictionary<CardButtonView, Coroutine> handAnimations = new();
         private readonly List<CardButtonView> openingStackPreviewCards = new();
         private readonly Dictionary<CardButtonView, Coroutine> openingStackPreviewAnimations = new();
@@ -84,6 +86,10 @@ namespace BackyardLegends.Runtime
         private AudioClip roundScoreClip;
         private AudioClip matchEndClip;
         private AudioClip setBookClip;
+        private Image lastTrickPanel;
+        private Text lastTrickTitleText;
+        private RectTransform lastTrickCardsRoot;
+        private CanvasGroup lastTrickGroup;
         private Sprite bidButtonDefaultSprite;
         private Sprite bidButtonSelectedSprite;
         private int bannerDefaultFontSize;
@@ -252,6 +258,7 @@ namespace BackyardLegends.Runtime
             EnsureRuntimeOptionsMenuWidgets();
             BindAuthoredBidConfirmationWidget();
             EnsureRuntimeSeatCallouts();
+            BindAuthoredLastTrickDisplay();
 
             var handLayoutGroup = sceneRefs.HandContent != null ? sceneRefs.HandContent.GetComponent<LayoutGroup>() : null;
             if (handLayoutGroup != null)
@@ -362,6 +369,90 @@ namespace BackyardLegends.Runtime
             EnsureSeatCallout(sceneRefs.LeftSeat);
             EnsureSeatCallout(sceneRefs.TopSeat);
             EnsureSeatCallout(sceneRefs.RightSeat);
+        }
+
+        private void BindAuthoredLastTrickDisplay()
+        {
+            lastTrickCardViews.Clear();
+            lastTrickPanel = sceneRefs.LastTrickPanel != null
+                ? sceneRefs.LastTrickPanel
+                : sceneRefs.TablePanel != null
+                    ? sceneRefs.TablePanel.transform.Find("Last Hand Played")?.GetComponent<Image>()
+                    : null;
+            lastTrickTitleText = sceneRefs.LastTrickTitleText != null
+                ? sceneRefs.LastTrickTitleText
+                : lastTrickPanel != null
+                    ? lastTrickPanel.transform.Find("Title")?.GetComponent<Text>()
+                    : null;
+            lastTrickCardsRoot = sceneRefs.LastTrickCardsRoot != null
+                ? sceneRefs.LastTrickCardsRoot
+                : lastTrickPanel != null
+                    ? lastTrickPanel.transform.Find("Cards") as RectTransform
+                    : null;
+            lastTrickGroup = sceneRefs.LastTrickGroup != null
+                ? sceneRefs.LastTrickGroup
+                : lastTrickPanel != null
+                    ? lastTrickPanel.GetComponent<CanvasGroup>()
+                    : null;
+
+            if (sceneRefs.LastTrickCards != null)
+            {
+                lastTrickCardViews.AddRange(sceneRefs.LastTrickCards.Where(view => view != null));
+            }
+
+            if (lastTrickCardViews.Count == 0 && lastTrickCardsRoot != null)
+            {
+                lastTrickCardViews.AddRange(lastTrickCardsRoot
+                    .GetComponentsInChildren<CardButtonView>(true)
+                    .OrderBy(view => view.transform.GetSiblingIndex()));
+            }
+
+            if (lastTrickPanel == null || lastTrickCardViews.Count == 0)
+            {
+                return;
+            }
+
+            lastTrickPanel.raycastTarget = false;
+            if (lastTrickGroup != null)
+            {
+                lastTrickGroup.alpha = 0f;
+                lastTrickGroup.blocksRaycasts = false;
+                lastTrickGroup.interactable = false;
+            }
+
+            foreach (var view in lastTrickCardViews)
+            {
+                ConfigureAuthoredLastTrickCard(view);
+            }
+
+            if (sceneRefs.LastTrickText != null)
+            {
+                sceneRefs.LastTrickText.gameObject.SetActive(false);
+            }
+        }
+
+        private void ConfigureAuthoredLastTrickCard(CardButtonView view)
+        {
+            if (view == null)
+            {
+                return;
+            }
+
+            view.Button.onClick.RemoveAllListeners();
+            view.Button.enabled = false;
+            view.Panel.raycastTarget = false;
+            view.RankText.raycastTarget = false;
+            view.SuitText.raycastTarget = false;
+            if (view.CanvasGroup != null)
+            {
+                view.CanvasGroup.blocksRaycasts = false;
+                view.CanvasGroup.interactable = false;
+            }
+
+            if (view.FaceImage != null)
+            {
+                view.FaceImage.raycastTarget = false;
+            }
         }
 
         private void EnsureSeatCallout(SeatPanelView view)
@@ -628,9 +719,9 @@ namespace BackyardLegends.Runtime
                 : Color.white;
         }
 
-        private bool TryApplyImportedCardFace(CardButtonView view, Card card, bool isLegal)
+        private bool TryApplyImportedCardFace(CardButtonView view, Card card, bool isLegal, bool createFaceImage = true)
         {
-            var artImage = EnsureCardFaceImage(view);
+            var artImage = createFaceImage ? EnsureCardFaceImage(view) : view?.FaceImage;
             if (artImage == null || !BackyardLegendsCardArtCatalog.TryGetFaceSprite(card, out var sprite))
             {
                 HideFaceImage(artImage);
@@ -849,6 +940,7 @@ namespace BackyardLegends.Runtime
             ApplyThemeText(sceneRefs.HomeDeltaText, theme.green, 18, FontStyle.Bold);
             ApplyThemeText(sceneRefs.AwayDeltaText, theme.red, 18, FontStyle.Bold);
             ApplyThemeText(sceneRefs.LastTrickText, theme.mutedText, 18, FontStyle.Normal);
+            ApplyThemeText(lastTrickTitleText, theme.mutedText, 13, FontStyle.Bold);
             ApplyThemeText(sceneRefs.FeedText, theme.mutedText, 15, FontStyle.Normal);
             ApplyThemeText(sceneRefs.CenterHintText, theme.primaryText, 22, FontStyle.Bold);
             EnsureFallbackFont(sceneRefs.DeckAnchorText);
@@ -882,6 +974,7 @@ namespace BackyardLegends.Runtime
             ApplyThemedImage(sceneRefs.TablePanel, new Color(0.18f, 0.19f, 0.21f, 0.9f), ResolvePanelSprite());
             ApplyThemedImage(sceneRefs.HandPanel, theme.panelColor, ResolvePanelSprite());
             ApplyThemedImage(sceneRefs.FeedPanel, new Color(1f, 1f, 1f, 0.18f), ResolveSoftPanelSprite());
+            ApplyThemedImage(lastTrickPanel, new Color(1f, 1f, 1f, 0.13f), ResolveSoftPanelSprite());
             ApplyFallbackSprite(sceneRefs.DeckAnchorImage, ResolveSoftPanelSprite());
             ApplyFallbackSprite(sceneRefs.DiscardAnchorImage, ResolveSoftPanelSprite());
             ApplyThemedImage(sceneRefs.OpeningStackImage, Color.white, ResolveCardBackSprite());
@@ -1175,7 +1268,7 @@ namespace BackyardLegends.Runtime
                 openingStackEffectImage.gameObject.SetActive(openingDealPending && !openingDealRunning && openingStackEffectImage.sprite != null);
             }
 
-            sceneRefs.LastTrickText.text = $"Previous book: {controller.DescribeLastTrick()}";
+            RenderLastTrickDisplay();
             sceneRefs.FeedText.text = recentFeed.Count == 0 ? "TABLE FEED\nNo hands yet." : "TABLE FEED\n" + string.Join("\n", recentFeed.Reverse());
 
             UpdateCenterHintLayout();
@@ -1184,6 +1277,115 @@ namespace BackyardLegends.Runtime
             RenderHand();
             RenderBidSheet();
             RenderOptionsMenu();
+        }
+
+        private void RenderLastTrickDisplay()
+        {
+            var lastTrick = controller.State.RoundState.CompletedTricks.LastOrDefault();
+            var hasLastTrick = lastTrick != null && lastTrick.Count > 0;
+            var hasCardDisplay = lastTrickPanel != null && lastTrickCardViews.Count > 0;
+
+            if (!hasCardDisplay)
+            {
+                if (sceneRefs.LastTrickText != null)
+                {
+                    sceneRefs.LastTrickText.gameObject.SetActive(true);
+                    sceneRefs.LastTrickText.text = $"Previous book: {controller.DescribeLastTrick()}";
+                }
+
+                return;
+            }
+
+            if (sceneRefs.LastTrickText != null)
+            {
+                sceneRefs.LastTrickText.gameObject.SetActive(false);
+            }
+
+            lastTrickPanel.gameObject.SetActive(hasLastTrick);
+            if (lastTrickGroup != null)
+            {
+                lastTrickGroup.alpha = hasLastTrick ? 0.74f : 0f;
+                lastTrickGroup.blocksRaycasts = false;
+                lastTrickGroup.interactable = false;
+            }
+
+            if (!hasLastTrick)
+            {
+                foreach (var view in lastTrickCardViews)
+                {
+                    view.gameObject.SetActive(false);
+                }
+
+                return;
+            }
+
+            if (lastTrickTitleText != null)
+            {
+                lastTrickTitleText.text = "LAST HAND PLAYED";
+            }
+
+            LayoutLastTrickCards(lastTrick.Count);
+            for (var index = 0; index < lastTrickCardViews.Count; index++)
+            {
+                var view = lastTrickCardViews[index];
+                var isVisible = index < lastTrick.Count;
+                view.gameObject.SetActive(isVisible);
+                if (isVisible)
+                {
+                    ConfigureLastTrickCardView(view, lastTrick[index]);
+                }
+            }
+        }
+
+        private void LayoutLastTrickCards(int visibleCount)
+        {
+            if (visibleCount <= 0)
+            {
+                return;
+            }
+
+            var cardSize = ResolveLastTrickCardSize();
+            var spacing = Mathf.Clamp(cardSize.x * 0.18f, 6f, 12f);
+            var totalWidth = visibleCount * cardSize.x + (visibleCount - 1) * spacing;
+            for (var index = 0; index < lastTrickCardViews.Count; index++)
+            {
+                var view = lastTrickCardViews[index];
+                view.Root.sizeDelta = cardSize;
+                view.Root.anchoredPosition = new Vector2(-totalWidth * 0.5f + cardSize.x * 0.5f + index * (cardSize.x + spacing), 0f);
+                view.Root.localRotation = Quaternion.Euler(0f, 0f, Mathf.Lerp(-3f, 3f, index / 3f));
+                view.Root.localScale = Vector3.one;
+            }
+        }
+
+        private void ConfigureLastTrickCardView(CardButtonView view, TrickPlay play)
+        {
+            var card = play.Card;
+            view.RankText.font = theme.ResolveFont();
+            view.SuitText.font = theme.ResolveFont();
+            view.RankText.text = card.RankLabel;
+            view.SuitText.text = card.SuitIcon;
+            view.RankText.resizeTextForBestFit = true;
+            view.SuitText.resizeTextForBestFit = true;
+            view.RankText.resizeTextMinSize = 8;
+            view.SuitText.resizeTextMinSize = 8;
+            view.RankText.resizeTextMaxSize = 18;
+            view.SuitText.resizeTextMaxSize = 20;
+            view.Panel.sprite = theme.cardFaceDefaultSprite != null ? theme.cardFaceDefaultSprite : ResolveCardSprite(false, true);
+            view.Panel.type = Image.Type.Sliced;
+            view.Panel.color = Color.white;
+            if (view.CanvasGroup != null)
+            {
+                view.CanvasGroup.alpha = 0.92f;
+            }
+
+            if (!TryApplyImportedCardFace(view, card, true, false))
+            {
+                HideFaceImage(view.FaceImage);
+                view.RankText.color = new Color(0.08f, 0.08f, 0.08f, 1f);
+                view.SuitText.color = card.IsRed ? theme.red : new Color(0.07f, 0.07f, 0.08f, 1f);
+                SetGraphicAlpha(view.RankText, 1f);
+                SetGraphicAlpha(view.SuitText, 1f);
+            }
         }
 
         private void RenderScoreboard(EndOfHandScoreboardView view, bool matchComplete, TeamId? winningTeam)
@@ -4168,6 +4370,11 @@ namespace BackyardLegends.Runtime
         private Vector2 ResolveBottomHandCardSize()
         {
             return ResolveCardButtonBaseSize() * BottomHandCardSizeMultiplier;
+        }
+
+        private Vector2 ResolveLastTrickCardSize()
+        {
+            return ResolveCardButtonBaseSize() * LastTrickCardSizeMultiplier;
         }
 
         private Color GetSeatPanelTint(SeatId seat)

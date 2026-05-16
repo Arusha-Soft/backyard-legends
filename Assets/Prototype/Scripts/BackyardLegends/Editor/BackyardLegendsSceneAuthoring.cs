@@ -158,7 +158,9 @@ namespace BackyardLegends.Editor
             refs.OpeningStackImage = CreatePanel("Opening Stack", tablePanel.transform, new Vector2(0.42f, 0.39f), new Vector2(0.58f, 0.60f), new Color(0.13f, 0.14f, 0.16f, 0.96f));
             ApplySprite(refs.OpeningStackImage, theme.cardBackHeroSprite != null ? theme.cardBackHeroSprite : theme.softPanelSprite, Image.Type.Sliced, Color.white);
             refs.OpeningStackText = CreateText("Opening Stack Label", refs.OpeningStackImage.transform, "52\nCARDS", 24, FontStyle.Bold, theme.gold, TextAnchor.MiddleCenter, new Vector2(0.18f, 0.18f), new Vector2(0.82f, 0.82f));
-            refs.LastTrickText = CreateText("Last Trick", tablePanel.transform, "Last hand: not started yet.", 17, FontStyle.Normal, theme.mutedText, TextAnchor.MiddleCenter, new Vector2(0.28f, 0.11f), new Vector2(0.72f, 0.16f));
+            CreateLastTrickDisplay(tablePanel.transform, refs, theme, cardPrefab);
+            refs.LastTrickText = CreateText("Last Trick Fallback", tablePanel.transform, "Previous book: no tricks resolved yet.", 16, FontStyle.Normal, theme.mutedText, TextAnchor.MiddleCenter, new Vector2(0.31f, 0.45f), new Vector2(0.69f, 0.57f));
+            refs.LastTrickText.gameObject.SetActive(false);
             refs.BannerText = CreateText("Banner", tablePanel.transform, string.Empty, 32, FontStyle.Bold, theme.gold, TextAnchor.MiddleCenter, new Vector2(0.18f, 0.58f), new Vector2(0.82f, 0.7f));
             refs.DealButton = CreateButton("Deal Button", tablePanel.transform, "DEAL", theme.green, new Vector2(0.34f, 0.25f), new Vector2(0.66f, 0.34f));
             ApplySprite(refs.DealButton.image, theme.buttonSprite, Image.Type.Sliced, theme.green);
@@ -379,6 +381,65 @@ namespace BackyardLegends.Editor
             trick.name = name;
             SetAnchors((RectTransform)trick.transform, anchorMin, anchorMax);
             return trick.GetComponent<TrickSlotView>();
+        }
+
+        private static void CreateLastTrickDisplay(Transform parent, BackyardLegendsSceneRefs refs, ThemeConfig theme, GameObject cardPrefab)
+        {
+            var panel = CreatePanel("Last Hand Played", parent, new Vector2(0.31f, 0.45f), new Vector2(0.69f, 0.57f), new Color(1f, 1f, 1f, 0.13f));
+            ApplySprite(panel, theme.softPanelSprite, Image.Type.Sliced, new Color(1f, 1f, 1f, 0.13f));
+            panel.raycastTarget = false;
+            var group = panel.gameObject.AddComponent<CanvasGroup>();
+            group.alpha = 0f;
+            group.blocksRaycasts = false;
+            group.interactable = false;
+            refs.LastTrickPanel = panel;
+            refs.LastTrickGroup = group;
+
+            refs.LastTrickTitleText = CreateText("Title", panel.transform, "LAST HAND PLAYED", 13, FontStyle.Bold, theme.mutedText, TextAnchor.MiddleCenter, new Vector2(0.05f, 0.70f), new Vector2(0.95f, 0.94f));
+            refs.LastTrickTitleText.resizeTextForBestFit = true;
+            refs.LastTrickTitleText.resizeTextMinSize = 9;
+            refs.LastTrickTitleText.resizeTextMaxSize = 13;
+
+            var cardsRoot = new GameObject("Cards", typeof(RectTransform));
+            cardsRoot.transform.SetParent(panel.transform, false);
+            refs.LastTrickCardsRoot = cardsRoot.GetComponent<RectTransform>();
+            SetAnchors(refs.LastTrickCardsRoot, new Vector2(0.04f, 0.07f), new Vector2(0.96f, 0.70f));
+
+            refs.LastTrickCards = new CardButtonView[4];
+            var cardSize = new Vector2(82f, 116f) * 0.54f;
+            var spacing = 8f;
+            var totalWidth = refs.LastTrickCards.Length * cardSize.x + (refs.LastTrickCards.Length - 1) * spacing;
+            for (var index = 0; index < refs.LastTrickCards.Length; index++)
+            {
+                var card = (GameObject)PrefabUtility.InstantiatePrefab(cardPrefab, refs.LastTrickCardsRoot);
+                card.name = $"Last Hand Card {index + 1}";
+                var view = card.GetComponent<CardButtonView>();
+                var rect = view.Root;
+                rect.anchorMin = new Vector2(0.5f, 0.5f);
+                rect.anchorMax = new Vector2(0.5f, 0.5f);
+                rect.pivot = new Vector2(0.5f, 0.5f);
+                rect.sizeDelta = cardSize;
+                rect.anchoredPosition = new Vector2(-totalWidth * 0.5f + cardSize.x * 0.5f + index * (cardSize.x + spacing), 0f);
+                rect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Lerp(-3f, 3f, index / 3f));
+
+                view.Button.onClick.RemoveAllListeners();
+                view.Button.enabled = false;
+                view.Panel.raycastTarget = false;
+                view.RankText.raycastTarget = false;
+                view.SuitText.raycastTarget = false;
+                view.CanvasGroup.alpha = 0.92f;
+                view.CanvasGroup.blocksRaycasts = false;
+                view.CanvasGroup.interactable = false;
+                view.FaceImage = CreateImage("Face Art", card.transform, Color.clear);
+                view.FaceImage.transform.SetSiblingIndex(0);
+                view.FaceImage.raycastTarget = false;
+                view.FaceImage.preserveAspect = true;
+                view.FaceImage.enabled = false;
+                SetAnchors(view.FaceImage.rectTransform, Vector2.zero, Vector2.one);
+                refs.LastTrickCards[index] = view;
+            }
+
+            panel.gameObject.SetActive(false);
         }
 
         private static void AssignLobbyRefs(BackyardLegendsLobbyPresenter presenter, BackyardLegendsLobbySceneRefs refs, ThemeConfig theme)

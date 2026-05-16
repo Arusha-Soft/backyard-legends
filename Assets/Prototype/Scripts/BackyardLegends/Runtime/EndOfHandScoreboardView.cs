@@ -69,8 +69,9 @@ namespace BackyardLegends.Runtime
             }
 
             rules ??= state.RuleSet;
-            var targetScore = rules != null ? rules.TargetScore : 500;
-            SetText(ModeText, $"{state.RuleSet.DisplayName.ToUpperInvariant()} MODE");
+            var modeName = rules != null ? rules.DisplayName : state.RuleSet != null ? state.RuleSet.DisplayName : "Spades";
+            var targetScore = ResolveTargetScore(state, rules);
+            SetText(ModeText, $"{modeName.ToUpperInvariant()} MODE");
             SetText(TitleText, matchComplete ? "MATCH COMPLETE" : "END OF HAND");
             RenderHero(home, away);
             RenderTeamRows(state, home, away);
@@ -78,7 +79,7 @@ namespace BackyardLegends.Runtime
             SetText(AwayTotalLabelText, "RED TEAM");
             SetText(HomeTotalScoreText, home.Score.ToString());
             SetText(AwayTotalScoreText, away.Score.ToString());
-            SetText(FooterText, $"SPADE FIRST TEAM TO {targetScore} WINS");
+            SetText(FooterText, $"First team to {targetScore} wins.");
 
             if (NextHandButton != null)
             {
@@ -150,6 +151,26 @@ namespace BackyardLegends.Runtime
         private static bool MadeContract(ScoreSnapshot score)
         {
             return score.TricksWon >= score.ContractBid;
+        }
+
+        private static int ResolveTargetScore(MatchState state, RuleSetDefinition rules)
+        {
+            if (rules != null && rules.TargetScore > 0)
+            {
+                return rules.TargetScore;
+            }
+
+            if (state.TargetScore > 0)
+            {
+                return state.TargetScore;
+            }
+
+            if (state.RuleSet != null && state.RuleSet.TargetScore > 0)
+            {
+                return state.RuleSet.TargetScore;
+            }
+
+            return 500;
         }
 
         private static string FormatSigned(int value)

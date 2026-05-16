@@ -1,19 +1,19 @@
 # ninja log v5
-33	1141	7987690481252752	GameActivity/CMakeFiles/game.dir/UGAInputKeyEvent.cpp.o	e2dd483924801c80
-14	1159	7987690481407741	GameActivity/CMakeFiles/game.dir/UGAConfiguration.cpp.o	60a4670eda88f709
-40	1465	7987690484473858	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	cb7287c05eac657
-1465	1619	7987690486033930	G:/UnityProjects/Arousha/BackyardLegends Git/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/1a2o2q37/obj/arm64-v8a/libgame.so	4721a65945e0d3f7
-4	1143	7987690481277985	GameActivity/CMakeFiles/game.dir/UGAEntry.cpp.o	e7b3752c5b9b99df
-28	1164	7987690481468711	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	68f994de721a2517
-18	1208	7987690481923998	GameActivity/CMakeFiles/game.dir/UGADebug.cpp.o	9fd88a1d7ecfe634
-23	1334	7987690483161981	GameActivity/CMakeFiles/game.dir/UGAInput.cpp.o	409764f93ed6e6dc
-9	1398	7987690483798988	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	e2637bfee615e3e9
 29	1128	7997165061878808	GameActivity/CMakeFiles/game.dir/UGAInputKeyEvent.cpp.o	e2dd483924801c80
-8	1129	7997165061898081	GameActivity/CMakeFiles/game.dir/UGAEntry.cpp.o	e7b3752c5b9b99df
+1464	2284	7997165073446169	G:/UnityProjects/Arousha/BackyardLegends Git/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/1a2o2q37/obj/arm64-v8a/libgame.so	4721a65945e0d3f7
+34	1464	7997165065227189	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	cb7287c05eac657
 15	1153	7997165062121098	GameActivity/CMakeFiles/game.dir/UGAConfiguration.cpp.o	60a4670eda88f709
-20	1155	7997165062161249	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	68f994de721a2517
+8	1129	7997165061898081	GameActivity/CMakeFiles/game.dir/UGAEntry.cpp.o	e7b3752c5b9b99df
 4	1202	7997165062597871	GameActivity/CMakeFiles/game.dir/UGADebug.cpp.o	9fd88a1d7ecfe634
+20	1155	7997165062161249	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	68f994de721a2517
 25	1352	7997165063888734	GameActivity/CMakeFiles/game.dir/UGAInput.cpp.o	409764f93ed6e6dc
 12	1403	7997165064611794	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	e2637bfee615e3e9
-34	1464	7997165065227189	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	cb7287c05eac657
-1464	2284	7997165073446169	G:/UnityProjects/Arousha/BackyardLegends Git/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/1a2o2q37/obj/arm64-v8a/libgame.so	4721a65945e0d3f7
+25	7928	8005380612349020	GameActivity/CMakeFiles/game.dir/UGAEntry.cpp.o	e7b3752c5b9b99df
+57	7978	8005380612349020	GameActivity/CMakeFiles/game.dir/UGAInputKeyEvent.cpp.o	e2dd483924801c80
+43	7979	8005380612828959	GameActivity/CMakeFiles/game.dir/UGAConfiguration.cpp.o	60a4670eda88f709
+52	7981	8005380612828959	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	68f994de721a2517
+48	7992	8005380623532287	GameActivity/CMakeFiles/game.dir/UGAInput.cpp.o	409764f93ed6e6dc
+61	7993	8005380623532287	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	cb7287c05eac657
+35	7994	8005380623537405	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	e2637bfee615e3e9
+39	7995	8005380623532287	GameActivity/CMakeFiles/game.dir/UGADebug.cpp.o	9fd88a1d7ecfe634
+7995	8286	8005380627296252	G:/UnityProjects/Arousha/BackyardLegends Git/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/1a2o2q37/obj/arm64-v8a/libgame.so	4721a65945e0d3f7

@@ -50,6 +50,13 @@ namespace BackyardLegends.Runtime
         public RectTransform ExitPromptOverlay;
         public RectTransform HandContent;
 
+        [Header("Last Trick Display")]
+        public Image LastTrickPanel;
+        public Text LastTrickTitleText;
+        public RectTransform LastTrickCardsRoot;
+        public CanvasGroup LastTrickGroup;
+        public CardButtonView[] LastTrickCards;
+
         [Header("Buttons")]
         public Button BackButton;
         public Button ClaimTheRestButton;
