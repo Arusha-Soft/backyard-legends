@@ -9,6 +9,7 @@ namespace BackyardLegends.Runtime
         private const string ResourceRoot = "BackyardLegends/CardFaces";
         private const string EmptyCardResource = ResourceRoot + "/Empty";
         private const string OpeningEffectResource = "BackyardLegends/Opening/efect";
+        private static readonly bool UseImportedFaceSprites = false;
         private static readonly Dictionary<Card, Sprite> FaceCache = new();
         private static Sprite emptyCardSprite;
         private static bool emptyCardLoaded;
@@ -17,6 +18,14 @@ namespace BackyardLegends.Runtime
 
         public static bool TryGetFaceSprite(Card card, out Sprite sprite)
         {
+            if (!UseImportedFaceSprites)
+            {
+                // The Update3 gameplay skin uses the card frame plus live rank/suit text so
+                // cards stay close to the cream reference mockup.
+                sprite = null;
+                return false;
+            }
+
             if (FaceCache.TryGetValue(card, out sprite))
             {
                 return sprite != null;

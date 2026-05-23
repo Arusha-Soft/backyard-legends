@@ -676,6 +676,11 @@ namespace BackyardLegends.Runtime
 
         private CardVisualState CaptureCardFaceState(CardButtonView view)
         {
+            if (view == null || view.Panel == null || view.RankText == null || view.SuitText == null)
+            {
+                return new CardVisualState(null, Image.Type.Simple, Color.clear, null, Color.clear, false, Color.clear, Color.clear);
+            }
+
             var artImage = EnsureCardFaceImage(view);
             var artVisible = artImage != null && artImage.enabled && artImage.sprite != null;
             return new CardVisualState(
@@ -691,23 +696,38 @@ namespace BackyardLegends.Runtime
 
         private void ApplyCardFaceVisual(CardButtonView view, CardVisualState state)
         {
+            if (view == null || view.Panel == null)
+            {
+                return;
+            }
+
             view.Panel.sprite = state.PanelSprite;
             view.Panel.type = state.PanelType;
             view.Panel.color = state.PanelColor;
             if (state.ArtVisible && state.ArtSprite != null)
             {
                 var artImage = EnsureCardFaceImage(view);
-                artImage.sprite = state.ArtSprite;
-                artImage.color = state.ArtColor;
-                artImage.enabled = true;
+                if (artImage != null)
+                {
+                    artImage.sprite = state.ArtSprite;
+                    artImage.color = state.ArtColor;
+                    artImage.enabled = true;
+                }
             }
             else
             {
                 HideFaceImage(view.FaceImage);
             }
 
-            view.RankText.color = state.RankColor;
-            view.SuitText.color = state.SuitColor;
+            if (view.RankText != null)
+            {
+                view.RankText.color = state.RankColor;
+            }
+
+            if (view.SuitText != null)
+            {
+                view.SuitText.color = state.SuitColor;
+            }
         }
 
         private Color ResolveCardArtTint(bool isLegal)
@@ -1430,14 +1450,11 @@ namespace BackyardLegends.Runtime
                 var slot = trickSlots[seat];
                 EnsureTrickFaceImage(slot);
                 HideFaceImage(slot.FaceImage);
-                slot.RankText.text = "--";
-                slot.SuitText.text = seat == SeatId.Bottom ? "YOU" :
-                    seat == SeatId.Top ? "PARTNER" :
-                    seat == SeatId.Left ? "LEFT" : "RIGHT";
-                SetGraphicAlpha(slot.RankText, 1f);
-                SetGraphicAlpha(slot.SuitText, 1f);
-                slot.SuitText.color = theme.mutedText;
-                slot.Panel.color = new Color(1f, 1f, 1f, 0.28f);
+                slot.RankText.text = string.Empty;
+                slot.SuitText.text = string.Empty;
+                SetGraphicAlpha(slot.RankText, 0f);
+                SetGraphicAlpha(slot.SuitText, 0f);
+                slot.Panel.color = new Color(1f, 1f, 1f, 0f);
             }
 
             foreach (var pair in activeCards)
@@ -1586,6 +1603,11 @@ namespace BackyardLegends.Runtime
 
         private void ApplyCardBackVisual(CardButtonView view)
         {
+            if (view == null || view.Panel == null)
+            {
+                return;
+            }
+
             view.Panel.sprite = ResolveCardBackSprite();
             view.Panel.type = Image.Type.Sliced;
             view.Panel.color = Color.white;
@@ -1970,7 +1992,7 @@ namespace BackyardLegends.Runtime
                 StartCoroutine(AnimateOpeningDealGhost(ghost, motion, delayStep * i, revealToHandFlags[i], travelDuration, i == 0));
             }
 
-            yield return new WaitForSecondsRealtime(delayStep * dealMotions.Count + travelDuration + 0.2f);
+            yield return new WaitForSecondsRealtime((delayStep * dealMotions.Count * 2f) + travelDuration + 0.35f);
 
             suppressNextHandEntryAnimation = true;
             openingDealPending = false;
@@ -2241,6 +2263,11 @@ namespace BackyardLegends.Runtime
                 ApplyCardBackVisual(ghost);
             }
 
+            if (ghost == null)
+            {
+                yield break;
+            }
+
             if (playLaunchSound)
             {
                 PlayFeedback(FeedbackCue.Deal, 0.16f);
@@ -2311,10 +2338,7 @@ namespace BackyardLegends.Runtime
 
             if (selectedCard.HasValue && selectedCard.Value.Equals(card))
             {
-                selectedCard = null;
-                PlayFeedback(FeedbackCue.Select, 0.12f);
-                FlashStatus("Card deselected.", theme.mutedText);
-                RenderHand();
+                TryPlaySelected();
                 return;
             }
 
@@ -2586,6 +2610,11 @@ namespace BackyardLegends.Runtime
 
         private IEnumerator AnimateFloatingCard(CardButtonView ghost, CardMotionSnapshot motion, float duration, bool fadeOutNearEnd, bool revealFromBack)
         {
+            if (ghost == null)
+            {
+                yield break;
+            }
+
             var faceState = CaptureCardFaceState(ghost);
             var revealedFace = !revealFromBack;
             if (revealFromBack)
@@ -2618,17 +2647,32 @@ namespace BackyardLegends.Runtime
 
         private void ApplyFloatingCardPose(CardButtonView ghost, CardMotionSnapshot motion, float progress, bool fadeOutNearEnd, bool revealFromBack)
         {
-            if (ghost == null)
+            if (ghost == null || ghost.CanvasGroup == null)
+            {
+                return;
+            }
+
+            RectTransform root;
+            try
+            {
+                root = ghost.transform as RectTransform;
+            }
+            catch (MissingReferenceException)
+            {
+                return;
+            }
+
+            if (root == null)
             {
                 return;
             }
 
             var eased = 1f - Mathf.Pow(1f - progress, 3f);
             var arc = Mathf.Sin(progress * Mathf.PI) * motion.ArcHeight;
-            ghost.Root.anchoredPosition = Vector2.Lerp(motion.StartPosition, motion.EndPosition, eased) + Vector2.up * arc;
-            ghost.Root.sizeDelta = Vector2.Lerp(motion.StartSize, motion.EndSize, eased);
-            ghost.Root.localRotation = Quaternion.Slerp(motion.StartRotation, motion.EndRotation, eased);
-            ghost.Root.localScale = revealFromBack
+            root.anchoredPosition = Vector2.Lerp(motion.StartPosition, motion.EndPosition, eased) + Vector2.up * arc;
+            root.sizeDelta = Vector2.Lerp(motion.StartSize, motion.EndSize, eased);
+            root.localRotation = Quaternion.Slerp(motion.StartRotation, motion.EndRotation, eased);
+            root.localScale = revealFromBack
                 ? new Vector3(progress < 0.5f
                     ? Mathf.Lerp(1f, 0.08f, progress / 0.5f)
                     : Mathf.Lerp(0.08f, 1f, (progress - 0.5f) / 0.5f), 1f, 1f)
@@ -4122,10 +4166,7 @@ namespace BackyardLegends.Runtime
         private string BuildScoreboardText(TeamId team)
         {
             var score = controller.State.Scores[team];
-            var label = team == TeamId.Home ? "HOME" : "AWAY";
-            var bid = controller.GetTeamBid(team);
-            var bidLabel = bid > 0 ? bid.ToString() : "--";
-            return $"{label} {score.Score}/{selectedRule.TargetScore} | BID {bidLabel} | BOOKS {controller.GetTeamTricks(team)}";
+            return $"{score.Score}/{selectedRule.TargetScore}";
         }
 
         private void SetDeckCountersVisible(bool visible)
@@ -4157,6 +4198,14 @@ namespace BackyardLegends.Runtime
         {
             if (label == null || label.transform.parent == null)
             {
+                return;
+            }
+
+            if (label.transform.root != null && label.transform.root.name == "Update3 Gameplay World UI")
+            {
+                label.alignment = TextAnchor.MiddleCenter;
+                label.horizontalOverflow = HorizontalWrapMode.Overflow;
+                label.verticalOverflow = VerticalWrapMode.Truncate;
                 return;
             }
 
@@ -4274,6 +4323,11 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
+            if (label.transform.root != null && label.transform.root.name == "Update3 Gameplay World UI")
+            {
+                return;
+            }
+
             label.color = color;
             label.fontSize = fontSize;
             label.fontStyle = style;
@@ -4342,7 +4396,7 @@ namespace BackyardLegends.Runtime
             var containerWidth = sceneRefs.HandContent != null ? sceneRefs.HandContent.rect.width : 720f;
             var cardWidth = ResolveBottomHandCardSize().x;
             var fitSpacing = count <= 1 ? 0f : (containerWidth - cardWidth) / span;
-            var preferredSpread = cardWidth * 0.30f;
+            var preferredSpread = cardWidth * 0.54f;
             var maxSpread = count <= 1 ? 0f : Mathf.Max(16f, Mathf.Min(preferredSpread, fitSpacing));
             var x = (index - span * 0.5f) * maxSpread;
             if (selectedIndex >= 0 && selectedIndex < count && index != selectedIndex)
@@ -4359,7 +4413,12 @@ namespace BackyardLegends.Runtime
 
         private Quaternion GetFanTargetRotation(int index, int count)
         {
-            return Quaternion.identity;
+            if (count <= 1)
+            {
+                return Quaternion.identity;
+            }
+
+            return Quaternion.Euler(0f, 0f, Mathf.Lerp(-10f, 10f, index / (float)(count - 1)));
         }
 
         private Vector2 ResolveCardButtonBaseSize()
@@ -4532,6 +4591,11 @@ namespace BackyardLegends.Runtime
         private static void ApplyThemedImage(Image image, Color color, Sprite sprite)
         {
             if (image == null)
+            {
+                return;
+            }
+
+            if (image.gameObject.name.StartsWith("Update3 Runtime"))
             {
                 return;
             }
