@@ -17,7 +17,7 @@ namespace BackyardLegends.Core
         [SerializeField] private int maxBid = 13;
         [SerializeField] private int bagPenaltyThreshold = 10;
         [SerializeField] private int bagPenaltyPoints = -100;
-        [SerializeField] private int[] targetScoreOptions = { 100, 200, 500 };
+        [SerializeField] private int[] targetScoreOptions = { 100, 200, 300 };
         [SerializeField] private bool enableFutureTurnTimer;
         [SerializeField] private int reservedTurnTimerSeconds = 30;
 

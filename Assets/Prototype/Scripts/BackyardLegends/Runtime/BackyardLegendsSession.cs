@@ -70,7 +70,7 @@ namespace BackyardLegends.Runtime
                 return config.TargetScoreOptions.ToArray();
             }
 
-            return new[] { 100, 200, 500 };
+            return new[] { 100, 200, 300 };
         }
 
         public void SelectMode(int modeIndex)

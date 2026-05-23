@@ -37,6 +37,7 @@ namespace BackyardLegends.Runtime
             BackgroundImage = BackgroundImage != null ? BackgroundImage : FindByPath<Image>("Background");
             SheetImage = SheetImage != null ? SheetImage : FindByPath<Image>("Lobby Sheet");
             PreviewPanelImage = PreviewPanelImage != null ? PreviewPanelImage : FindByPath<Image>("Lobby Sheet/Preview Panel");
+            TitleText = TitleText != null ? TitleText : FindByPath<Text>("Lobby Sheet/Title");
             SubtitleText = SubtitleText != null ? SubtitleText : FindByPath<Text>("Lobby Sheet/Subtitle");
             FlavorText = FlavorText != null ? FlavorText : FindByPath<Text>("Lobby Sheet/Preview Panel/Flavor");
             RuleSummaryText = RuleSummaryText != null ? RuleSummaryText : FindByPath<Text>("Lobby Sheet/Preview Panel/Rule Summary");
@@ -46,17 +47,34 @@ namespace BackyardLegends.Runtime
                 ModeButtons,
                 "Lobby Sheet/Mode Row/Classic Mode",
                 "Lobby Sheet/Mode Row/Street Mode");
-            TargetButtons = ResolveButtons(
-                TargetButtons,
-                "Lobby Sheet/Score Row/Score 100",
-                "Lobby Sheet/Score Row/Score 200",
-                "Lobby Sheet/Score Row/Score 500");
+            TargetButtons = ResolveScoreButtons(TargetButtons);
         }
 
         private T FindByPath<T>(string path) where T : Component
         {
             var target = transform.Find(path);
-            return target != null ? target.GetComponent<T>() : null;
+            if (target == null && transform.root != transform)
+            {
+                target = transform.root.Find(path);
+            }
+
+            if (target != null && target.TryGetComponent<T>(out var component))
+            {
+                return component;
+            }
+
+            var leafNameIndex = path.LastIndexOf('/');
+            var leafName = leafNameIndex >= 0 ? path.Substring(leafNameIndex + 1) : path;
+            var candidates = transform.root.GetComponentsInChildren<T>(true);
+            for (var i = 0; i < candidates.Length; i++)
+            {
+                if (candidates[i].name == leafName)
+                {
+                    return candidates[i];
+                }
+            }
+
+            return null;
         }
 
         private Button[] ResolveButtons(Button[] existing, params string[] paths)
@@ -71,6 +89,22 @@ namespace BackyardLegends.Runtime
                 }
 
                 resolved[i] = FindByPath<Button>(paths[i]);
+            }
+
+            return resolved;
+        }
+
+        private Button[] ResolveScoreButtons(Button[] existing)
+        {
+            var resolved = ResolveButtons(
+                existing,
+                "Lobby Sheet/Score Row/Score 100",
+                "Lobby Sheet/Score Row/Score 200",
+                "Lobby Sheet/Score Row/Score 300");
+
+            if (resolved.Length > 2 && resolved[2] == null)
+            {
+                resolved[2] = FindByPath<Button>("Lobby Sheet/Score Row/Score 500");
             }
 
             return resolved;

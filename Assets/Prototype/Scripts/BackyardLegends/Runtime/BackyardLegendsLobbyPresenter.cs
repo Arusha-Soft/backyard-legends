@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using BackyardLegends.Core;
 using UnityEngine;
 using UnityEngine.UI;
@@ -15,6 +16,7 @@ namespace BackyardLegends.Runtime
         private readonly List<Button> targetButtons = new();
         private readonly Dictionary<Button, BackyardLegendsLobbyButtonFeedback> buttonFeedback = new();
         private readonly List<RectTransform> modeSelectionMarkers = new();
+        private readonly HashSet<Button> transparentHitAreaButtons = new();
 
         private BackyardLegendsSession session;
         private ThemeConfig theme;
@@ -22,6 +24,15 @@ namespace BackyardLegends.Runtime
         private AudioClip hoverClip;
         private AudioClip selectClip;
         private AudioClip confirmClip;
+        private Coroutine backgroundDestroyedRoutine;
+        private Coroutine backgroundSharpenRoutine;
+        private Component backgroundDestroyedFx;
+        private Component backgroundSharpenFx;
+
+        private const float BackgroundDestroyedRevealSeconds = 1f;
+        private const float BackgroundSharpenMin = 1f;
+        private const float BackgroundSharpenMax = 12f;
+        private const float BackgroundSharpenCycleSeconds = 1f;
 
         private enum FeedbackCue
         {
@@ -34,6 +45,7 @@ namespace BackyardLegends.Runtime
         {
             Screen.orientation = ScreenOrientation.Portrait;
             Application.targetFrameRate = 60;
+            Application.runInBackground = true;
 
             session = BackyardLegendsSession.GetOrCreateRuntimeInstance();
             theme = themeOverride != null ? themeOverride : session.Theme ?? ThemeConfig.CreateFallback();
@@ -63,6 +75,7 @@ namespace BackyardLegends.Runtime
             ConfigureFeedbackAudio();
             ConfigureUiCallbacks();
             ApplyTheme();
+            ConfigureBackgroundEffects();
             ConfigureButtonFeedback();
             RefreshContent();
         }
@@ -71,28 +84,16 @@ namespace BackyardLegends.Runtime
         {
             modeButtons.Clear();
             targetButtons.Clear();
+            transparentHitAreaButtons.Clear();
 
-            if (sceneRefs.ModeButtons != null)
-            {
-                modeButtons.AddRange(sceneRefs.ModeButtons.Where(button => button != null));
-            }
-
-            if (sceneRefs.TargetButtons != null)
-            {
-                targetButtons.AddRange(sceneRefs.TargetButtons.Where(button => button != null));
-            }
+            PrepareButtonForRuntime(sceneRefs.StartMatchButton, false);
+            CacheConfiguredButtons(sceneRefs.ModeButtons, modeButtons, true);
+            CacheConfiguredButtons(sceneRefs.TargetButtons, targetButtons, false);
         }
 
         private bool HasRequiredReferences()
         {
-            return sceneRefs.BackgroundImage != null &&
-                   sceneRefs.SheetImage != null &&
-                   sceneRefs.PreviewPanelImage != null &&
-                   sceneRefs.SubtitleText != null &&
-                   sceneRefs.FlavorText != null &&
-                   sceneRefs.RuleSummaryText != null &&
-                   sceneRefs.SelectionSummaryText != null &&
-                   sceneRefs.StartMatchButton != null &&
+            return sceneRefs.StartMatchButton != null &&
                    modeButtons.Count > 0 &&
                    targetButtons.Count > 0;
         }
@@ -109,8 +110,7 @@ namespace BackyardLegends.Runtime
 
         private void ConfigureUiCallbacks()
         {
-            sceneRefs.StartMatchButton.onClick.RemoveAllListeners();
-            sceneRefs.StartMatchButton.onClick.AddListener(() =>
+            BindButtonFamily(sceneRefs.StartMatchButton, () =>
             {
                 PlayFeedback(FeedbackCue.Confirm, 0.95f);
                 KickButton(sceneRefs.StartMatchButton, 0.7f);
@@ -120,10 +120,11 @@ namespace BackyardLegends.Runtime
             for (var i = 0; i < modeButtons.Count; i++)
             {
                 var localIndex = i;
-                modeButtons[i].onClick.RemoveAllListeners();
-                modeButtons[i].onClick.AddListener(() =>
+                var button = modeButtons[i];
+                BindButtonFamily(button, () =>
                 {
                     session.SelectMode(localIndex);
+                    PlayFeedback(FeedbackCue.Select, 0.85f);
                     RefreshContent();
                     PlayModeSelectionFeedback(localIndex);
                 });
@@ -132,15 +133,16 @@ namespace BackyardLegends.Runtime
             for (var i = 0; i < targetButtons.Count; i++)
             {
                 var localIndex = i;
-                targetButtons[i].onClick.RemoveAllListeners();
-                targetButtons[i].onClick.AddListener(() =>
+                var button = targetButtons[i];
+                BindButtonFamily(button, () =>
                 {
                     var options = session.GetTargetOptions();
                     if (localIndex < options.Length)
                     {
                         session.SelectTarget(options[localIndex]);
+                        PlayFeedback(FeedbackCue.Select, 0.75f);
                         RefreshContent();
-                        PlayTargetSelectionFeedback(targetButtons[localIndex]);
+                        PlayTargetSelectionFeedback(button);
                     }
                 });
             }
@@ -268,14 +270,15 @@ namespace BackyardLegends.Runtime
             {
                 var isSelected = i == session.SelectedModeIndex;
                 SyncButtonFeedback(modeButtons[i], isSelected);
+                SetTransparentHitAreaSelected(modeButtons[i], isSelected);
                 SetModeSelectionMarkerState(i, isSelected);
             }
 
-            foreach (var button in targetButtons)
+            var options = session.GetTargetOptions();
+            for (var i = 0; i < targetButtons.Count; i++)
             {
-                var label = GetButtonLabel(button);
-                var isSelected = label != null && int.TryParse(label.text, out var score) && score == session.SelectedTargetScore;
-                SyncButtonFeedback(button, isSelected);
+                var isSelected = i < options.Length && options[i] == session.SelectedTargetScore;
+                SyncButtonFeedback(targetButtons[i], isSelected);
             }
         }
 
@@ -305,7 +308,7 @@ namespace BackyardLegends.Runtime
 
         private void ConfigureButtonFeedback(Button button, bool isConfirmButton = false)
         {
-            if (button == null)
+            if (button == null || transparentHitAreaButtons.Contains(button))
             {
                 return;
             }
@@ -319,7 +322,7 @@ namespace BackyardLegends.Runtime
             feedback.Initialize(theme);
             feedback.SetCallbacks(
                 () => PlayFeedback(FeedbackCue.Hover, 0.55f),
-                isConfirmButton ? null : () => PlayFeedback(FeedbackCue.Select, 0.75f));
+                null);
             buttonFeedback[button] = feedback;
         }
 
@@ -377,6 +380,287 @@ namespace BackyardLegends.Runtime
             return label != null
                 ? label.GetComponent<Text>()
                 : button.GetComponentsInChildren<Text>(true).FirstOrDefault(text => text.name != "Selected Checkmark");
+        }
+
+        private void CacheConfiguredButtons(Button[] source, List<Button> destination, bool transparentWhenInactive)
+        {
+            if (source == null)
+            {
+                return;
+            }
+
+            foreach (var button in source.Where(button => button != null))
+            {
+                PrepareButtonForRuntime(button, transparentWhenInactive);
+                destination.Add(button);
+            }
+        }
+
+        private void PrepareButtonForRuntime(Button button, bool transparentWhenInactive)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            var wasInactive = !button.gameObject.activeSelf;
+            button.gameObject.SetActive(true);
+            button.interactable = true;
+
+            var image = button.GetComponent<Image>();
+            if (image != null)
+            {
+                image.raycastTarget = true;
+                button.targetGraphic = image;
+            }
+
+            var canvasGroup = button.GetComponent<CanvasGroup>();
+            if (canvasGroup != null)
+            {
+                canvasGroup.interactable = true;
+                canvasGroup.blocksRaycasts = true;
+            }
+
+            if (transparentWhenInactive && wasInactive)
+            {
+                transparentHitAreaButtons.Add(button);
+                MakeTransparentHitArea(button);
+            }
+        }
+
+        private void BindButtonFamily(Button rootButton, UnityEngine.Events.UnityAction onClick)
+        {
+            if (rootButton == null)
+            {
+                return;
+            }
+
+            foreach (var button in GetButtonFamily(rootButton))
+            {
+                PrepareButtonSurface(button);
+                button.onClick.RemoveAllListeners();
+                button.onClick.AddListener(onClick);
+            }
+        }
+
+        private IEnumerable<Button> GetButtonFamily(Button rootButton)
+        {
+            if (rootButton == null)
+            {
+                yield break;
+            }
+
+            yield return rootButton;
+            var nestedButtons = rootButton.GetComponentsInChildren<Button>(true);
+            foreach (var nestedButton in nestedButtons)
+            {
+                if (nestedButton != null && nestedButton != rootButton)
+                {
+                    yield return nestedButton;
+                }
+            }
+        }
+
+        private void PrepareButtonSurface(Button button)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.gameObject.SetActive(true);
+            button.interactable = true;
+
+            var image = button.GetComponent<Image>();
+            if (image != null)
+            {
+                image.raycastTarget = true;
+                if (button.targetGraphic == null)
+                {
+                    button.targetGraphic = image;
+                }
+            }
+
+            var canvasGroup = button.GetComponent<CanvasGroup>();
+            if (canvasGroup != null)
+            {
+                canvasGroup.interactable = true;
+                canvasGroup.blocksRaycasts = true;
+            }
+        }
+
+        private static void MakeTransparentHitArea(Button button)
+        {
+            button.transition = Selectable.Transition.None;
+
+            var image = button.GetComponent<Image>();
+            if (image != null)
+            {
+                var color = image.color;
+                color.a = 0f;
+                image.color = color;
+                image.raycastTarget = true;
+            }
+
+            var canvasGroup = button.GetComponent<CanvasGroup>();
+            if (canvasGroup != null)
+            {
+                canvasGroup.alpha = 0f;
+                canvasGroup.interactable = true;
+                canvasGroup.blocksRaycasts = true;
+            }
+        }
+
+        private void SetTransparentHitAreaSelected(Button button, bool isSelected)
+        {
+            if (button == null || !transparentHitAreaButtons.Contains(button))
+            {
+                return;
+            }
+
+            var alpha = isSelected ? 1f : 0f;
+            var image = button.GetComponent<Image>();
+            if (image != null)
+            {
+                var color = image.color;
+                color.a = alpha;
+                image.color = color;
+                image.raycastTarget = true;
+            }
+
+            var canvasGroup = button.GetComponent<CanvasGroup>();
+            if (canvasGroup != null)
+            {
+                canvasGroup.alpha = alpha;
+                canvasGroup.interactable = true;
+                canvasGroup.blocksRaycasts = true;
+            }
+        }
+
+        private void ConfigureBackgroundEffects()
+        {
+            var background = sceneRefs.BackgroundImage != null ? sceneRefs.BackgroundImage.gameObject : null;
+            if (background == null)
+            {
+                return;
+            }
+
+            backgroundDestroyedFx = FindComponentByTypeName(background, "_2dxFX_DestroyedFX");
+            backgroundSharpenFx = FindComponentByTypeName(background, "_2dxFX_Sharpen");
+
+            if (backgroundDestroyedRoutine != null)
+            {
+                StopCoroutine(backgroundDestroyedRoutine);
+            }
+
+            if (backgroundSharpenRoutine != null)
+            {
+                StopCoroutine(backgroundSharpenRoutine);
+            }
+
+            if (backgroundSharpenFx != null)
+            {
+                SetFxBool(backgroundSharpenFx, "ActiveChange", true);
+                SetFxBool(backgroundSharpenFx, "ActiveUpdate", true);
+                SetFxFloat(backgroundSharpenFx, "_Alpha", 1f);
+                SetFxFloat(backgroundSharpenFx, "Sharpen", BackgroundSharpenMin);
+                SetFxEnabled(backgroundSharpenFx, false);
+            }
+
+            if (backgroundDestroyedFx != null)
+            {
+                SetFxBool(backgroundDestroyedFx, "ActiveChange", true);
+                SetFxBool(backgroundDestroyedFx, "ActiveUpdate", true);
+                SetFxFloat(backgroundDestroyedFx, "_Alpha", 1f);
+                SetFxFloat(backgroundDestroyedFx, "Destroyed", 1f);
+                SetFxEnabled(backgroundDestroyedFx, true);
+                CallFxUpdate(backgroundDestroyedFx);
+                backgroundDestroyedRoutine = StartCoroutine(AnimateBackgroundDestroyed());
+            }
+
+            if (backgroundSharpenFx != null)
+            {
+                backgroundSharpenRoutine = StartCoroutine(AnimateBackgroundSharpen(backgroundDestroyedFx != null ? BackgroundDestroyedRevealSeconds : 0f));
+            }
+        }
+
+        private IEnumerator AnimateBackgroundDestroyed()
+        {
+            var elapsed = 0f;
+            while (elapsed < BackgroundDestroyedRevealSeconds)
+            {
+                elapsed += Time.deltaTime;
+                var t = Mathf.Clamp01(elapsed / BackgroundDestroyedRevealSeconds);
+                SetFxFloat(backgroundDestroyedFx, "Destroyed", Mathf.Lerp(1f, 0f, Mathf.SmoothStep(0f, 1f, t)));
+                CallFxUpdate(backgroundDestroyedFx);
+                yield return null;
+            }
+
+            SetFxFloat(backgroundDestroyedFx, "Destroyed", 0f);
+            CallFxUpdate(backgroundDestroyedFx);
+            SetFxBool(backgroundDestroyedFx, "ActiveUpdate", false);
+            SetFxEnabled(backgroundDestroyedFx, false);
+            backgroundDestroyedRoutine = null;
+        }
+
+        private IEnumerator AnimateBackgroundSharpen(float delaySeconds)
+        {
+            if (delaySeconds > 0f)
+            {
+                yield return new WaitForSeconds(delaySeconds);
+            }
+
+            SetFxEnabled(backgroundSharpenFx, true);
+            SetFxFloat(backgroundSharpenFx, "Sharpen", BackgroundSharpenMin);
+            CallFxUpdate(backgroundSharpenFx);
+
+            var elapsed = 0f;
+            while (true)
+            {
+                elapsed += Time.deltaTime;
+                var t = Mathf.PingPong(elapsed / BackgroundSharpenCycleSeconds, 1f);
+                SetFxFloat(backgroundSharpenFx, "Sharpen", Mathf.Lerp(BackgroundSharpenMin, BackgroundSharpenMax, t));
+                CallFxUpdate(backgroundSharpenFx);
+                yield return null;
+            }
+        }
+
+        private static Component FindComponentByTypeName(GameObject target, string typeName)
+        {
+            return target.GetComponents<Component>()
+                .FirstOrDefault(component => component != null && component.GetType().Name == typeName);
+        }
+
+        private static void SetFxEnabled(Component component, bool enabled)
+        {
+            if (component is Behaviour behaviour)
+            {
+                behaviour.enabled = enabled;
+            }
+        }
+
+        private static void SetFxBool(Component component, string fieldName, bool value)
+        {
+            var field = FindFxField(component, fieldName);
+            field?.SetValue(component, value);
+        }
+
+        private static void SetFxFloat(Component component, string fieldName, float value)
+        {
+            var field = FindFxField(component, fieldName);
+            field?.SetValue(component, value);
+        }
+
+        private static void CallFxUpdate(Component component)
+        {
+            component?.GetType()
+                .GetMethod("CallUpdate", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                ?.Invoke(component, null);
+        }
+
+        private static FieldInfo FindFxField(Component component, string fieldName)
+        {
+            return component?.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
         }
 
         private void PlayFeedback(FeedbackCue cue, float volumeScale = 1f)

@@ -90,7 +90,7 @@ namespace BackyardLegends.Editor
             {
                 CreateButton("Score 100", scoreRow.transform, "100", theme.gold),
                 CreateButton("Score 200", scoreRow.transform, "200", theme.panelStroke),
-                CreateButton("Score 500", scoreRow.transform, "500", theme.panelStroke)
+                CreateButton("Score 300", scoreRow.transform, "300", theme.panelStroke)
             };
 
             refs.StartMatchButton = CreateButton("Start Match", sheet.transform, "START MATCH", theme.green, new Vector2(0.18f, 0.03f), new Vector2(0.82f, 0.09f));

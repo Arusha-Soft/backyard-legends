@@ -170,7 +170,7 @@ namespace BackyardLegends.Runtime
                 return state.RuleSet.TargetScore;
             }
 
-            return 500;
+            return 300;
         }
 
         private static string FormatSigned(int value)
