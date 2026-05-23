@@ -30,9 +30,10 @@ namespace BackyardLegends.Runtime
         private Component backgroundSharpenFx;
 
         private const float BackgroundDestroyedRevealSeconds = 1f;
-        private const float BackgroundSharpenMin = 1f;
+        private const float BackgroundSharpenMin = 0.001f;
         private const float BackgroundSharpenMax = 12f;
         private const float BackgroundSharpenCycleSeconds = 1f;
+        private const float BackgroundSharpenMinHoldSeconds = 1f;
 
         private enum FeedbackCue
         {
@@ -545,8 +546,9 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
+            var sharpenBackground = FindSceneObject("Background2") ?? background;
             backgroundDestroyedFx = FindComponentByTypeName(background, "_2dxFX_DestroyedFX");
-            backgroundSharpenFx = FindComponentByTypeName(background, "_2dxFX_Sharpen");
+            backgroundSharpenFx = FindComponentByTypeName(sharpenBackground, "_2dxFX_Sharpen");
 
             if (backgroundDestroyedRoutine != null)
             {
@@ -560,6 +562,7 @@ namespace BackyardLegends.Runtime
 
             if (backgroundSharpenFx != null)
             {
+                sharpenBackground.SetActive(true);
                 SetFxBool(backgroundSharpenFx, "ActiveChange", true);
                 SetFxBool(backgroundSharpenFx, "ActiveUpdate", true);
                 SetFxFloat(backgroundSharpenFx, "_Alpha", 1f);
@@ -611,24 +614,47 @@ namespace BackyardLegends.Runtime
             }
 
             SetFxEnabled(backgroundSharpenFx, true);
-            SetFxFloat(backgroundSharpenFx, "Sharpen", BackgroundSharpenMin);
-            CallFxUpdate(backgroundSharpenFx);
 
-            var elapsed = 0f;
             while (true)
             {
+                SetFxFloat(backgroundSharpenFx, "Sharpen", BackgroundSharpenMin);
+                CallFxUpdate(backgroundSharpenFx);
+                yield return new WaitForSeconds(BackgroundSharpenMinHoldSeconds);
+                yield return AnimateBackgroundSharpenRange(BackgroundSharpenMin, BackgroundSharpenMax);
+                yield return AnimateBackgroundSharpenRange(BackgroundSharpenMax, BackgroundSharpenMin);
+            }
+        }
+
+        private IEnumerator AnimateBackgroundSharpenRange(float from, float to)
+        {
+            var elapsed = 0f;
+            while (elapsed < BackgroundSharpenCycleSeconds)
+            {
                 elapsed += Time.deltaTime;
-                var t = Mathf.PingPong(elapsed / BackgroundSharpenCycleSeconds, 1f);
-                SetFxFloat(backgroundSharpenFx, "Sharpen", Mathf.Lerp(BackgroundSharpenMin, BackgroundSharpenMax, t));
+                var t = Mathf.Clamp01(elapsed / BackgroundSharpenCycleSeconds);
+                SetFxFloat(backgroundSharpenFx, "Sharpen", Mathf.Lerp(from, to, t));
                 CallFxUpdate(backgroundSharpenFx);
                 yield return null;
             }
+
+            SetFxFloat(backgroundSharpenFx, "Sharpen", to);
+            CallFxUpdate(backgroundSharpenFx);
         }
 
         private static Component FindComponentByTypeName(GameObject target, string typeName)
         {
-            return target.GetComponents<Component>()
-                .FirstOrDefault(component => component != null && component.GetType().Name == typeName);
+            return target == null
+                ? null
+                : target.GetComponents<Component>()
+                    .FirstOrDefault(component => component != null && component.GetType().Name == typeName);
+        }
+
+        private GameObject FindSceneObject(string objectName)
+        {
+            return sceneRefs.transform.root
+                .GetComponentsInChildren<Transform>(true)
+                .FirstOrDefault(child => child.name == objectName)
+                ?.gameObject;
         }
 
         private static void SetFxEnabled(Component component, bool enabled)
