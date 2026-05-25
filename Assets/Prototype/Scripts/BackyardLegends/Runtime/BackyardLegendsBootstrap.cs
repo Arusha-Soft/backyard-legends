@@ -1880,6 +1880,13 @@ namespace BackyardLegends.Runtime
                     continue;
                 }
 
+                var buttonName = button.gameObject.name;
+                if (buttonName.IndexOf("Selected", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    bidButtonSelectedSprite ??= sprite;
+                    continue;
+                }
+
                 if (bidButtonDefaultSprite == null || sprite.name.EndsWith("_1", System.StringComparison.Ordinal))
                 {
                     bidButtonDefaultSprite = sprite;
