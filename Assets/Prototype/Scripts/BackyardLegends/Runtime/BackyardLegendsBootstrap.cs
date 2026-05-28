@@ -605,6 +605,7 @@ namespace BackyardLegends.Runtime
 
             if (view.FaceImage != null)
             {
+                SetAnchors(view.FaceImage.rectTransform, Vector2.zero, Vector2.one);
                 return view.FaceImage;
             }
 
@@ -612,7 +613,7 @@ namespace BackyardLegends.Runtime
             art.transform.SetParent(view.transform, false);
             art.transform.SetSiblingIndex(0);
             var rect = art.GetComponent<RectTransform>();
-            SetAnchors(rect, new Vector2(0.08f, 0.07f), new Vector2(0.92f, 0.93f));
+            SetAnchors(rect, Vector2.zero, Vector2.one);
             var image = art.GetComponent<Image>();
             image.raycastTarget = false;
             image.preserveAspect = true;
@@ -632,6 +633,7 @@ namespace BackyardLegends.Runtime
 
             if (view.FaceImage != null)
             {
+                SetAnchors(view.FaceImage.rectTransform, Vector2.zero, Vector2.one);
                 return view.FaceImage;
             }
 
@@ -639,7 +641,7 @@ namespace BackyardLegends.Runtime
             art.transform.SetParent(view.transform, false);
             art.transform.SetSiblingIndex(0);
             var rect = art.GetComponent<RectTransform>();
-            SetAnchors(rect, new Vector2(0.08f, 0.06f), new Vector2(0.92f, 0.94f));
+            SetAnchors(rect, Vector2.zero, Vector2.one);
             var image = art.GetComponent<Image>();
             image.raycastTarget = false;
             image.preserveAspect = true;
@@ -751,6 +753,9 @@ namespace BackyardLegends.Runtime
             artImage.sprite = sprite;
             artImage.color = ResolveCardArtTint(isLegal);
             artImage.enabled = true;
+            view.Panel.sprite = null;
+            view.Panel.type = Image.Type.Simple;
+            view.Panel.color = Color.clear;
             SetGraphicAlpha(view.RankText, 0f);
             SetGraphicAlpha(view.SuitText, 0f);
             return true;
@@ -768,6 +773,9 @@ namespace BackyardLegends.Runtime
             artImage.sprite = sprite;
             artImage.color = Color.white;
             artImage.enabled = true;
+            view.Panel.sprite = null;
+            view.Panel.type = Image.Type.Simple;
+            view.Panel.color = Color.clear;
             SetGraphicAlpha(view.RankText, 0f);
             SetGraphicAlpha(view.SuitText, 0f);
             return true;
@@ -1467,7 +1475,6 @@ namespace BackyardLegends.Runtime
                 var slot = trickSlots[pair.Key];
                 if (TryApplyImportedTrickFace(slot, pair.Value))
                 {
-                    slot.Panel.color = new Color(1f, 1f, 1f, 0.18f);
                     continue;
                 }
 
@@ -2752,10 +2759,10 @@ namespace BackyardLegends.Runtime
                 : ResolveCardButtonBaseSize() * 0.82f;
             var endSize = seat == SeatId.Bottom
                 ? ResolveBottomHandCardSize()
-                : ResolveCardButtonBaseSize() * 0.52f;
+                : ResolveOpponentHandCardSize();
             var endRotation = seat == SeatId.Bottom
                 ? GetFanTargetRotation(index, count)
-                : Quaternion.Euler(0f, 0f, seat == SeatId.Left ? -84f : seat == SeatId.Right ? 84f : 0f);
+                : GetSeatFanTargetRotation(seat, index, count);
             var explodeDirection = (startPosition - stackCenter).normalized;
             if (explodeDirection.sqrMagnitude < 0.01f)
             {
@@ -3633,12 +3640,15 @@ namespace BackyardLegends.Runtime
 
         private Vector2 GetSeatDealPoint(SeatId seat, int index, int count)
         {
-            var spreadIndex = index - (count - 1) * 0.5f;
+            var span = Mathf.Max(1, count - 1);
+            var t = count <= 1 ? 0f : index / (float)span * 2f - 1f;
+            var spreadIndex = index - span * 0.5f;
+            var arcLift = (1f - t * t) * 22f;
             var offset = seat switch
             {
-                SeatId.Top => new Vector2(spreadIndex * 10f, 0f),
-                SeatId.Left => new Vector2(0f, -spreadIndex * 8f),
-                SeatId.Right => new Vector2(0f, spreadIndex * 8f),
+                SeatId.Top => new Vector2(-30f + spreadIndex * 32f, -212f + arcLift),
+                SeatId.Left => new Vector2(-24f + spreadIndex * 18f, -76f + arcLift),
+                SeatId.Right => new Vector2(24f + spreadIndex * 18f, -76f + arcLift),
                 _ => Vector2.zero
             };
             return GetAnchoredPointWithOffset(seatViews[seat].Root, GetSeatInnerAnchor(seat), offset);
@@ -4414,7 +4424,9 @@ namespace BackyardLegends.Runtime
                 x += Mathf.Sign(delta) * pushBase * falloff;
             }
 
-            var y = 8f + (isSelected ? theme.cardLiftAmount : 0f);
+            var t = count <= 1 ? 0f : index / (float)span * 2f - 1f;
+            var arcLift = (1f - t * t) * Mathf.Clamp(cardWidth * 0.18f, 18f, 34f);
+            var y = 30f + arcLift + (isSelected ? theme.cardLiftAmount : 0f);
             return new Vector2(x, y);
         }
 
@@ -4425,7 +4437,29 @@ namespace BackyardLegends.Runtime
                 return Quaternion.identity;
             }
 
-            return Quaternion.Euler(0f, 0f, Mathf.Lerp(-10f, 10f, index / (float)(count - 1)));
+            return Quaternion.Euler(0f, 0f, Mathf.Lerp(-14f, 14f, index / (float)(count - 1)));
+        }
+
+        private Quaternion GetSeatFanTargetRotation(SeatId seat, int index, int count)
+        {
+            if (count <= 1)
+            {
+                return seat switch
+                {
+                    SeatId.Left => Quaternion.Euler(0f, 0f, 7f),
+                    SeatId.Right => Quaternion.Euler(0f, 0f, -7f),
+                    _ => Quaternion.identity
+                };
+            }
+
+            var t = index / (float)(count - 1) * 2f - 1f;
+            var baseAngle = seat switch
+            {
+                SeatId.Left => 7f,
+                SeatId.Right => -7f,
+                _ => 0f
+            };
+            return Quaternion.Euler(0f, 0f, baseAngle - t * 10f);
         }
 
         private Vector2 ResolveCardButtonBaseSize()
@@ -4436,6 +4470,11 @@ namespace BackyardLegends.Runtime
         private Vector2 ResolveBottomHandCardSize()
         {
             return ResolveCardButtonBaseSize() * BottomHandCardSizeMultiplier;
+        }
+
+        private Vector2 ResolveOpponentHandCardSize()
+        {
+            return ResolveCardButtonBaseSize() * 1.13f;
         }
 
         private Vector2 ResolveLastTrickCardSize()
