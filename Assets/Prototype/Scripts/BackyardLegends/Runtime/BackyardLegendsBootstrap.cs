@@ -4413,7 +4413,7 @@ namespace BackyardLegends.Runtime
             var containerWidth = sceneRefs.HandContent != null ? sceneRefs.HandContent.rect.width : 720f;
             var cardWidth = ResolveBottomHandCardSize().x;
             var fitSpacing = count <= 1 ? 0f : (containerWidth - cardWidth) / span;
-            var preferredSpread = cardWidth * 0.54f;
+            var preferredSpread = cardWidth * 0.42f;
             var maxSpread = count <= 1 ? 0f : Mathf.Max(16f, Mathf.Min(preferredSpread, fitSpacing));
             var x = (index - span * 0.5f) * maxSpread;
             if (selectedIndex >= 0 && selectedIndex < count && index != selectedIndex)
@@ -4424,20 +4424,13 @@ namespace BackyardLegends.Runtime
                 x += Mathf.Sign(delta) * pushBase * falloff;
             }
 
-            var t = count <= 1 ? 0f : index / (float)span * 2f - 1f;
-            var arcLift = (1f - t * t) * Mathf.Clamp(cardWidth * 0.18f, 18f, 34f);
-            var y = 30f + arcLift + (isSelected ? theme.cardLiftAmount : 0f);
+            var y = isSelected ? theme.cardLiftAmount : 0f;
             return new Vector2(x, y);
         }
 
         private Quaternion GetFanTargetRotation(int index, int count)
         {
-            if (count <= 1)
-            {
-                return Quaternion.identity;
-            }
-
-            return Quaternion.Euler(0f, 0f, Mathf.Lerp(-14f, 14f, index / (float)(count - 1)));
+            return Quaternion.identity;
         }
 
         private Quaternion GetSeatFanTargetRotation(SeatId seat, int index, int count)
