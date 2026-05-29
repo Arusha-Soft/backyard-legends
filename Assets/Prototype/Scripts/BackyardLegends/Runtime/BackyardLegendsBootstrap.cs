@@ -16,6 +16,7 @@ namespace BackyardLegends.Runtime
         private const float BookImpactExaggeration = 3f;
         private const float AvatarIntroMinSeconds = 2f;
         private const float AvatarIntroMaxSeconds = 4f;
+        private const float AvatarIntroEntrySeconds = 1.15f;
         private const float OpeningDeckIntroDelayStep = 0.001f;
         private const float OpeningDeckIntroDuration = 0.14f;
         private const float OpeningDeckSettleSeconds = 0.28f;
@@ -37,6 +38,12 @@ namespace BackyardLegends.Runtime
             "Card_Place_01",
             "Card_Place_02",
             "Card_Place_03"
+        };
+        private static readonly string[] SetBookAudioResourceNames =
+        {
+            "Set_Book_Impact",
+            "Set_Book_Impact_Heavy",
+            "Set_Book_Whoosh"
         };
         private static readonly Vector2 BidCalloutAnchorMin = new(0.08f, 1.00f);
         private static readonly Vector2 BidCalloutAnchorMax = new(0.92f, 1.42f);
@@ -142,9 +149,16 @@ namespace BackyardLegends.Runtime
         private Coroutine bidTurnDelayLoop;
         private Coroutine exitPromptFadeLoop;
         private Coroutine bookCameraShakeLoop;
+        private Coroutine bidCameraFocusLoop;
         private Transform bookCameraShakeTarget;
         private Vector3 bookCameraShakeStartPosition;
         private Quaternion bookCameraShakeStartRotation;
+        private Camera bidFocusCamera;
+        private Vector3 bidFocusDefaultPosition;
+        private Quaternion bidFocusDefaultRotation;
+        private float bidFocusDefaultOrthographicSize;
+        private float bidFocusDefaultFieldOfView;
+        private bool bidFocusDefaultsCaptured;
         private SpadesMatchController controller;
         private IRuleEngine ruleEngine;
         private BackyardLegendsSession session;
@@ -164,6 +178,7 @@ namespace BackyardLegends.Runtime
         private AudioClip avatarAssignedClip;
         private AudioClip bidPanelOpenClip;
         private AudioClip[] cardPlaceClips;
+        private AudioClip[] setBookClips;
         private Image lastTrickPanel;
         private Text lastTrickTitleText;
         private RectTransform lastTrickCardsRoot;
@@ -234,7 +249,11 @@ namespace BackyardLegends.Runtime
             public CanvasGroup Group;
             public Sprite OriginalSprite;
             public Vector3 OriginalScale;
+            public Quaternion OriginalRotation;
             public Vector2 OriginalAnchoredPosition;
+            public Vector2 EntryOffset;
+            public Vector2 EntryCurveOffset;
+            public float EntryRotationDegrees;
             public string OriginalName;
             public Sprite FinalSprite;
             public string FinalName;
@@ -1195,6 +1214,7 @@ namespace BackyardLegends.Runtime
             avatarAssignedClip = ResolveFeedbackClip(avatarAssignedClipAsset, "Avatar_Assigned", () => CreateToneClip("Avatar Assigned Cue", 420f, 840f, 0.16f, 0.14f));
             bidPanelOpenClip = ResolveFeedbackClip(bidPanelOpenClipAsset, "Bid_Panel_Open", () => CreateToneClip("Bid Panel Open Cue", 300f, 560f, 0.14f, 0.12f));
             cardPlaceClips = ResolveCardPlaceClips();
+            setBookClips = ResolveSetBookClips();
         }
 
         private static AudioClip ResolveFeedbackClip(AudioClip overrideClip, string resourceName, System.Func<AudioClip> fallbackFactory)
@@ -1221,6 +1241,17 @@ namespace BackyardLegends.Runtime
                 .Select(BackyardLegendsStreetAudio.LoadSfx)
                 .Where(clip => clip != null)
                 .ToArray();
+        }
+
+        private AudioClip[] ResolveSetBookClips()
+        {
+            var clips = SetBookAudioResourceNames
+                .Select(BackyardLegendsStreetAudio.LoadSfx)
+                .Where(clip => clip != null)
+                .ToArray();
+            return clips.Length > 0
+                ? clips
+                : new[] { setBookClip }.Where(clip => clip != null).ToArray();
         }
 
         private AudioSource FindSoundFxAudioSource()
@@ -1338,6 +1369,58 @@ namespace BackyardLegends.Runtime
 
             nextAvatarRouletteCueTime = Time.unscaledTime + 0.095f;
             PlayFeedback(FeedbackCue.AvatarRoulette, 0.11f);
+        }
+
+        private void PlaySetBookSound()
+        {
+            if (feedbackAudioSource == null)
+            {
+                return;
+            }
+
+            if (setBookClips == null || setBookClips.Length == 0)
+            {
+                PlayFeedback(FeedbackCue.SetBook, 1f);
+                return;
+            }
+
+            PlaySetBookClips(1.4f);
+        }
+
+        private void PlayBookWonSound()
+        {
+            if (setBookClips == null || setBookClips.Length == 0)
+            {
+                PlayFeedback(FeedbackCue.Collect, 0.5f);
+                return;
+            }
+
+            PlaySetBookClips(0.72f);
+        }
+
+        private void PlaySetBookClips(float volumeMultiplier)
+        {
+            if (feedbackAudioSource == null || setBookClips == null)
+            {
+                return;
+            }
+
+            for (var i = 0; i < setBookClips.Length; i++)
+            {
+                var clip = setBookClips[i];
+                if (clip == null)
+                {
+                    continue;
+                }
+
+                var volume = i switch
+                {
+                    0 => 1.55f,
+                    1 => 1.9f,
+                    _ => 0.9f
+                };
+                feedbackAudioSource.PlayOneShot(clip, volume * volumeMultiplier);
+            }
         }
 
         private void ApplyTheme()
@@ -2176,6 +2259,11 @@ namespace BackyardLegends.Runtime
             var shouldShow = controller.State.Phase == MatchPhase.Bidding &&
                              controller.State.RoundState.BidState.CurrentBidder == SeatId.Bottom;
             SetBidSheetVisible(shouldShow);
+            if (shouldShow)
+            {
+                RestoreBidCameraFocus();
+            }
+
             if (!shouldShow)
             {
                 pendingBidSelection = null;
@@ -2415,9 +2503,13 @@ namespace BackyardLegends.Runtime
                     Group = group,
                     OriginalSprite = avatarImage != null ? avatarImage.sprite : null,
                     OriginalScale = view.Root.localScale,
+                    OriginalRotation = view.Root.localRotation,
                     OriginalAnchoredPosition = view.Root.anchoredPosition,
+                    EntryOffset = GetAvatarIntroEntryOffset(view, seat),
+                    EntryCurveOffset = GetAvatarIntroCurveOffset(seat),
+                    EntryRotationDegrees = GetAvatarIntroEntryRotation(seat),
                     OriginalName = view.NameText != null ? view.NameText.text : seat.DisplayName(),
-                    EntryDelay = seat == SeatId.Bottom ? 0.05f : Random.Range(0.12f, 0.38f),
+                    EntryDelay = seat == SeatId.Bottom ? 0.05f : Random.Range(0.16f, 0.48f),
                     RouletteDuration = seat == SeatId.Bottom ? 0.4f : Random.Range(AvatarIntroMinSeconds, AvatarIntroMaxSeconds),
                     RouletteOffset = Random.Range(0, Mathf.Max(1, avatarRouletteSprites.Count))
                 };
@@ -2452,8 +2544,9 @@ namespace BackyardLegends.Runtime
                 }
 
                 state.View.gameObject.SetActive(true);
-                state.View.Root.localScale = state.OriginalScale * 0.78f;
-                state.View.Root.anchoredPosition = state.OriginalAnchoredPosition + GetAvatarIntroEntryOffset(state.Seat);
+                state.View.Root.localScale = state.OriginalScale * 0.68f;
+                state.View.Root.localRotation = state.OriginalRotation * Quaternion.Euler(0f, 0f, state.EntryRotationDegrees);
+                state.View.Root.anchoredPosition = state.OriginalAnchoredPosition + state.EntryOffset;
                 if (state.Group != null)
                 {
                     state.Group.alpha = 0f;
@@ -2504,22 +2597,26 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
-            var entryT = Mathf.Clamp01(localTime / 0.34f);
-            var entryEase = Mathf.SmoothStep(0f, 1f, entryT);
+            var entryT = Mathf.Clamp01(localTime / AvatarIntroEntrySeconds);
+            var entryEase = EaseOutBack(entryT);
+            var entryVisualEase = Mathf.SmoothStep(0f, 1f, entryT);
             if (state.Group != null)
             {
-                state.Group.alpha = entryEase;
+                state.Group.alpha = entryVisualEase;
             }
 
-            state.View.Root.anchoredPosition = Vector2.Lerp(
-                state.OriginalAnchoredPosition + GetAvatarIntroEntryOffset(state.Seat),
-                state.OriginalAnchoredPosition,
-                entryEase);
+            var entryStart = state.OriginalAnchoredPosition + state.EntryOffset;
+            var entryMid = state.OriginalAnchoredPosition + state.EntryOffset * 0.42f + state.EntryCurveOffset;
+            state.View.Root.anchoredPosition = QuadraticBezier(entryStart, entryMid, state.OriginalAnchoredPosition, entryEase);
+            var drift = Mathf.Sin(entryT * Mathf.PI * 2.5f) * (1f - entryVisualEase);
+            state.View.Root.localRotation = state.OriginalRotation *
+                                            Quaternion.Euler(0f, 0f, Mathf.Lerp(state.EntryRotationDegrees, 0f, entryVisualEase) + drift * 7f);
 
             var settlePulse = localTime > state.RouletteDuration
                 ? Mathf.Sin(Mathf.Clamp01((localTime - state.RouletteDuration) / 0.26f) * Mathf.PI) * 0.08f
                 : Mathf.Sin(localTime * 18f) * 0.018f;
-            state.View.Root.localScale = state.OriginalScale * (Mathf.Lerp(0.78f, 1f, entryEase) + settlePulse);
+            var entryPop = Mathf.Sin(entryT * Mathf.PI) * 0.09f;
+            state.View.Root.localScale = state.OriginalScale * (Mathf.Lerp(0.68f, 1f, entryVisualEase) + entryPop + settlePulse);
 
             if (state.Seat == SeatId.Bottom)
             {
@@ -2587,6 +2684,7 @@ namespace BackyardLegends.Runtime
 
             state.View.Root.anchoredPosition = state.OriginalAnchoredPosition;
             state.View.Root.localScale = state.OriginalScale;
+            state.View.Root.localRotation = state.OriginalRotation;
             ApplyAvatarIntroSeatSprite(state, state.FinalSprite);
             if (state.View.NameText != null)
             {
@@ -2638,16 +2736,63 @@ namespace BackyardLegends.Runtime
             return sprite != null ? sprite : fallback;
         }
 
-        private Vector2 GetAvatarIntroEntryOffset(SeatId seat)
+        private static Vector2 GetAvatarIntroEntryOffset(SeatPanelView view, SeatId seat)
+        {
+            var parentRect = view?.Root != null ? view.Root.parent as RectTransform : null;
+            var parentSize = parentRect != null
+                ? parentRect.rect.size
+                : new Vector2(Mathf.Max(Screen.width, 1280f), Mathf.Max(Screen.height, 720f));
+            var seatSize = view?.Root != null
+                ? view.Root.rect.size
+                : new Vector2(220f, 180f);
+            var horizontalTravel = Mathf.Max(parentSize.x, Screen.width, 1280f) + seatSize.x + 160f;
+            var verticalTravel = Mathf.Max(parentSize.y, Screen.height, 720f) + seatSize.y + 160f;
+            return seat switch
+            {
+                SeatId.Left => new Vector2(-horizontalTravel, 0f),
+                SeatId.Right => new Vector2(horizontalTravel, 0f),
+                SeatId.Top => new Vector2(0f, verticalTravel),
+                SeatId.Bottom => new Vector2(0f, -verticalTravel),
+                _ => Vector2.zero
+            };
+        }
+
+        private static Vector2 GetAvatarIntroCurveOffset(SeatId seat)
         {
             return seat switch
             {
-                SeatId.Left => new Vector2(-70f, 0f),
-                SeatId.Right => new Vector2(70f, 0f),
-                SeatId.Top => new Vector2(0f, 70f),
-                SeatId.Bottom => new Vector2(0f, -70f),
+                SeatId.Left => new Vector2(130f, 210f),
+                SeatId.Right => new Vector2(-130f, -210f),
+                SeatId.Top => new Vector2(-250f, -120f),
+                SeatId.Bottom => new Vector2(250f, 120f),
                 _ => Vector2.zero
             };
+        }
+
+        private static float GetAvatarIntroEntryRotation(SeatId seat)
+        {
+            return seat switch
+            {
+                SeatId.Left => -18f,
+                SeatId.Right => 18f,
+                SeatId.Top => -14f,
+                SeatId.Bottom => 14f,
+                _ => 0f
+            };
+        }
+
+        private static float EaseOutBack(float t)
+        {
+            const float overshoot = 1.18f;
+            t = Mathf.Clamp01(t) - 1f;
+            return 1f + t * t * ((overshoot + 1f) * t + overshoot);
+        }
+
+        private static Vector2 QuadraticBezier(Vector2 a, Vector2 b, Vector2 c, float t)
+        {
+            t = Mathf.Clamp01(t);
+            var oneMinusT = 1f - t;
+            return oneMinusT * oneMinusT * a + 2f * oneMinusT * t * b + t * t * c;
         }
 
         private void EnsureAvatarRouletteSprites()
@@ -3804,7 +3949,8 @@ namespace BackyardLegends.Runtime
             hiddenTrickSlots.Clear();
             resolvedTrickCards.Clear();
             RenderTrickArea();
-            PlayFeedback(FeedbackCue.Collect, 0.22f);
+            PlayFeedback(FeedbackCue.Collect, 0.16f);
+            PlayBookWonSound();
             RefreshBookLeaderLightningFx();
             SetLatestBookAura(winner);
             StartBookCameraShake();
@@ -4401,7 +4547,7 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
-            ConfigureBookLightningFx(lightning, 1f);
+            EnableBookLightningFx(lightning);
         }
 
         private Component EnsureAvatarBookLightningFx(SeatId seat, Image avatarImage)
@@ -4485,7 +4631,7 @@ namespace BackyardLegends.Runtime
             return leader;
         }
 
-        private static void ConfigureBookLightningFx(Component lightning, float intensity)
+        private static void EnableBookLightningFx(Component lightning)
         {
             if (lightning == null)
             {
@@ -4497,13 +4643,6 @@ namespace BackyardLegends.Runtime
                 behaviour.enabled = true;
             }
 
-            SetFxBool(lightning, "ActiveChange", true);
-            SetFxBool(lightning, "ActiveUpdate", true);
-            SetFxFloat(lightning, "_Alpha", 1f - Mathf.Clamp01(intensity));
-            SetFxFloat(lightning, "_Value1", 144f);
-            SetFxFloat(lightning, "_Value2", 1.65f);
-            SetFxFloat(lightning, "_Value3", 0.88f);
-            SetFxFloat(lightning, "_Value4", Mathf.Repeat(Time.unscaledTime * 2.8f, 1f));
             CallFxUpdate(lightning);
         }
 
@@ -4523,9 +4662,6 @@ namespace BackyardLegends.Runtime
                     continue;
                 }
 
-                SetFxFloat(fx, "_Alpha", 1f);
-                CallFxUpdate(fx);
-                SetFxBool(fx, "ActiveUpdate", false);
                 if (fx is Behaviour behaviour)
                 {
                     behaviour.enabled = false;
@@ -4596,6 +4732,172 @@ namespace BackyardLegends.Runtime
             DisableBookLightningFxExcept(null);
         }
 
+        private void StartBidCameraFocus(SeatId seat)
+        {
+            var targetCamera = Camera.main ?? FindFirstObjectByType<Camera>();
+            if (targetCamera == null)
+            {
+                return;
+            }
+
+            CaptureBidCameraDefaults(targetCamera);
+            if (bidCameraFocusLoop != null)
+            {
+                StopCoroutine(bidCameraFocusLoop);
+            }
+
+            var side = GetBidCameraFocusDirection(seat);
+            var travel = targetCamera.orthographic
+                ? Mathf.Max(0.45f, bidFocusDefaultOrthographicSize * 0.18f)
+                : 0.52f;
+            var targetPosition = bidFocusDefaultPosition + new Vector3(side.x * travel, side.y * travel * 0.78f, 0f);
+            var targetOrthographicSize = targetCamera.orthographic
+                ? bidFocusDefaultOrthographicSize * 0.92f
+                : bidFocusDefaultOrthographicSize;
+            var targetFieldOfView = targetCamera.orthographic
+                ? bidFocusDefaultFieldOfView
+                : bidFocusDefaultFieldOfView * 0.94f;
+
+            bidCameraFocusLoop = StartCoroutine(BidCameraFocusRoutine(
+                targetCamera,
+                targetPosition,
+                bidFocusDefaultRotation,
+                targetOrthographicSize,
+                targetFieldOfView,
+                0.95f));
+        }
+
+        private void RestoreBidCameraFocus(bool immediate = false)
+        {
+            if (!bidFocusDefaultsCaptured || bidFocusCamera == null)
+            {
+                return;
+            }
+
+            if (bidCameraFocusLoop != null)
+            {
+                StopCoroutine(bidCameraFocusLoop);
+                bidCameraFocusLoop = null;
+            }
+
+            if (immediate)
+            {
+                ApplyBidCameraState(bidFocusCamera, bidFocusDefaultPosition, bidFocusDefaultRotation, bidFocusDefaultOrthographicSize, bidFocusDefaultFieldOfView);
+                bidFocusDefaultsCaptured = false;
+                bidFocusCamera = null;
+                return;
+            }
+
+            bidCameraFocusLoop = StartCoroutine(BidCameraFocusRoutine(
+                bidFocusCamera,
+                bidFocusDefaultPosition,
+                bidFocusDefaultRotation,
+                bidFocusDefaultOrthographicSize,
+                bidFocusDefaultFieldOfView,
+                0.85f,
+                clearDefaultsOnComplete: true));
+        }
+
+        private void CaptureBidCameraDefaults(Camera targetCamera)
+        {
+            if (bidFocusDefaultsCaptured && bidFocusCamera == targetCamera)
+            {
+                return;
+            }
+
+            bidFocusCamera = targetCamera;
+            bidFocusDefaultPosition = targetCamera.transform.localPosition;
+            bidFocusDefaultRotation = targetCamera.transform.localRotation;
+            bidFocusDefaultOrthographicSize = targetCamera.orthographicSize;
+            bidFocusDefaultFieldOfView = targetCamera.fieldOfView;
+            bidFocusDefaultsCaptured = true;
+        }
+
+        private IEnumerator BidCameraFocusRoutine(
+            Camera targetCamera,
+            Vector3 targetPosition,
+            Quaternion targetRotation,
+            float targetOrthographicSize,
+            float targetFieldOfView,
+            float duration,
+            bool clearDefaultsOnComplete = false)
+        {
+            if (targetCamera == null)
+            {
+                yield break;
+            }
+
+            var transform = targetCamera.transform;
+            var startPosition = transform.localPosition;
+            var startRotation = transform.localRotation;
+            var startOrthographicSize = targetCamera.orthographicSize;
+            var startFieldOfView = targetCamera.fieldOfView;
+            var elapsed = 0f;
+            duration = Mathf.Max(0.05f, duration);
+            while (elapsed < duration && targetCamera != null)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(elapsed / duration);
+                var eased = EaseInOutCubic(t);
+                var floatDrift = Mathf.Sin(t * Mathf.PI) * 0.035f;
+                transform.localPosition = Vector3.Lerp(startPosition, targetPosition, eased) + transform.up * floatDrift;
+                transform.localRotation = Quaternion.Slerp(startRotation, targetRotation, eased);
+                if (targetCamera.orthographic)
+                {
+                    targetCamera.orthographicSize = Mathf.Lerp(startOrthographicSize, targetOrthographicSize, eased);
+                }
+                else
+                {
+                    targetCamera.fieldOfView = Mathf.Lerp(startFieldOfView, targetFieldOfView, eased);
+                }
+
+                yield return null;
+            }
+
+            if (targetCamera != null)
+            {
+                ApplyBidCameraState(targetCamera, targetPosition, targetRotation, targetOrthographicSize, targetFieldOfView);
+            }
+
+            bidCameraFocusLoop = null;
+            if (clearDefaultsOnComplete)
+            {
+                bidFocusDefaultsCaptured = false;
+                bidFocusCamera = null;
+            }
+        }
+
+        private static void ApplyBidCameraState(Camera targetCamera, Vector3 position, Quaternion rotation, float orthographicSize, float fieldOfView)
+        {
+            if (targetCamera == null)
+            {
+                return;
+            }
+
+            targetCamera.transform.localPosition = position;
+            targetCamera.transform.localRotation = rotation;
+            if (targetCamera.orthographic)
+            {
+                targetCamera.orthographicSize = orthographicSize;
+            }
+            else
+            {
+                targetCamera.fieldOfView = fieldOfView;
+            }
+        }
+
+        private static Vector2 GetBidCameraFocusDirection(SeatId seat)
+        {
+            return seat switch
+            {
+                SeatId.Left => new Vector2(-1f, 0.08f),
+                SeatId.Right => new Vector2(1f, 0.08f),
+                SeatId.Top => new Vector2(0f, 0.88f),
+                SeatId.Bottom => new Vector2(0f, -0.76f),
+                _ => Vector2.zero
+            };
+        }
+
         private void StartBookCameraShake()
         {
             if (bookCameraShakeLoop != null)
@@ -4622,16 +4924,20 @@ namespace BackyardLegends.Runtime
 
         private IEnumerator BookCameraShakeRoutine(Transform target)
         {
-            var duration = Mathf.Max(0.28f, theme.shakeDuration * 1.9f);
+            var duration = Mathf.Max(0.44f, theme.shakeDuration * 2.8f);
             var elapsed = 0f;
             while (elapsed < duration && target != null)
             {
                 elapsed += Time.unscaledDeltaTime;
                 var t = Mathf.Clamp01(elapsed / duration);
                 var falloff = 1f - EaseOutCubic(t);
-                var x = Mathf.Sin(elapsed * 112f) * 0.14f * falloff;
-                var y = Mathf.Cos(elapsed * 89f) * 0.09f * falloff;
-                var roll = Mathf.Sin(elapsed * 138f) * 1.35f * falloff;
+                var hit = Mathf.Exp(-18f * t);
+                var x = (Mathf.Sin(elapsed * 118f) * 0.32f + Mathf.Sin(elapsed * 39f) * 0.14f) * falloff;
+                var y = (Mathf.Cos(elapsed * 96f) * 0.24f + Mathf.Sin(elapsed * 51f) * 0.08f) * falloff;
+                var roll = (Mathf.Sin(elapsed * 142f) * 3.2f + Mathf.Sin(elapsed * 28f) * 1.1f) * falloff;
+                x += Mathf.Sin(elapsed * 220f) * 0.18f * hit;
+                y += Mathf.Cos(elapsed * 210f) * 0.14f * hit;
+                roll += Mathf.Sin(elapsed * 260f) * 1.8f * hit;
                 target.localPosition = bookCameraShakeStartPosition + new Vector3(x, y, 0f);
                 target.localRotation = bookCameraShakeStartRotation * Quaternion.Euler(0f, 0f, roll);
                 yield return null;
@@ -4676,6 +4982,7 @@ namespace BackyardLegends.Runtime
             }
 
             RestoreBookCameraShakeTarget();
+            RestoreBidCameraFocus(immediate: true);
             HideAllBidBubbles(true);
             if (deferredSheetStateLoop != null)
             {
@@ -5115,6 +5422,11 @@ namespace BackyardLegends.Runtime
         private void ShowBidCallout(SeatId seat, int bid)
         {
             var holdForPlayerDecision = ShouldHoldBidCalloutForPlayerDecision(seat);
+            if (seat != SeatId.Bottom)
+            {
+                StartBidCameraFocus(seat);
+            }
+
             ShowSeatCallout(
                 seat,
                 bid == 0 ? "I BID NIL" : $"I BID {bid}",
@@ -5786,7 +6098,7 @@ namespace BackyardLegends.Runtime
 
             RestoreBannerVisualDefaults(false);
             var color = team == TeamId.Home ? theme.green : theme.red;
-            PlayFeedback(FeedbackCue.SetBook, 0.95f);
+            PlaySetBookSound();
             TriggerSetBookHaptic();
             var center = GetAnchoredPoint(sceneRefs.BannerText.rectTransform, new Vector2(0.5f, 0.5f));
             SpawnImpactBurst(center, color, 88f, 10);
