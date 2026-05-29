@@ -1780,6 +1780,18 @@ namespace BackyardLegends.Runtime
                 view.SuitText.color = card.IsRed ? theme.red : new Color(0.07f, 0.07f, 0.08f, 1f);
             }
             view.CanvasGroup.alpha = 1f;
+            view.CanvasGroup.blocksRaycasts = true;
+            view.CanvasGroup.interactable = true;
+            view.Panel.raycastTarget = true;
+            if (view.FaceImage != null)
+            {
+                view.FaceImage.raycastTarget = false;
+            }
+
+            view.RankText.raycastTarget = false;
+            view.SuitText.raycastTarget = false;
+            view.Button.enabled = true;
+            view.Button.targetGraphic = view.Panel;
             view.Button.onClick.RemoveAllListeners();
             view.Button.interactable = controller.State.Phase == MatchPhase.TrickPlay;
             view.Button.onClick.AddListener(() => OnCardTapped(card));
@@ -4498,7 +4510,6 @@ namespace BackyardLegends.Runtime
 
         private void SpawnImpactBurst(Vector2 anchoredPosition, Color color, float size, int pieces)
         {
-            StartCoroutine(ImpactBurstRoutine(anchoredPosition, color, size, pieces));
         }
 
         private IEnumerator OpeningDealFinale()
