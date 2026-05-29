@@ -32,6 +32,13 @@ namespace BackyardLegends.Runtime
 #endif
         private const string AvatarResourceRoot = "BackyardLegends/Avatars";
         private const string AvatarAssetFolder = "Assets/Prototype/Art/Update3/avatar";
+        private static readonly string[] CardPlaceAudioResourceNames =
+        {
+            "Card_Place_01",
+            "Card_Place_02",
+            "Card_Place_03",
+            "Card_Place_04"
+        };
         private static readonly Vector2 BidCalloutAnchorMin = new(0.08f, 1.00f);
         private static readonly Vector2 BidCalloutAnchorMax = new(0.92f, 1.42f);
         private static readonly string[] AvatarDisplayNames =
@@ -151,6 +158,7 @@ namespace BackyardLegends.Runtime
         private AudioClip roundScoreClip;
         private AudioClip matchEndClip;
         private AudioClip setBookClip;
+        private AudioClip[] cardPlaceClips;
         private Image lastTrickPanel;
         private Text lastTrickTitleText;
         private RectTransform lastTrickCardsRoot;
@@ -1160,16 +1168,43 @@ namespace BackyardLegends.Runtime
                 feedbackAudioSource.volume = 0.18f;
             }
 
-            bidClip = bidClipAsset != null ? bidClipAsset : CreateToneClip("Bid Cue", 680f, 920f, 0.09f, 0.16f);
-            selectClip = selectClipAsset != null ? selectClipAsset : CreateToneClip("Select Cue", 520f, 760f, 0.05f, 0.13f);
-            playClip = playClipAsset != null ? playClipAsset : CreateToneClip("Play Cue", 430f, 700f, 0.07f, 0.17f);
-            collectClip = collectClipAsset != null ? collectClipAsset : CreateToneClip("Collect Cue", 360f, 580f, 0.13f, 0.2f);
-            bannerClip = bannerClipAsset != null ? bannerClipAsset : CreateToneClip("Banner Cue", 720f, 1080f, 0.16f, 0.14f);
-            dealClip = dealClipAsset != null ? dealClipAsset : CreateToneClip("Deal Cue", 250f, 410f, 0.18f, 0.2f);
-            invalidClip = invalidClipAsset != null ? invalidClipAsset : CreateToneClip("Invalid Cue", 240f, 160f, 0.1f, 0.16f);
-            roundScoreClip = roundScoreClipAsset != null ? roundScoreClipAsset : CreateToneClip("Round Score Cue", 560f, 820f, 0.2f, 0.18f);
-            matchEndClip = matchEndClipAsset != null ? matchEndClipAsset : CreateToneClip("Match End Cue", 460f, 920f, 0.28f, 0.22f);
-            setBookClip = setBookClipAsset != null ? setBookClipAsset : CreateSetBookImpactClip();
+            bidClip = ResolveFeedbackClip(bidClipAsset, "Bid_Lock", () => CreateToneClip("Bid Cue", 680f, 920f, 0.09f, 0.16f));
+            selectClip = ResolveFeedbackClip(selectClipAsset, "Ui_Select", () => CreateToneClip("Select Cue", 520f, 760f, 0.05f, 0.13f));
+            playClip = ResolveFeedbackClip(playClipAsset, "Card_Play", () => CreateToneClip("Play Cue", 430f, 700f, 0.07f, 0.17f));
+            collectClip = ResolveFeedbackClip(collectClipAsset, "Trick_Collect", () => CreateToneClip("Collect Cue", 360f, 580f, 0.13f, 0.2f));
+            bannerClip = ResolveFeedbackClip(bannerClipAsset, "Banner_Pop", () => CreateToneClip("Banner Cue", 720f, 1080f, 0.16f, 0.14f));
+            dealClip = ResolveFeedbackClip(dealClipAsset, "Card_Deal", () => CreateToneClip("Deal Cue", 250f, 410f, 0.18f, 0.2f));
+            invalidClip = ResolveFeedbackClip(invalidClipAsset, "Ui_Invalid", () => CreateToneClip("Invalid Cue", 240f, 160f, 0.1f, 0.16f));
+            roundScoreClip = ResolveFeedbackClip(roundScoreClipAsset, "Score_Punch", () => CreateToneClip("Round Score Cue", 560f, 820f, 0.2f, 0.18f));
+            matchEndClip = ResolveFeedbackClip(matchEndClipAsset, "Match_End", () => CreateToneClip("Match End Cue", 460f, 920f, 0.28f, 0.22f));
+            setBookClip = ResolveFeedbackClip(setBookClipAsset, "Set_Book_Impact", CreateSetBookImpactClip);
+            cardPlaceClips = ResolveCardPlaceClips();
+        }
+
+        private static AudioClip ResolveFeedbackClip(AudioClip overrideClip, string resourceName, System.Func<AudioClip> fallbackFactory)
+        {
+            if (overrideClip != null)
+            {
+                return overrideClip;
+            }
+
+            return BackyardLegendsStreetAudio.LoadSfx(resourceName) ?? fallbackFactory();
+        }
+
+        private AudioClip[] ResolveCardPlaceClips()
+        {
+            var overrideClips = cardPlaceClipAssets?
+                .Where(clip => clip != null)
+                .ToArray();
+            if (overrideClips != null && overrideClips.Length > 0)
+            {
+                return overrideClips;
+            }
+
+            return CardPlaceAudioResourceNames
+                .Select(BackyardLegendsStreetAudio.LoadSfx)
+                .Where(clip => clip != null)
+                .ToArray();
         }
 
         private AudioSource FindSoundFxAudioSource()
@@ -1262,7 +1297,7 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
-            var clips = cardPlaceClipAssets?
+            var clips = cardPlaceClips?
                 .Where(clip => clip != null)
                 .ToArray();
             if (clips == null || clips.Length == 0)
@@ -1272,7 +1307,7 @@ namespace BackyardLegends.Runtime
             }
 
             var clip = clips[Random.Range(0, clips.Length)];
-            feedbackAudioSource.PlayOneShot(clip, 1f);
+            feedbackAudioSource.PlayOneShot(clip, 0.28f);
         }
 
         private void ApplyTheme()

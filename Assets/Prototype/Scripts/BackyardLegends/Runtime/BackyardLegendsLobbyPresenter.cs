@@ -162,9 +162,9 @@ namespace BackyardLegends.Runtime
             feedbackAudioSource.spatialBlend = 0f;
             feedbackAudioSource.volume = 0.16f;
 
-            hoverClip = CreateToneClip("Lobby Hover Cue", 680f, 920f, 0.03f, 0.05f);
-            selectClip = CreateToneClip("Lobby Select Cue", 500f, 760f, 0.05f, 0.09f);
-            confirmClip = CreateToneClip("Lobby Confirm Cue", 400f, 620f, 0.11f, 0.13f);
+            hoverClip = BackyardLegendsStreetAudio.LoadSfx("Ui_Hover") ?? CreateToneClip("Lobby Hover Cue", 680f, 920f, 0.03f, 0.05f);
+            selectClip = BackyardLegendsStreetAudio.LoadSfx("Ui_Select") ?? CreateToneClip("Lobby Select Cue", 500f, 760f, 0.05f, 0.09f);
+            confirmClip = BackyardLegendsStreetAudio.LoadSfx("Ui_Confirm") ?? CreateToneClip("Lobby Confirm Cue", 400f, 620f, 0.11f, 0.13f);
         }
 
         private void ApplyTheme()
