@@ -14,8 +14,50 @@ namespace BackyardLegends.Runtime
         private const float LastTrickCardSizeMultiplier = 0.54f;
         private const int BidCalloutFontSize = 46;
         private const float BookImpactExaggeration = 3f;
+        private const float AvatarIntroMinSeconds = 2f;
+        private const float AvatarIntroMaxSeconds = 4f;
+        private const float OpeningDeckIntroDelayStep = 0.001f;
+        private const float OpeningDeckIntroDuration = 0.28f;
+        private const float OpeningDeckSettleSeconds = 2.2f;
+        private const float OpeningDealDelayStep = 0.038f;
+        private const float OpeningDealTravelSeconds = 0.62f;
+        private const float OpeningDeckStackSizeMultiplier = 1.36f;
+        private const float OpeningDeckStackXOffset = 0.62f;
+        private const float OpeningDeckStackYOffset = -0.42f;
+        private const string AvatarResourceRoot = "BackyardLegends/Avatars";
+        private const string AvatarAssetFolder = "Assets/Prototype/Art/Update3/avatar";
         private static readonly Vector2 BidCalloutAnchorMin = new(0.08f, 1.00f);
         private static readonly Vector2 BidCalloutAnchorMax = new(0.92f, 1.42f);
+        private static readonly string[] AvatarDisplayNames =
+        {
+            string.Empty,
+            "FANG",
+            "YOU",
+            "QUEEN",
+            "SHADES",
+            "RAIDER",
+            "DIVA",
+            "ACE",
+            "ROXY",
+            "KNOX",
+            "ZARA",
+            "KINGJAY",
+            "MONK",
+            "BANDIT",
+            "SOUL",
+            "MASK",
+            "DREAD",
+            "OG",
+            "GREEN"
+        };
+        private static readonly string[] StartupHiddenCardGroupNames =
+        {
+            "Top Opponent Cards",
+            "Left Opponent Cards",
+            "Right Opponent Cards",
+            "Bottom Player Cards",
+            "Update3 Runtime Hand Content"
+        };
 
         [SerializeField] private BackyardLegendsSceneRefs sceneRefs;
         [SerializeField] private ThemeConfig themeOverride;
@@ -44,6 +86,9 @@ namespace BackyardLegends.Runtime
         private readonly Dictionary<SeatId, Coroutine> bidBubbleLoops = new();
         private readonly Dictionary<SeatId, Coroutine> bookTextLoops = new();
         private readonly Dictionary<SeatId, BookTextVisualState> bookTextDefaults = new();
+        private readonly Dictionary<SeatId, Image> seatAvatarImages = new();
+        private readonly Dictionary<SeatId, CanvasGroup> seatIntroGroups = new();
+        private readonly List<Sprite> avatarRouletteSprites = new();
         private readonly Queue<string> recentFeed = new();
         private readonly Queue<IEnumerator> queuedAnimations = new();
         private readonly Queue<TeamId> pendingSetBookMoments = new();
@@ -51,6 +96,7 @@ namespace BackyardLegends.Runtime
         private readonly HashSet<SeatId> hiddenTrickSlots = new();
         private readonly Dictionary<SeatId, Card> resolvedTrickCards = new();
         private readonly List<CardButtonView> floatingCards = new();
+        private readonly List<CardButtonView> openingDealRuntimeSeatCards = new();
         private readonly List<Graphic> transientFx = new();
         private readonly HashSet<Image> preservedSeatPanelVisuals = new();
         private readonly Dictionary<SeatId, Vector3> preservedSeatRootScales = new();
@@ -62,6 +108,7 @@ namespace BackyardLegends.Runtime
         private Coroutine aiLoop;
         private Coroutine animationQueueLoop;
         private Coroutine openingStackIntroLoop;
+        private Coroutine avatarIntroLoop;
         private Coroutine deferredSheetStateLoop;
         private Coroutine bannerLoop;
         private Coroutine flashLoop;
@@ -102,6 +149,7 @@ namespace BackyardLegends.Runtime
         private bool pendingRoundSheetOpen;
         private bool pendingEndSheetOpen;
         private bool setBookMomentRunning;
+        private bool avatarIntroRunning;
         private bool openingDealPending;
         private bool openingDealRunning;
         private bool handReviewPending;
@@ -136,6 +184,23 @@ namespace BackyardLegends.Runtime
             None,
             ReturnToLobby,
             ClaimRest
+        }
+
+        private sealed class AvatarIntroSeatState
+        {
+            public SeatId Seat;
+            public SeatPanelView View;
+            public Image AvatarImage;
+            public CanvasGroup Group;
+            public Sprite OriginalSprite;
+            public Vector3 OriginalScale;
+            public Vector2 OriginalAnchoredPosition;
+            public string OriginalName;
+            public Sprite FinalSprite;
+            public string FinalName;
+            public float EntryDelay;
+            public float RouletteDuration;
+            public int RouletteOffset;
         }
 
         private readonly struct CardMotionSnapshot
@@ -209,6 +274,16 @@ namespace BackyardLegends.Runtime
             public bool ArtVisible { get; }
             public Color RankColor { get; }
             public Color SuitColor { get; }
+        }
+
+        private sealed class OpeningDealFlight
+        {
+            public CardMotionSnapshot Motion;
+            public bool RevealToHand;
+            public CanvasGroup RevealTarget;
+            public CardButtonView Ghost;
+            public float Delay;
+            public int SequenceIndex;
         }
 
         private readonly struct BookTextVisualState
@@ -552,6 +627,8 @@ namespace BackyardLegends.Runtime
             seatViews[SeatId.Top] = sceneRefs.TopSeat;
             seatViews[SeatId.Right] = sceneRefs.RightSeat;
 
+            CacheSeatAvatarRefs();
+
             trickSlots[SeatId.Bottom] = sceneRefs.BottomTrick;
             trickSlots[SeatId.Left] = sceneRefs.LeftTrick;
             trickSlots[SeatId.Top] = sceneRefs.TopTrick;
@@ -566,6 +643,30 @@ namespace BackyardLegends.Runtime
                         bidButtons[bid] = sceneRefs.BidButtons[bid];
                     }
                 }
+            }
+        }
+
+        private void CacheSeatAvatarRefs()
+        {
+            seatAvatarImages.Clear();
+            seatIntroGroups.Clear();
+
+            foreach (var pair in seatViews)
+            {
+                var view = pair.Value;
+                if (view == null)
+                {
+                    continue;
+                }
+
+                var avatarTransform = view.Root.Find("Avatar");
+                if (avatarTransform != null && avatarTransform.TryGetComponent<Image>(out var avatarImage))
+                {
+                    seatAvatarImages[pair.Key] = avatarImage;
+                }
+
+                var group = ResolveCanvasGroup(view.gameObject);
+                seatIntroGroups[pair.Key] = group;
             }
         }
 
@@ -1092,6 +1193,14 @@ namespace BackyardLegends.Runtime
             pendingBidSelection = null;
             lastRenderedHand.Clear();
             HideAllBidBubbles(true);
+            ClearOpeningDealRuntimeSeatCards();
+            if (avatarIntroLoop != null)
+            {
+                StopCoroutine(avatarIntroLoop);
+                avatarIntroLoop = null;
+            }
+
+            avatarIntroRunning = true;
             openingDealPending = true;
             openingDealRunning = false;
             handReviewPending = false;
@@ -1140,9 +1249,8 @@ namespace BackyardLegends.Runtime
             SetSheetVisible(sceneRefs.OptionsMenu, false);
             SetSheetVisible(sceneRefs.ExitPromptOverlay, false);
             ResetExitPromptVisualState();
-            ShowSeatCallout(SeatId.Top, "HEY PARTNER !", 999f, new Color(theme.green.r, theme.green.g, theme.green.b, 0.95f), theme.backgroundColor);
             RenderAll();
-            StartOpeningStackIntro();
+            StartAvatarIntro();
         }
 
         private void OnMatchEvent(SpadesMatchEvent matchEvent)
@@ -1236,9 +1344,9 @@ namespace BackyardLegends.Runtime
             sceneRefs.AwayScoreText.text = BuildScoreboardText(TeamId.Away);
             sceneRefs.StatusText.text = openingDealPending
                 ? openingDealRunning
-                    ? "Throwing the cards out."
+                    ? "Dealing from center table."
                     : openingStackIntroRunning
-                        ? "Stacking the deck in the middle."
+                        ? "Deck is set at center table."
                         : "Cards deal automatically."
                 : handReviewPending
                     ? "Count your books before bidding."
@@ -1249,7 +1357,7 @@ namespace BackyardLegends.Runtime
                 ? openingDealRunning
                     ? "Cards are spreading across the table."
                     : openingStackIntroRunning
-                        ? "Deck is gathering at center table."
+                        ? "All cards start from the center stack."
                         : "Getting ready to deal."
                 : handReviewPending
                     ? "Review your hand. Bidding opens in a moment."
@@ -1293,7 +1401,7 @@ namespace BackyardLegends.Runtime
 
             if (openingStackEffectImage != null)
             {
-                openingStackEffectImage.gameObject.SetActive(openingDealPending && !openingDealRunning && openingStackEffectImage.sprite != null);
+                openingStackEffectImage.gameObject.SetActive(false);
             }
 
             RenderLastTrickDisplay();
@@ -1305,6 +1413,7 @@ namespace BackyardLegends.Runtime
             RenderHand();
             RenderBidSheet();
             RenderOptionsMenu();
+            ApplyAvatarIntroVisibility();
         }
 
         private void RenderLastTrickDisplay()
@@ -1625,26 +1734,7 @@ namespace BackyardLegends.Runtime
 
         private void ApplyOpeningStackPreviewVisual(CardButtonView view)
         {
-            var artImage = EnsureCardFaceImage(view);
-            if (artImage != null)
-            {
-                SetAnchors(artImage.rectTransform, Vector2.zero, Vector2.one);
-            }
-
-            if (artImage == null || !BackyardLegendsCardArtCatalog.TryGetEmptyCardSprite(out var sprite))
-            {
-                ApplyCardBackVisual(view);
-                return;
-            }
-
-            view.Panel.sprite = null;
-            view.Panel.type = Image.Type.Simple;
-            view.Panel.color = Color.clear;
-            artImage.sprite = sprite;
-            artImage.color = Color.white;
-            artImage.enabled = true;
-            SetGraphicAlpha(view.RankText, 0f);
-            SetGraphicAlpha(view.SuitText, 0f);
+            ApplyCardBackVisual(view);
         }
 
         private void StartHandLayoutAnimation(CardButtonView view, Vector2 targetPosition, Quaternion targetRotation, float targetScale)
@@ -1728,10 +1818,7 @@ namespace BackyardLegends.Runtime
                 var scale = Vector3.Lerp(startScale, Vector3.one * targetScale, eased);
                 if (flipReveal)
                 {
-                    var flip = t < 0.5f
-                        ? Mathf.Lerp(1f, 0.08f, t / 0.5f)
-                        : Mathf.Lerp(0.08f, 1f, (t - 0.5f) / 0.5f);
-                    scale.x *= flip;
+                    scale *= 1f + Mathf.Sin(t * Mathf.PI) * 0.035f;
                 }
 
                 view.Root.localScale = scale;
@@ -1921,7 +2008,7 @@ namespace BackyardLegends.Runtime
 
         private bool IsGameplayInputBlocked()
         {
-            return exitPromptOpen || optionsMenuOpen;
+            return exitPromptOpen || optionsMenuOpen || avatarIntroRunning;
         }
 
         private bool CanClaimRemainingBooks()
@@ -1930,6 +2017,7 @@ namespace BackyardLegends.Runtime
                    controller.State.Phase == MatchPhase.TrickPlay &&
                    !openingDealPending &&
                    !openingDealRunning &&
+                   !avatarIntroRunning &&
                    !handReviewPending &&
                    !bidTurnDelayPending &&
                    !HasVisualMotionPending &&
@@ -1964,6 +2052,642 @@ namespace BackyardLegends.Runtime
             StartCoroutine(OpeningDealSequence());
         }
 
+        private void StartAvatarIntro()
+        {
+            if (avatarIntroLoop != null)
+            {
+                StopCoroutine(avatarIntroLoop);
+                avatarIntroLoop = null;
+            }
+
+            EnsureAvatarRouletteSprites();
+            ApplyAvatarIntroVisibility();
+
+            var states = BuildAvatarIntroSeatStates();
+            if (states.Count == 0)
+            {
+                CompleteAvatarIntroAndStartDeal(states);
+                return;
+            }
+
+            avatarIntroLoop = StartCoroutine(AvatarIntroSequence(states));
+        }
+
+        private List<AvatarIntroSeatState> BuildAvatarIntroSeatStates()
+        {
+            var states = new List<AvatarIntroSeatState>();
+            var finalSpritePool = avatarRouletteSprites.Where(sprite => sprite != null).ToList();
+
+            foreach (var seat in SpadesSeatUtility.TurnOrder)
+            {
+                if (!seatViews.TryGetValue(seat, out var view) || view == null)
+                {
+                    continue;
+                }
+
+                seatAvatarImages.TryGetValue(seat, out var avatarImage);
+                seatIntroGroups.TryGetValue(seat, out var group);
+                group = group != null ? group : ResolveCanvasGroup(view.gameObject);
+
+                var state = new AvatarIntroSeatState
+                {
+                    Seat = seat,
+                    View = view,
+                    AvatarImage = avatarImage,
+                    Group = group,
+                    OriginalSprite = avatarImage != null ? avatarImage.sprite : null,
+                    OriginalScale = view.Root.localScale,
+                    OriginalAnchoredPosition = view.Root.anchoredPosition,
+                    OriginalName = view.NameText != null ? view.NameText.text : seat.DisplayName(),
+                    EntryDelay = seat == SeatId.Bottom ? 0.05f : Random.Range(0.12f, 0.38f),
+                    RouletteDuration = seat == SeatId.Bottom ? 0.4f : Random.Range(AvatarIntroMinSeconds, AvatarIntroMaxSeconds),
+                    RouletteOffset = Random.Range(0, Mathf.Max(1, avatarRouletteSprites.Count))
+                };
+
+                if (seat == SeatId.Bottom)
+                {
+                    state.FinalSprite = state.OriginalSprite;
+                    state.FinalName = "YOU";
+                }
+                else
+                {
+                    state.FinalSprite = TakeAvatarIntroFinalSprite(finalSpritePool, state.OriginalSprite);
+                    state.FinalName = GetAvatarDisplayName(state.FinalSprite, seat);
+                }
+
+                states.Add(state);
+            }
+
+            return states;
+        }
+
+        private IEnumerator AvatarIntroSequence(List<AvatarIntroSeatState> states)
+        {
+            SetSeatGameplayLabelsVisible(false);
+            SetGameplayChromeVisible(false);
+
+            foreach (var state in states)
+            {
+                if (state.View == null)
+                {
+                    continue;
+                }
+
+                state.View.gameObject.SetActive(true);
+                state.View.Root.localScale = state.OriginalScale * 0.78f;
+                state.View.Root.anchoredPosition = state.OriginalAnchoredPosition + GetAvatarIntroEntryOffset(state.Seat);
+                if (state.Group != null)
+                {
+                    state.Group.alpha = 0f;
+                    state.Group.interactable = false;
+                    state.Group.blocksRaycasts = false;
+                }
+
+                ApplyAvatarIntroSeatVisual(state, true, 0f);
+            }
+
+            var totalDuration = states.Count == 0 ? AvatarIntroMinSeconds : states.Max(state => state.EntryDelay + state.RouletteDuration) + 0.38f;
+            var elapsed = 0f;
+            while (elapsed < totalDuration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                foreach (var state in states)
+                {
+                    UpdateAvatarIntroSeat(state, elapsed);
+                }
+
+                yield return null;
+            }
+
+            foreach (var state in states)
+            {
+                ApplyAvatarIntroSeatFinal(state);
+            }
+
+            yield return new WaitForSecondsRealtime(0.22f);
+            CompleteAvatarIntroAndStartDeal(states);
+        }
+
+        private void UpdateAvatarIntroSeat(AvatarIntroSeatState state, float elapsed)
+        {
+            if (state.View == null)
+            {
+                return;
+            }
+
+            var localTime = elapsed - state.EntryDelay;
+            if (localTime < 0f)
+            {
+                return;
+            }
+
+            var entryT = Mathf.Clamp01(localTime / 0.34f);
+            var entryEase = Mathf.SmoothStep(0f, 1f, entryT);
+            if (state.Group != null)
+            {
+                state.Group.alpha = entryEase;
+            }
+
+            state.View.Root.anchoredPosition = Vector2.Lerp(
+                state.OriginalAnchoredPosition + GetAvatarIntroEntryOffset(state.Seat),
+                state.OriginalAnchoredPosition,
+                entryEase);
+
+            var settlePulse = localTime > state.RouletteDuration
+                ? Mathf.Sin(Mathf.Clamp01((localTime - state.RouletteDuration) / 0.26f) * Mathf.PI) * 0.08f
+                : Mathf.Sin(localTime * 18f) * 0.018f;
+            state.View.Root.localScale = state.OriginalScale * (Mathf.Lerp(0.78f, 1f, entryEase) + settlePulse);
+
+            if (state.Seat == SeatId.Bottom)
+            {
+                ApplyAvatarIntroSeatSprite(state, state.FinalSprite);
+                if (state.View.NameText != null)
+                {
+                    state.View.NameText.text = state.FinalName;
+                    state.View.NameText.gameObject.SetActive(true);
+                    SetGraphicAlpha(state.View.NameText, 1f);
+                }
+
+                return;
+            }
+
+            if (localTime >= state.RouletteDuration || avatarRouletteSprites.Count == 0)
+            {
+                ApplyAvatarIntroSeatFinal(state);
+                return;
+            }
+
+            var rouletteIndex = (state.RouletteOffset + Mathf.FloorToInt(localTime / 0.055f)) % avatarRouletteSprites.Count;
+            var sprite = avatarRouletteSprites[rouletteIndex];
+            ApplyAvatarIntroSeatSprite(state, sprite);
+            if (state.View.NameText != null)
+            {
+                state.View.NameText.text = GetAvatarDisplayName(sprite, state.Seat);
+                state.View.NameText.gameObject.SetActive(true);
+                SetGraphicAlpha(state.View.NameText, 1f);
+            }
+        }
+
+        private void CompleteAvatarIntroAndStartDeal(List<AvatarIntroSeatState> states)
+        {
+            foreach (var state in states)
+            {
+                ApplyAvatarIntroSeatFinal(state);
+                if (state.Group != null)
+                {
+                    state.Group.alpha = 1f;
+                    state.Group.interactable = true;
+                    state.Group.blocksRaycasts = true;
+                }
+            }
+
+            avatarIntroRunning = false;
+            avatarIntroLoop = null;
+            SetGameplayChromeVisible(true);
+            SetSeatGameplayLabelsVisible(true);
+            RenderAll();
+            StartOpeningStackIntro();
+        }
+
+        private void ApplyAvatarIntroSeatFinal(AvatarIntroSeatState state)
+        {
+            if (state.View == null)
+            {
+                return;
+            }
+
+            state.View.Root.anchoredPosition = state.OriginalAnchoredPosition;
+            state.View.Root.localScale = state.OriginalScale;
+            ApplyAvatarIntroSeatSprite(state, state.FinalSprite);
+            if (state.View.NameText != null)
+            {
+                state.View.NameText.text = state.FinalName;
+                state.View.NameText.gameObject.SetActive(true);
+                SetGraphicAlpha(state.View.NameText, 1f);
+            }
+
+            if (controller?.State?.SeatNames != null)
+            {
+                controller.State.SeatNames[state.Seat] = state.FinalName;
+            }
+        }
+
+        private void ApplyAvatarIntroSeatVisual(AvatarIntroSeatState state, bool useFinal, float alpha)
+        {
+            ApplyAvatarIntroSeatSprite(state, useFinal ? state.FinalSprite : state.OriginalSprite);
+            if (state.View?.NameText != null)
+            {
+                state.View.NameText.text = useFinal ? state.FinalName : state.OriginalName;
+                state.View.NameText.gameObject.SetActive(true);
+                SetGraphicAlpha(state.View.NameText, alpha);
+            }
+        }
+
+        private void ApplyAvatarIntroSeatSprite(AvatarIntroSeatState state, Sprite sprite)
+        {
+            if (state.AvatarImage == null || sprite == null)
+            {
+                return;
+            }
+
+            state.AvatarImage.sprite = sprite;
+            state.AvatarImage.preserveAspect = true;
+            state.AvatarImage.color = Color.white;
+            state.AvatarImage.enabled = true;
+        }
+
+        private Sprite TakeAvatarIntroFinalSprite(List<Sprite> pool, Sprite fallback)
+        {
+            if (pool == null || pool.Count == 0)
+            {
+                return fallback;
+            }
+
+            var index = Random.Range(0, pool.Count);
+            var sprite = pool[index];
+            pool.RemoveAt(index);
+            return sprite != null ? sprite : fallback;
+        }
+
+        private Vector2 GetAvatarIntroEntryOffset(SeatId seat)
+        {
+            return seat switch
+            {
+                SeatId.Left => new Vector2(-70f, 0f),
+                SeatId.Right => new Vector2(70f, 0f),
+                SeatId.Top => new Vector2(0f, 70f),
+                SeatId.Bottom => new Vector2(0f, -70f),
+                _ => Vector2.zero
+            };
+        }
+
+        private void EnsureAvatarRouletteSprites()
+        {
+            if (avatarRouletteSprites.Count > 0)
+            {
+                return;
+            }
+
+            AddAvatarSprites(Resources.LoadAll<Sprite>(AvatarResourceRoot));
+
+#if UNITY_EDITOR
+            if (avatarRouletteSprites.Count == 0)
+            {
+                var guids = UnityEditor.AssetDatabase.FindAssets("t:Sprite", new[] { AvatarAssetFolder });
+                foreach (var guid in guids)
+                {
+                    var path = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
+                    if (path.EndsWith("border.png", System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    AddAvatarSprite(UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(path));
+                }
+            }
+#endif
+
+            if (avatarRouletteSprites.Count == 0)
+            {
+                foreach (var image in seatAvatarImages.Values)
+                {
+                    AddAvatarSprite(image != null ? image.sprite : null);
+                }
+            }
+
+            avatarRouletteSprites.Sort((left, right) => GetAvatarSortIndex(left).CompareTo(GetAvatarSortIndex(right)));
+        }
+
+        private void AddAvatarSprites(IEnumerable<Sprite> sprites)
+        {
+            if (sprites == null)
+            {
+                return;
+            }
+
+            foreach (var sprite in sprites)
+            {
+                AddAvatarSprite(sprite);
+            }
+        }
+
+        private void AddAvatarSprite(Sprite sprite)
+        {
+            if (sprite == null || sprite.name.Equals("border", System.StringComparison.OrdinalIgnoreCase) || avatarRouletteSprites.Contains(sprite))
+            {
+                return;
+            }
+
+            avatarRouletteSprites.Add(sprite);
+        }
+
+        private static int GetAvatarSortIndex(Sprite sprite)
+        {
+            return sprite != null && int.TryParse(sprite.name, out var index) ? index : int.MaxValue;
+        }
+
+        private static string GetAvatarDisplayName(Sprite sprite, SeatId fallbackSeat)
+        {
+            var index = GetAvatarSortIndex(sprite);
+            if (index > 0 && index < AvatarDisplayNames.Length)
+            {
+                return AvatarDisplayNames[index];
+            }
+
+            return fallbackSeat.DisplayName().ToUpperInvariant();
+        }
+
+        private void ApplyAvatarIntroVisibility()
+        {
+            if (!avatarIntroRunning)
+            {
+                return;
+            }
+
+            SetGameplayChromeVisible(false);
+            SetSeatGameplayLabelsVisible(false);
+            foreach (var view in seatViews.Values)
+            {
+                if (view != null)
+                {
+                    view.gameObject.SetActive(true);
+                    if (view.NameText != null)
+                    {
+                        view.NameText.gameObject.SetActive(true);
+                    }
+                }
+            }
+        }
+
+        private void SetGameplayChromeVisible(bool visible)
+        {
+            SetStartupCardGroupsVisible(visible && !avatarIntroRunning && !openingDealPending && !openingDealRunning);
+            SetGraphicObjectActive(sceneRefs.HudPanel, visible);
+            SetGraphicObjectActive(sceneRefs.TablePanel, visible);
+            SetGraphicObjectActive(sceneRefs.HandPanel, visible);
+            SetGraphicObjectActive(sceneRefs.FeedPanel, visible);
+            SetGraphicObjectActive(sceneRefs.DeckAnchorImage, visible);
+            SetGraphicObjectActive(sceneRefs.DiscardAnchorImage, visible);
+            SetGraphicObjectActive(sceneRefs.OpeningStackImage, visible);
+            SetGraphicObjectActive(sceneRefs.LastTrickPanel, visible);
+            SetGraphicObjectActive(lastTrickPanel, visible);
+            SetTextObjectActive(sceneRefs.StatusText, visible);
+            SetTextObjectActive(sceneRefs.HudModeText, visible);
+            SetTextObjectActive(sceneRefs.TimerHookText, visible);
+            SetTextObjectActive(sceneRefs.HomeScoreText, visible);
+            SetTextObjectActive(sceneRefs.AwayScoreText, visible);
+            SetTextObjectActive(sceneRefs.LastTrickText, visible);
+            SetTextObjectActive(sceneRefs.FeedText, visible);
+            SetTextObjectActive(sceneRefs.CenterHintText, visible);
+            SetTextObjectActive(sceneRefs.DeckAnchorText, visible);
+            SetTextObjectActive(sceneRefs.DiscardAnchorText, visible);
+            SetTextObjectActive(sceneRefs.OpeningStackText, visible);
+            SetTextObjectActive(sceneRefs.BannerText, visible);
+            if (openingStackEffectImage != null)
+            {
+                openingStackEffectImage.gameObject.SetActive(false);
+            }
+
+            SetSheetVisible(sceneRefs.BidSheet, visible &&
+                                             !openingDealPending &&
+                                             !openingDealRunning &&
+                                             controller?.State?.Phase == MatchPhase.Bidding &&
+                                             controller.State.RoundState.BidState.CurrentBidder == SeatId.Bottom);
+            SetSheetVisible(sceneRefs.RoundSheet, false);
+            SetSheetVisible(sceneRefs.EndSheet, false);
+            SetSheetVisible(sceneRefs.OptionsMenu, false);
+            SetSheetVisible(sceneRefs.ExitPromptOverlay, false);
+            if (sceneRefs.DealButton != null)
+            {
+                sceneRefs.DealButton.gameObject.SetActive(false);
+            }
+        }
+
+        private static void SetStartupCardGroupsVisible(bool visible)
+        {
+            var allTransforms = Resources.FindObjectsOfTypeAll<Transform>();
+            foreach (var target in allTransforms)
+            {
+                if (target == null ||
+                    !target.gameObject.scene.IsValid() ||
+                    !StartupHiddenCardGroupNames.Contains(target.name))
+                {
+                    continue;
+                }
+
+                var group = ResolveCanvasGroup(target.gameObject);
+                group.alpha = visible ? 1f : 0f;
+                group.interactable = visible;
+                group.blocksRaycasts = visible;
+            }
+        }
+
+        private void SetSeatGameplayLabelsVisible(bool visible)
+        {
+            foreach (var view in seatViews.Values)
+            {
+                if (view == null)
+                {
+                    continue;
+                }
+
+                SetTextObjectActive(view.StatusText, visible);
+                SetTextObjectActive(view.BidText, visible);
+                SetTextObjectActive(view.TricksText, visible);
+                if (view.NameText != null)
+                {
+                    view.NameText.gameObject.SetActive(true);
+                    SetGraphicAlpha(view.NameText, 1f);
+                }
+            }
+        }
+
+        private static void SetGraphicObjectActive(Graphic graphic, bool active)
+        {
+            if (graphic != null)
+            {
+                graphic.gameObject.SetActive(true);
+                graphic.enabled = active;
+            }
+        }
+
+        private static void SetTextObjectActive(Text text, bool active)
+        {
+            if (text != null)
+            {
+                text.gameObject.SetActive(true);
+                text.enabled = active;
+            }
+        }
+
+        private List<CanvasGroup> PrepareBottomOpeningDealRealCards(List<Card> hand)
+        {
+            var targets = new List<CanvasGroup>();
+            if (hand == null || sceneRefs.HandContent == null)
+            {
+                return targets;
+            }
+
+            EnsureCardPoolSize(hand.Count);
+            for (var index = 0; index < hand.Count; index++)
+            {
+                var view = handPool[index];
+                view.CanvasGroup = view.CanvasGroup != null ? view.CanvasGroup : ResolveCanvasGroup(view.gameObject);
+                ConfigureCardView(view, hand[index], false, false);
+                ApplyFanLayout(view, GetFanTargetPosition(index, hand.Count, false), GetFanTargetRotation(index, hand.Count), 1f);
+                view.Root.SetSiblingIndex(index);
+                view.gameObject.SetActive(true);
+                view.Button.interactable = false;
+                SetCanvasGroupVisible(view.CanvasGroup, false);
+                targets.Add(view.CanvasGroup);
+            }
+
+            for (var index = hand.Count; index < handPool.Count; index++)
+            {
+                StopHandAnimation(handPool[index]);
+                handPool[index].gameObject.SetActive(false);
+            }
+
+            SetPlaySelectedButtonActive(false);
+            return targets;
+        }
+
+        private Dictionary<SeatId, List<CanvasGroup>> PrepareOpponentOpeningDealRealCards()
+        {
+            var targetsBySeat = new Dictionary<SeatId, List<CanvasGroup>>();
+            foreach (var seat in SpadesSeatUtility.TurnOrder)
+            {
+                if (seat == SeatId.Bottom)
+                {
+                    continue;
+                }
+
+                var targets = FindAuthoredOpeningDealSeatCards(seat);
+                targetsBySeat[seat] = targets;
+                foreach (var group in targets)
+                {
+                    SetCanvasGroupVisible(group, false);
+                }
+            }
+
+            return targetsBySeat;
+        }
+
+        private CanvasGroup GetOpponentOpeningDealRevealTarget(
+            IReadOnlyDictionary<SeatId, List<CanvasGroup>> targetsBySeat,
+            SeatId seat,
+            int cardIndex)
+        {
+            if (targetsBySeat != null &&
+                targetsBySeat.TryGetValue(seat, out var targets) &&
+                targets != null &&
+                cardIndex >= 0 &&
+                cardIndex < targets.Count)
+            {
+                return targets[cardIndex];
+            }
+
+            return null;
+        }
+
+        private static List<CanvasGroup> FindAuthoredOpeningDealSeatCards(SeatId seat)
+        {
+            var prefix = GetAuthoredOpeningDealCardPrefix(seat);
+            if (string.IsNullOrEmpty(prefix))
+            {
+                return new List<CanvasGroup>();
+            }
+
+            return Resources.FindObjectsOfTypeAll<Transform>()
+                .Where(target => target != null &&
+                                 target.gameObject.scene.IsValid() &&
+                                 TryGetAuthoredOpeningDealCardIndex(target.name, prefix, out _) &&
+                                 !target.name.Contains("White Edge", System.StringComparison.OrdinalIgnoreCase))
+                .OrderBy(target => TryGetAuthoredOpeningDealCardIndex(target.name, prefix, out var index) ? index : int.MaxValue)
+                .Select(target => ResolveCanvasGroup(target.gameObject))
+                .ToList();
+        }
+
+        private static string GetAuthoredOpeningDealCardPrefix(SeatId seat)
+        {
+            return seat switch
+            {
+                SeatId.Top => "Top Opponent Card ",
+                SeatId.Left => "Left Opponent Card ",
+                SeatId.Right => "Right Opponent Card ",
+                _ => string.Empty
+            };
+        }
+
+        private static bool TryGetAuthoredOpeningDealCardIndex(string objectName, string prefix, out int index)
+        {
+            index = 0;
+            return !string.IsNullOrEmpty(objectName) &&
+                   objectName.StartsWith(prefix, System.StringComparison.Ordinal) &&
+                   int.TryParse(objectName.Substring(prefix.Length), out index);
+        }
+
+        private CardButtonView CreateOpeningDealRuntimeSeatCard(SeatId seat, int index, CardMotionSnapshot motion)
+        {
+            if (sceneRefs.CardButtonPrefab == null)
+            {
+                return null;
+            }
+
+            var view = Instantiate(sceneRefs.CardButtonPrefab, AnimationRoot);
+            view.gameObject.name = $"{seat} Runtime Dealt Card {index + 1}";
+            view.transform.SetAsLastSibling();
+            view.CanvasGroup = view.CanvasGroup != null ? view.CanvasGroup : ResolveCanvasGroup(view.gameObject);
+            view.CanvasGroup.blocksRaycasts = false;
+            view.Button.onClick.RemoveAllListeners();
+            view.Button.enabled = false;
+            view.Root.anchorMin = new Vector2(0.5f, 0.5f);
+            view.Root.anchorMax = new Vector2(0.5f, 0.5f);
+            view.Root.pivot = new Vector2(0.5f, 0.5f);
+            view.Root.anchoredPosition = motion.EndPosition;
+            view.Root.sizeDelta = motion.EndSize;
+            view.Root.localRotation = motion.EndRotation;
+            view.Root.localScale = Vector3.one;
+            ApplyCardBackVisual(view);
+            SetCanvasGroupVisible(view.CanvasGroup, false);
+            openingDealRuntimeSeatCards.Add(view);
+            return view;
+        }
+
+        private void DetachOpeningStackPreviewCard(CardButtonView preview)
+        {
+            if (preview == null)
+            {
+                return;
+            }
+
+            if (openingStackPreviewAnimations.TryGetValue(preview, out var routine) && routine != null)
+            {
+                StopCoroutine(routine);
+            }
+
+            openingStackPreviewAnimations.Remove(preview);
+            openingStackPreviewCards.Remove(preview);
+        }
+
+        private static void RevealOpeningDealRealCard(CanvasGroup target)
+        {
+            SetCanvasGroupVisible(target, true);
+        }
+
+        private static void SetCanvasGroupVisible(CanvasGroup group, bool visible)
+        {
+            if (group == null)
+            {
+                return;
+            }
+
+            group.gameObject.SetActive(true);
+            group.alpha = visible ? 1f : 0f;
+            group.interactable = false;
+            group.blocksRaycasts = false;
+        }
+
         private IEnumerator OpeningDealSequence()
         {
             if (sceneRefs.OpeningStackImage != null)
@@ -1976,42 +2700,76 @@ namespace BackyardLegends.Runtime
 
             var handsBySeat = SpadesSeatUtility.TurnOrder.ToDictionary(seat => seat, seat => controller.GetHand(seat).ToList());
             var perSeatIndex = SpadesSeatUtility.TurnOrder.ToDictionary(seat => seat, _ => 0);
+            SetStartupCardGroupsVisible(true);
+            var opponentRevealTargets = PrepareOpponentOpeningDealRealCards();
+            var bottomRevealTargets = PrepareBottomOpeningDealRealCards(handsBySeat[SeatId.Bottom]);
             var previewSources = openingStackPreviewCards.ToList();
-            var dealMotions = new List<CardMotionSnapshot>(52);
-            var revealToHandFlags = new List<bool>(52);
+            var flights = new List<OpeningDealFlight>(52);
             var ghosts = new List<CardButtonView>(52);
-            var delayStep = 0.018f;
-            var travelDuration = Mathf.Max(0.22f, theme.modalDuration * 1.15f);
-            var launchIndex = 0;
+            var delayStep = OpeningDealDelayStep;
+            var travelDuration = Mathf.Max(OpeningDealTravelSeconds, theme.modalDuration * 1.75f);
 
             foreach (var recipient in BuildOpeningDealOrder(controller.State.RoundState.Dealer))
             {
                 var cardIndex = perSeatIndex[recipient];
                 perSeatIndex[recipient] = cardIndex + 1;
                 var card = handsBySeat[recipient][cardIndex];
-                var previewSource = launchIndex < previewSources.Count ? previewSources[launchIndex] : null;
-                var motion = BuildOpeningDealMotion(recipient, card, cardIndex, handsBySeat[recipient].Count, previewSource);
-                dealMotions.Add(motion);
-                revealToHandFlags.Add(recipient == SeatId.Bottom);
-                launchIndex++;
+                var revealTarget = recipient == SeatId.Bottom
+                    ? cardIndex < bottomRevealTargets.Count ? bottomRevealTargets[cardIndex] : null
+                    : GetOpponentOpeningDealRevealTarget(opponentRevealTargets, recipient, cardIndex);
+                var motion = BuildOpeningDealMotion(
+                    recipient,
+                    card,
+                    cardIndex,
+                    handsBySeat[recipient].Count,
+                    revealTarget,
+                    flights.Count,
+                    previewSources.Count);
+                if (recipient != SeatId.Bottom && revealTarget == null)
+                {
+                    revealTarget = CreateOpeningDealRuntimeSeatCard(recipient, cardIndex, motion)?.CanvasGroup;
+                }
+
+                flights.Add(new OpeningDealFlight
+                {
+                    Motion = motion,
+                    RevealToHand = recipient == SeatId.Bottom,
+                    RevealTarget = revealTarget,
+                    Delay = delayStep * flights.Count,
+                    SequenceIndex = flights.Count
+                });
             }
 
-            ClearOpeningStackPreviewCards();
-
-            for (var i = 0; i < dealMotions.Count; i++)
+            for (var i = 0; i < flights.Count; i++)
             {
-                var motion = dealMotions[i];
-                var ghost = CreateFloatingCard(motion);
+                var flight = flights[i];
+                var usesPreviewCard = i < previewSources.Count && previewSources[i] != null;
+                var ghost = usesPreviewCard
+                    ? previewSources[i]
+                    : CreateFloatingCard(flight.Motion);
+                DetachOpeningStackPreviewCard(ghost);
+                if (!floatingCards.Contains(ghost))
+                {
+                    floatingCards.Add(ghost);
+                }
+
+                PrepareOpeningDealGhostAtCenter(ghost, flight);
+                flight.Ghost = ghost;
                 ghosts.Add(ghost);
-                StartCoroutine(AnimateOpeningDealGhost(ghost, motion, delayStep * i, revealToHandFlags[i], travelDuration, i == 0));
             }
 
-            yield return new WaitForSecondsRealtime((delayStep * dealMotions.Count * 2f) + travelDuration + 0.35f);
+            for (var i = 0; i < flights.Count; i++)
+            {
+                StartCoroutine(AnimateOpeningDealGhost(flights[i], travelDuration, i == 0));
+            }
+
+            yield return new WaitForSecondsRealtime((delayStep * Mathf.Max(0, flights.Count - 1)) + travelDuration + 0.45f);
 
             suppressNextHandEntryAnimation = true;
             openingDealPending = false;
             openingDealRunning = false;
             ClearOpeningStackPreviewCards();
+            SetStartupCardGroupsVisible(true);
             RenderAll();
 
             foreach (var ghost in ghosts)
@@ -2214,65 +2972,65 @@ namespace BackyardLegends.Runtime
             activePrompt = ConfirmationPromptType.None;
         }
 
-        private IEnumerator AnimateOpeningDealGhost(CardButtonView ghost, CardMotionSnapshot motion, float delay, bool revealToHand, float duration, bool playLaunchSound)
+        private void PrepareOpeningDealGhostAtCenter(CardButtonView ghost, OpeningDealFlight flight)
         {
+            if (ghost == null || flight == null)
+            {
+                return;
+            }
+
+            var motion = flight.Motion;
+            ghost.gameObject.SetActive(true);
+            ghost.transform.SetAsLastSibling();
+            ghost.Button.onClick.RemoveAllListeners();
+            ghost.Button.enabled = false;
+            ghost.CanvasGroup = ghost.CanvasGroup != null ? ghost.CanvasGroup : ResolveCanvasGroup(ghost.gameObject);
+            ghost.CanvasGroup.alpha = 1f;
+            ghost.CanvasGroup.blocksRaycasts = false;
+            ghost.Root.anchorMin = new Vector2(0.5f, 0.5f);
+            ghost.Root.anchorMax = new Vector2(0.5f, 0.5f);
+            ghost.Root.pivot = new Vector2(0.5f, 0.5f);
+            ghost.Root.anchoredPosition = motion.StartPosition;
+            ghost.Root.localRotation = motion.StartRotation;
+            ghost.Root.sizeDelta = motion.StartSize;
+            ghost.Root.localScale = Vector3.one;
+            ApplyCardBackVisual(ghost);
+        }
+
+        private IEnumerator AnimateOpeningDealGhost(OpeningDealFlight flight, float duration, bool playLaunchSound)
+        {
+            if (flight == null || flight.Ghost == null)
+            {
+                yield break;
+            }
+
+            var ghost = flight.Ghost;
+            var motion = flight.Motion;
+            var revealToHand = flight.RevealToHand;
+            if (flight.Delay > 0f)
+            {
+                yield return AnimateOpeningDealCenterHold(ghost, motion, flight.Delay, flight.SequenceIndex);
+            }
+
             if (ghost == null)
             {
                 yield break;
             }
 
-            ApplyOpeningStackPreviewVisual(ghost);
+            ghost.gameObject.SetActive(true);
+            ghost.transform.SetAsLastSibling();
+            ghost.Root.anchoredPosition = motion.StartPosition;
+            ghost.Root.localRotation = motion.StartRotation;
+            ghost.Root.sizeDelta = motion.StartSize;
+            ghost.Root.localScale = Vector3.one;
+            ghost.CanvasGroup = ghost.CanvasGroup != null ? ghost.CanvasGroup : ResolveCanvasGroup(ghost.gameObject);
+            ghost.CanvasGroup.alpha = 1f;
 
-            var motionSeed = Mathf.Abs(ghost.gameObject.name.GetHashCode());
-            var burstDuration = Mathf.Lerp(0.08f, 0.13f, GetOpeningStackPreviewRandom01(motionSeed));
-            var burstTarget = motion.StartPosition + motion.BurstOffset;
-            var burstRotation = motion.StartRotation * Quaternion.Euler(0f, 0f, Mathf.Sign(motion.BurstOffset.x == 0f ? Random.Range(-1f, 1f) : motion.BurstOffset.x) * Mathf.Lerp(4f, 12f, GetOpeningStackPreviewRandom01(motionSeed + 11)));
-            var burstSize = motion.StartSize * 1.04f;
-            var burstElapsed = 0f;
-            while (burstElapsed < burstDuration)
+            if (revealToHand)
             {
-                burstElapsed += Time.unscaledDeltaTime;
-                var t = Mathf.Clamp01(burstElapsed / burstDuration);
-                var eased = 1f - Mathf.Pow(1f - t, 2f);
-                ghost.Root.anchoredPosition = Vector2.Lerp(motion.StartPosition, burstTarget, eased);
-                ghost.Root.localRotation = Quaternion.Slerp(motion.StartRotation, burstRotation, eased);
-                ghost.Root.sizeDelta = Vector2.Lerp(motion.StartSize, burstSize, eased);
-                ghost.CanvasGroup.alpha = Mathf.Lerp(0.92f, 1f, eased);
-                yield return null;
+                ConfigureFloatingCardView(ghost, motion.Card);
             }
-
-            ghost.Root.anchoredPosition = burstTarget;
-            ghost.Root.localRotation = burstRotation;
-            ghost.Root.sizeDelta = burstSize;
-
-            if (delay > 0f)
-            {
-                var hoverElapsed = 0f;
-                var hoverAmplitude = new Vector2(
-                    Mathf.Lerp(2.4f, 6.2f, GetOpeningStackPreviewRandom01(motionSeed + 23)),
-                    Mathf.Lerp(1.8f, 4.8f, GetOpeningStackPreviewRandom01(motionSeed + 37)));
-                var hoverRotationAmplitude = Mathf.Lerp(1.2f, 3.4f, GetOpeningStackPreviewRandom01(motionSeed + 41));
-                var hoverSpeed = Mathf.Lerp(2.1f, 3.6f, GetOpeningStackPreviewRandom01(motionSeed + 53));
-                var hoverScalePulse = Mathf.Lerp(0.004f, 0.011f, GetOpeningStackPreviewRandom01(motionSeed + 67));
-                while (hoverElapsed < delay)
-                {
-                    hoverElapsed += Time.unscaledDeltaTime;
-                    var hoverT = Mathf.Clamp01(hoverElapsed / delay);
-                    var hoverFalloff = Mathf.Lerp(1f, 0.35f, hoverT);
-                    var phase = motionSeed * 0.001f + hoverElapsed * hoverSpeed;
-                    var drift = new Vector2(
-                        Mathf.Sin(phase) * hoverAmplitude.x,
-                        Mathf.Cos(phase * 1.27f) * hoverAmplitude.y) * hoverFalloff;
-                    var rotationOffset = Mathf.Sin(phase * 0.91f) * hoverRotationAmplitude * hoverFalloff;
-                    var scaleOffset = 1f + Mathf.Sin(phase * 1.43f) * hoverScalePulse * hoverFalloff;
-                    ghost.Root.anchoredPosition = burstTarget + drift;
-                    ghost.Root.localRotation = burstRotation * Quaternion.Euler(0f, 0f, rotationOffset);
-                    ghost.Root.sizeDelta = burstSize * scaleOffset;
-                    yield return null;
-                }
-            }
-
-            if (!revealToHand)
+            else
             {
                 ApplyCardBackVisual(ghost);
             }
@@ -2287,19 +3045,102 @@ namespace BackyardLegends.Runtime
                 PlayFeedback(FeedbackCue.Deal, 0.16f);
             }
 
-            var dealMotion = new CardMotionSnapshot(
-                motion.Card,
-                motion.Seat,
-                ghost.Root.anchoredPosition,
-                motion.EndPosition,
-                ghost.Root.sizeDelta,
-                motion.EndSize,
-                ghost.Root.localRotation,
+            var faceState = CaptureCardFaceState(ghost);
+            var revealedFace = !revealToHand;
+            if (revealToHand)
+            {
+                ApplyCardBackVisual(ghost);
+            }
+
+            var elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(elapsed / duration);
+                if (revealToHand && !revealedFace && t >= 0.54f)
+                {
+                    ApplyCardFaceVisual(ghost, faceState);
+                    revealedFace = true;
+                }
+
+                ApplyOpeningDealFlightPose(ghost, motion, t, revealToHand);
+                yield return null;
+            }
+
+            if (revealToHand)
+            {
+                ApplyCardFaceVisual(ghost, faceState);
+            }
+
+            ApplyOpeningDealFlightPose(ghost, motion, 1f, false);
+            RevealOpeningDealRealCard(flight.RevealTarget);
+            CleanupFloatingCard(ghost);
+        }
+
+        private IEnumerator AnimateOpeningDealCenterHold(CardButtonView ghost, CardMotionSnapshot motion, float duration, int sequenceIndex)
+        {
+            var elapsed = 0f;
+            var phase = sequenceIndex * 0.37f;
+            while (elapsed < duration)
+            {
+                if (ghost == null)
+                {
+                    yield break;
+                }
+
+                elapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(elapsed / duration);
+                var driftFalloff = Mathf.Lerp(1f, 0.2f, t);
+                var drift = new Vector2(
+                    Mathf.Sin(Time.unscaledTime * 1.4f + phase) * 0.8f,
+                    Mathf.Cos(Time.unscaledTime * 1.1f + phase) * 0.6f) * driftFalloff;
+                ghost.Root.anchoredPosition = motion.StartPosition + drift;
+                ghost.Root.sizeDelta = motion.StartSize;
+                ghost.Root.localRotation = motion.StartRotation;
+                ghost.Root.localScale = Vector3.one;
+                ghost.CanvasGroup.alpha = 1f;
+                yield return null;
+            }
+        }
+
+        private void ApplyOpeningDealFlightPose(CardButtonView ghost, CardMotionSnapshot motion, float progress, bool flipReveal)
+        {
+            if (ghost == null || ghost.CanvasGroup == null)
+            {
+                return;
+            }
+
+            var root = ghost.Root;
+            var eased = EaseInOutCubic(progress);
+            var start = motion.StartPosition;
+            var end = motion.EndPosition;
+            var distance = Vector2.Distance(start, end);
+            var direction = distance > 0.1f ? (end - start).normalized : Vector2.up;
+            var side = GetOpeningDealLaneSide(motion.Seat);
+            var tangent = new Vector2(-direction.y, direction.x) * side;
+            var controlOne = start + direction * Mathf.Clamp(distance * 0.18f, 26f, 92f) + Vector2.up * Mathf.Clamp(distance * 0.08f, 24f, 72f);
+            var controlTwo = Vector2.Lerp(start, end, 0.68f)
+                             + Vector2.up * Mathf.Clamp(distance * 0.18f, 52f, 156f)
+                             + tangent * Mathf.Clamp(distance * 0.08f, 18f, 74f);
+            var settleDip = Vector2.down * Mathf.Sin(progress * Mathf.PI) * Mathf.Lerp(0f, 10f, Mathf.Clamp01((progress - 0.62f) / 0.38f));
+            root.anchoredPosition = CubicBezier(start, controlOne, controlTwo, end, eased) + settleDip;
+
+            var sizeEase = EaseOutCubic(progress);
+            var peakSize = Vector2.Lerp(motion.StartSize, motion.EndSize, 0.55f) * 1.08f;
+            root.sizeDelta = progress < 0.5f
+                ? Vector2.Lerp(motion.StartSize, peakSize, EaseOutCubic(progress / 0.5f))
+                : Vector2.Lerp(peakSize, motion.EndSize, EaseOutCubic((progress - 0.5f) / 0.5f));
+
+            var travelRotation = Quaternion.Slerp(
+                motion.StartRotation,
                 motion.EndRotation,
-                motion.ArcHeight,
-                Vector2.zero,
-                motion.Delay);
-            yield return AnimateFloatingCard(ghost, dealMotion, duration, fadeOutNearEnd: !revealToHand, revealFromBack: revealToHand);
+                sizeEase);
+            var twist = Mathf.Sin(progress * Mathf.PI) * GetOpeningDealTwist(motion.Seat);
+            root.localRotation = travelRotation * Quaternion.Euler(0f, 0f, twist);
+
+            var pulse = 1f + Mathf.Sin(progress * Mathf.PI) * (flipReveal ? 0.075f : 0.055f);
+            root.localScale = Vector3.one * pulse;
+            ghost.CanvasGroup.alpha = Mathf.Lerp(0.96f, 1f, sizeEase);
         }
 
         private void SubmitBid(int bid)
@@ -2457,7 +3298,7 @@ namespace BackyardLegends.Runtime
                 aiLoop = null;
             }
 
-            if (exitPromptOpen || optionsMenuOpen || openingDealPending || handReviewPending || bidTurnDelayPending || HasVisualMotionPending)
+            if (exitPromptOpen || optionsMenuOpen || avatarIntroRunning || openingDealPending || handReviewPending || bidTurnDelayPending || HasVisualMotionPending)
             {
                 return;
             }
@@ -2472,14 +3313,14 @@ namespace BackyardLegends.Runtime
         {
             while (controller != null && controller.NeedsAiTurn)
             {
-                if (exitPromptOpen || optionsMenuOpen)
+                if (exitPromptOpen || optionsMenuOpen || avatarIntroRunning)
                 {
                     aiLoop = null;
                     yield break;
                 }
 
                 yield return new WaitForSecondsRealtime(0.55f);
-                if (exitPromptOpen || optionsMenuOpen || handReviewPending || bidTurnDelayPending || controller == null || HasVisualMotionPending)
+                if (exitPromptOpen || optionsMenuOpen || avatarIntroRunning || handReviewPending || bidTurnDelayPending || controller == null || HasVisualMotionPending)
                 {
                     aiLoop = null;
                     yield break;
@@ -2687,9 +3528,7 @@ namespace BackyardLegends.Runtime
             root.sizeDelta = Vector2.Lerp(motion.StartSize, motion.EndSize, eased);
             root.localRotation = Quaternion.Slerp(motion.StartRotation, motion.EndRotation, eased);
             root.localScale = revealFromBack
-                ? new Vector3(progress < 0.5f
-                    ? Mathf.Lerp(1f, 0.08f, progress / 0.5f)
-                    : Mathf.Lerp(0.08f, 1f, (progress - 0.5f) / 0.5f), 1f, 1f)
+                ? Vector3.one * (1f + Mathf.Sin(progress * Mathf.PI) * 0.045f)
                 : Vector3.one;
             ghost.CanvasGroup.alpha = fadeOutNearEnd
                 ? Mathf.Lerp(1f, 0f, Mathf.Clamp01((progress - 0.68f) / 0.32f))
@@ -2748,39 +3587,51 @@ namespace BackyardLegends.Runtime
             }
         }
 
-        private CardMotionSnapshot BuildOpeningDealMotion(SeatId seat, Card card, int index, int count, CardButtonView previewSource = null)
+        private CardMotionSnapshot BuildOpeningDealMotion(
+            SeatId seat,
+            Card card,
+            int index,
+            int count,
+            CanvasGroup revealTarget,
+            int sequenceIndex,
+            int sequenceCount)
         {
             var stackCenter = GetOpeningStackPosition();
-            var startPosition = previewSource != null
-                ? previewSource.Root.anchoredPosition
-                : stackCenter + new Vector2(Random.Range(-12f, 12f), Random.Range(-10f, 10f));
-            var startSize = previewSource != null
-                ? previewSource.Root.sizeDelta
-                : ResolveCardButtonBaseSize() * 0.82f;
-            var endSize = seat == SeatId.Bottom
-                ? ResolveBottomHandCardSize()
-                : ResolveOpponentHandCardSize();
-            var endRotation = seat == SeatId.Bottom
-                ? GetFanTargetRotation(index, count)
-                : GetSeatFanTargetRotation(seat, index, count);
-            var explodeDirection = (startPosition - stackCenter).normalized;
-            if (explodeDirection.sqrMagnitude < 0.01f)
-            {
-                explodeDirection = Quaternion.Euler(0f, 0f, Random.Range(0f, 360f)) * Vector2.right;
-            }
-
-            var burstOffset = explodeDirection * Mathf.Lerp(34f, 92f, GetOpeningStackPreviewRandom01(index + count * 7));
+            var startPosition = stackCenter + GetOpeningDealLaunchOffset(sequenceIndex, sequenceCount);
+            var startSize = ResolveOpeningDealLaunchCardSize();
+            var targetPose = ResolveOpeningDealTargetPose(seat, index, count, revealTarget);
             return new CardMotionSnapshot(
                 card,
                 seat,
                 startPosition,
-                seat == SeatId.Bottom ? GetHandAnimationPoint(index, count, false) : GetSeatDealPoint(seat, index, count),
+                targetPose.Position,
                 startSize,
-                endSize,
-                previewSource != null ? previewSource.Root.localRotation : Quaternion.Euler(0f, 0f, Random.Range(-18f, 18f)),
-                endRotation,
+                targetPose.Size,
+                GetOpeningDealLaunchRotation(sequenceIndex, sequenceCount),
+                targetPose.Rotation,
                 seat == SeatId.Bottom ? 78f : 58f,
-                burstOffset);
+                Vector2.zero);
+        }
+
+        private (Vector2 Position, Vector2 Size, Quaternion Rotation) ResolveOpeningDealTargetPose(SeatId seat, int index, int count, CanvasGroup revealTarget)
+        {
+            if (revealTarget != null && revealTarget.transform is RectTransform targetRect)
+            {
+                return (
+                    GetAnchoredPoint(targetRect, new Vector2(0.5f, 0.5f)),
+                    GetAnchoredSize(targetRect),
+                    Quaternion.Euler(0f, 0f, targetRect.eulerAngles.z));
+            }
+
+            return seat == SeatId.Bottom
+                ? (
+                    GetHandAnimationPoint(index, count, false),
+                    ResolveBottomHandCardSize(),
+                    GetFanTargetRotation(index, count))
+                : (
+                    GetSeatDealPoint(seat, index, count),
+                    ResolveOpponentHandCardSize(),
+                    GetSeatFanTargetRotation(seat, index, count));
         }
 
         private RectTransform ResolvePlaySourceRect(SeatId seat, Card card)
@@ -2860,6 +3711,19 @@ namespace BackyardLegends.Runtime
             floatingCards.Clear();
         }
 
+        private void ClearOpeningDealRuntimeSeatCards()
+        {
+            foreach (var view in openingDealRuntimeSeatCards.ToArray())
+            {
+                if (view != null)
+                {
+                    Destroy(view.gameObject);
+                }
+            }
+
+            openingDealRuntimeSeatCards.Clear();
+        }
+
         private void ClearTransientFx()
         {
             foreach (var fx in transientFx.ToArray())
@@ -2885,6 +3749,7 @@ namespace BackyardLegends.Runtime
             StopOpeningStackIntro();
             ClearOpeningStackPreviewCards();
             ClearFloatingCards();
+            ClearOpeningDealRuntimeSeatCards();
             ClearTransientFx();
             HideAllBidBubbles(true);
             if (deferredSheetStateLoop != null)
@@ -2934,34 +3799,38 @@ namespace BackyardLegends.Runtime
         private IEnumerator OpeningStackIntroSequence()
         {
             openingStackIntroRunning = true;
+            SetStartupCardGroupsVisible(false);
             RefreshOpeningStackEffectVisual();
             RenderAll();
 
             var totalCards = ResolveOpeningStackCardCount();
-            var delayStep = 0.014f;
-            var baseTravelDuration = Mathf.Max(0.32f, theme.modalDuration * 1.45f);
+            var delayStep = OpeningDeckIntroDelayStep;
+            var baseTravelDuration = Mathf.Max(OpeningDeckIntroDuration, theme.modalDuration * 0.72f);
             var previewSize = ResolveOpeningStackPreviewCardSize();
             var maxTravelDuration = 0f;
+            if (openingStackEffectImage != null)
+            {
+                openingStackEffectImage.gameObject.SetActive(false);
+            }
 
             for (var index = 0; index < totalCards; index++)
             {
-                var preview = CreateOpeningStackPreviewCard(index, previewSize);
-                var travelDuration = baseTravelDuration / GetOpeningStackPreviewSpeedFactor(index);
+                var preview = CreateOpeningStackPreviewCard(index, totalCards, previewSize);
+                var travelDuration = baseTravelDuration + Mathf.Lerp(0f, 0.08f, GetOpeningStackPreviewRandom01(index + 13));
                 maxTravelDuration = Mathf.Max(maxTravelDuration, travelDuration);
                 openingStackPreviewAnimations[preview] = StartCoroutine(AnimateOpeningStackPreviewCard(preview, index, totalCards, travelDuration, delayStep * index));
             }
 
             PlayFeedback(FeedbackCue.Collect, 0.14f);
-            yield return new WaitForSecondsRealtime(delayStep * Mathf.Max(0, totalCards - 1) + maxTravelDuration + 0.04f);
+            yield return new WaitForSecondsRealtime(delayStep * Mathf.Max(0, totalCards - 1) + maxTravelDuration + OpeningDeckSettleSeconds);
 
             openingStackIntroRunning = false;
             openingStackIntroLoop = null;
             RenderAll();
-            yield return new WaitForSecondsRealtime(0.35f);
             OnDealPressed();
         }
 
-        private CardButtonView CreateOpeningStackPreviewCard(int index, Vector2 previewSize)
+        private CardButtonView CreateOpeningStackPreviewCard(int index, int totalCards, Vector2 previewSize)
         {
             var preview = Instantiate(sceneRefs.CardButtonPrefab, AnimationRoot);
             preview.gameObject.name = $"Opening Stack Preview {index + 1}";
@@ -2978,10 +3847,10 @@ namespace BackyardLegends.Runtime
             preview.Root.anchorMin = new Vector2(0.5f, 0.5f);
             preview.Root.anchorMax = new Vector2(0.5f, 0.5f);
             preview.Root.pivot = new Vector2(0.5f, 0.5f);
-            preview.Root.anchoredPosition = GetOpeningStackPreviewEntryPosition(index);
-            preview.Root.sizeDelta = previewSize;
-            preview.Root.localRotation = Quaternion.Euler(0f, 0f, GetOpeningStackPreviewEntryRotation(index));
-            preview.Root.localScale = Vector3.one * Random.Range(0.94f, 1f);
+            preview.Root.anchoredPosition = GetOpeningStackDeckIntroPosition(index, totalCards);
+            preview.Root.sizeDelta = previewSize * 0.98f;
+            preview.Root.localRotation = Quaternion.identity;
+            preview.Root.localScale = Vector3.one;
             preview.CanvasGroup.alpha = 0f;
             ApplyOpeningStackPreviewVisual(preview);
             openingStackPreviewCards.Add(preview);
@@ -3003,22 +3872,24 @@ namespace BackyardLegends.Runtime
             var startPosition = preview.Root.anchoredPosition;
             var startRotation = preview.Root.localRotation;
             var startScale = preview.Root.localScale;
+            var startSize = preview.Root.sizeDelta;
             var previewSize = ResolveOpeningStackPreviewCardSize();
-            var targetPosition = GetOpeningStackPosition() + GetOpeningStackPreviewOffset(index, totalCards);
-            var targetRotation = Quaternion.Euler(0f, 0f, GetOpeningStackPreviewRotation(index, totalCards));
-            var arcHeight = Mathf.Lerp(18f, 42f, totalCards <= 1 ? 0f : index / (float)(totalCards - 1));
+            var targetPosition = GetOpeningStackDeckPosition(index, totalCards);
+            var targetRotation = Quaternion.Euler(0f, 0f, GetOpeningStackDeckRotation(index, totalCards));
+            var arcHeight = Mathf.Lerp(4f, 12f, GetOpeningStackPreviewRandom01(index + 29));
             var elapsed = 0f;
 
             while (elapsed < duration)
             {
                 elapsed += Time.unscaledDeltaTime;
                 var t = Mathf.Clamp01(elapsed / duration);
-                var eased = Mathf.SmoothStep(0f, 1f, t);
+                var eased = EaseOutCubic(t);
+                var settlePulse = 1f + Mathf.Sin(t * Mathf.PI) * 0.045f;
                 preview.CanvasGroup.alpha = Mathf.Lerp(0f, 1f, eased);
                 preview.Root.anchoredPosition = Vector2.Lerp(startPosition, targetPosition, eased) + Vector2.up * Mathf.Sin(t * Mathf.PI) * arcHeight;
-                preview.Root.sizeDelta = Vector2.Lerp(previewSize * 0.92f, previewSize, eased);
+                preview.Root.sizeDelta = Vector2.Lerp(startSize, previewSize, eased);
                 preview.Root.localRotation = Quaternion.Slerp(startRotation, targetRotation, eased);
-                preview.Root.localScale = Vector3.Lerp(startScale, Vector3.one, eased);
+                preview.Root.localScale = Vector3.Lerp(startScale, Vector3.one * settlePulse, eased);
                 yield return null;
             }
 
@@ -3029,14 +3900,9 @@ namespace BackyardLegends.Runtime
             preview.Root.localScale = Vector3.one;
             while (preview != null && openingDealPending && !openingDealRunning)
             {
-                var floatTime = Time.unscaledTime * GetOpeningStackPreviewFloatSpeed(index) + index * 0.29f;
-                var floatAmplitude = GetOpeningStackPreviewFloatAmplitude(index);
-                var rotationAmplitude = Mathf.Lerp(3.8f, 6.6f, GetOpeningStackPreviewRandom01(index * 2 + 5));
-                var floatOffset = new Vector2(
-                    Mathf.Sin(floatTime) * floatAmplitude.x,
-                    Mathf.Cos(floatTime * 1.17f) * floatAmplitude.y);
-                preview.Root.anchoredPosition = targetPosition + floatOffset;
-                preview.Root.localRotation = Quaternion.Euler(0f, 0f, GetOpeningStackPreviewRotation(index, totalCards) + Mathf.Sin(floatTime * 0.92f) * rotationAmplitude);
+                preview.Root.anchoredPosition = targetPosition;
+                preview.Root.localRotation = Quaternion.identity;
+                preview.Root.localScale = Vector3.one;
                 yield return null;
             }
 
@@ -3067,34 +3933,13 @@ namespace BackyardLegends.Runtime
 
         private void RefreshOpeningStackEffectVisual()
         {
-            EnsureOpeningStackEffectVisual();
             if (openingStackEffectImage == null)
             {
                 return;
             }
 
-            if (!BackyardLegendsCardArtCatalog.TryGetOpeningEffectSprite(out var effectSprite))
-            {
-                openingStackEffectImage.sprite = null;
-                openingStackEffectImage.enabled = false;
-                return;
-            }
-
-            var previewSize = ResolveOpeningStackPreviewCardSize();
-            var rect = openingStackEffectImage.rectTransform;
-            rect.anchorMin = new Vector2(0.5f, 0.5f);
-            rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.anchoredPosition = new Vector2(-10f, -8f);
-            rect.sizeDelta = previewSize * 1.2f;
-            rect.localRotation = Quaternion.Euler(0f, 0f, -7f);
-            rect.localScale = Vector3.one;
-            openingStackEffectImage.sprite = effectSprite;
-            openingStackEffectImage.type = Image.Type.Simple;
-            openingStackEffectImage.preserveAspect = true;
-            openingStackEffectImage.color = new Color(1f, 1f, 1f, 0.86f);
-            openingStackEffectImage.enabled = true;
-            openingStackEffectImage.transform.SetAsFirstSibling();
+            openingStackEffectImage.gameObject.SetActive(false);
+            openingStackEffectImage.enabled = false;
         }
 
         private void EnsureOpeningStackEffectVisual()
@@ -3555,33 +4400,48 @@ namespace BackyardLegends.Runtime
 
         private Vector2 ResolveOpeningStackPreviewCardSize()
         {
-            return ResolveCardButtonBaseSize() * 1.12f;
+            return ResolveOpeningDealLaunchCardSize();
         }
 
-        private Vector2 GetOpeningStackPreviewEntryPosition(int index)
+        private Vector2 ResolveOpeningDealLaunchCardSize()
         {
-            var rect = AnimationRoot.rect;
-            var sidePadding = 150f;
-            var innerX = Mathf.Lerp(rect.xMin + 84f, rect.xMax - 84f, Random.value);
-            var innerY = Mathf.Lerp(rect.yMin + 112f, rect.yMax - 112f, Random.value);
-            return (index % 4) switch
-            {
-                0 => new Vector2(innerX, rect.yMax + sidePadding),
-                1 => new Vector2(rect.xMax + sidePadding, innerY),
-                2 => new Vector2(innerX, rect.yMin - sidePadding),
-                _ => new Vector2(rect.xMin - sidePadding, innerY)
-            };
+            return ResolveCardButtonBaseSize() * OpeningDeckStackSizeMultiplier;
         }
 
-        private float GetOpeningStackPreviewEntryRotation(int index)
+        private static Vector2 GetOpeningDealLaunchOffset(int index, int count)
         {
-            return (index % 4) switch
+            return GetOpeningStackDeckOffset(index, count);
+        }
+
+        private static Quaternion GetOpeningDealLaunchRotation(int index, int count)
+        {
+            return Quaternion.identity;
+        }
+
+        private Vector2 GetOpeningStackDeckIntroPosition(int index, int totalCards)
+        {
+            return GetOpeningStackPosition() + GetOpeningStackDeckOffset(index, totalCards) + Vector2.up * 18f;
+        }
+
+        private Vector2 GetOpeningStackDeckPosition(int index, int totalCards)
+        {
+            return GetOpeningStackPosition() + GetOpeningStackDeckOffset(index, totalCards);
+        }
+
+        private static Vector2 GetOpeningStackDeckOffset(int index, int totalCards)
+        {
+            if (totalCards <= 1)
             {
-                0 => Random.Range(-24f, 24f),
-                1 => Random.Range(-34f, -10f),
-                2 => Random.Range(-24f, 24f),
-                _ => Random.Range(10f, 34f)
-            };
+                return Vector2.zero;
+            }
+
+            var depth = index - (totalCards - 1) * 0.5f;
+            return new Vector2(depth * OpeningDeckStackXOffset, depth * OpeningDeckStackYOffset);
+        }
+
+        private static float GetOpeningStackDeckRotation(int index, int totalCards)
+        {
+            return 0f;
         }
 
         private static float GetOpeningStackPreviewRandom01(int index)
@@ -3589,46 +4449,63 @@ namespace BackyardLegends.Runtime
             return Mathf.Abs(Mathf.Sin((index + 1) * 12.9898f));
         }
 
-        private static float GetOpeningStackPreviewSpeedFactor(int index)
-        {
-            return Mathf.Lerp(0.76f, 0.94f, GetOpeningStackPreviewRandom01(index));
-        }
-
         private static float GetOpeningStackPreviewFloatSpeed(int index)
         {
-            return Mathf.Lerp(1.35f, 2.25f, GetOpeningStackPreviewRandom01(index + 17));
+            return Mathf.Lerp(0.82f, 1.28f, GetOpeningStackPreviewRandom01(index + 17));
         }
 
         private static Vector2 GetOpeningStackPreviewFloatAmplitude(int index)
         {
             return new Vector2(
-                Mathf.Lerp(5.6f, 9.8f, GetOpeningStackPreviewRandom01(index + 31)),
-                Mathf.Lerp(7.4f, 12.6f, GetOpeningStackPreviewRandom01(index + 53)));
+                Mathf.Lerp(0.6f, 1.6f, GetOpeningStackPreviewRandom01(index + 31)),
+                Mathf.Lerp(0.8f, 2.0f, GetOpeningStackPreviewRandom01(index + 53)));
         }
 
-        private static Vector2 GetOpeningStackPreviewOffset(int index, int totalCards)
+        private static Vector2 CubicBezier(Vector2 a, Vector2 b, Vector2 c, Vector2 d, float t)
         {
-            if (totalCards <= 1)
-            {
-                return Vector2.zero;
-            }
-
-            var centered = (index / (float)(totalCards - 1)) * 2f - 1f;
-            var band = (index % 4) - 1.5f;
-            return new Vector2(
-                centered * 84f + Mathf.Sin(index * 0.73f) * 12f,
-                -Mathf.Abs(centered) * 18f + band * 7.2f + Mathf.Cos(index * 0.47f) * 4.1f);
+            var oneMinusT = 1f - t;
+            return oneMinusT * oneMinusT * oneMinusT * a
+                   + 3f * oneMinusT * oneMinusT * t * b
+                   + 3f * oneMinusT * t * t * c
+                   + t * t * t * d;
         }
 
-        private static float GetOpeningStackPreviewRotation(int index, int totalCards)
+        private static float EaseOutCubic(float t)
         {
-            if (totalCards <= 1)
-            {
-                return 0f;
-            }
+            t = Mathf.Clamp01(t);
+            return 1f - Mathf.Pow(1f - t, 3f);
+        }
 
-            var centered = (index / (float)(totalCards - 1)) * 2f - 1f;
-            return -centered * 16f + Mathf.Sin(index * 0.62f) * 3.4f;
+        private static float EaseInOutCubic(float t)
+        {
+            t = Mathf.Clamp01(t);
+            return t < 0.5f
+                ? 4f * t * t * t
+                : 1f - Mathf.Pow(-2f * t + 2f, 3f) * 0.5f;
+        }
+
+        private static float GetOpeningDealLaneSide(SeatId seat)
+        {
+            return seat switch
+            {
+                SeatId.Left => -1.1f,
+                SeatId.Right => 1.1f,
+                SeatId.Top => 0.35f,
+                SeatId.Bottom => -0.25f,
+                _ => 0f
+            };
+        }
+
+        private static float GetOpeningDealTwist(SeatId seat)
+        {
+            return seat switch
+            {
+                SeatId.Left => -10f,
+                SeatId.Right => 10f,
+                SeatId.Top => 5f,
+                SeatId.Bottom => -6f,
+                _ => 0f
+            };
         }
 
         private Vector2 GetHandAnimationPoint(int index, int count, bool isSelected)
