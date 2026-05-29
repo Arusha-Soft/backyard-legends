@@ -27,6 +27,9 @@ namespace BackyardLegends.Runtime
         private const float OpeningDeckStackSizeMultiplier = 2.15f;
         private const float OpeningDeckStackXOffset = 0.62f;
         private const float OpeningDeckStackYOffset = -0.42f;
+#if UNITY_EDITOR
+        private const float EditorFastTimeScale = 10f;
+#endif
         private const string AvatarResourceRoot = "BackyardLegends/Avatars";
         private const string AvatarAssetFolder = "Assets/Prototype/Art/Update3/avatar";
         private static readonly Vector2 BidCalloutAnchorMin = new(0.08f, 1.00f);
@@ -77,6 +80,12 @@ namespace BackyardLegends.Runtime
         [SerializeField] private AudioClip roundScoreClipAsset;
         [SerializeField] private AudioClip matchEndClipAsset;
         [SerializeField] private AudioClip setBookClipAsset;
+        [SerializeField] private AudioClip[] cardPlaceClipAssets;
+        [SerializeField] private AudioSource soundFxAudioSource;
+        [Header("Strong Card FX")]
+        [SerializeField] private GameObject aceCardFxPrefab;
+        [SerializeField] private GameObject kingCardFxPrefab;
+        [SerializeField] private GameObject highSpadeFxPrefab;
 
         private readonly Dictionary<SeatId, SeatPanelView> seatViews = new();
         private readonly Dictionary<SeatId, TrickSlotView> trickSlots = new();
@@ -91,6 +100,8 @@ namespace BackyardLegends.Runtime
         private readonly Dictionary<SeatId, BookTextVisualState> bookTextDefaults = new();
         private readonly Dictionary<SeatId, Image> seatAvatarImages = new();
         private readonly Dictionary<SeatId, CanvasGroup> seatIntroGroups = new();
+        private readonly Dictionary<SeatId, Component> avatarBookLightningFx = new();
+        private readonly Dictionary<SeatId, GameObject> seatAuraObjects = new();
         private readonly List<Sprite> avatarRouletteSprites = new();
         private readonly Queue<string> recentFeed = new();
         private readonly Queue<IEnumerator> queuedAnimations = new();
@@ -121,6 +132,10 @@ namespace BackyardLegends.Runtime
         private Coroutine handReviewLoop;
         private Coroutine bidTurnDelayLoop;
         private Coroutine exitPromptFadeLoop;
+        private Coroutine bookCameraShakeLoop;
+        private Transform bookCameraShakeTarget;
+        private Vector3 bookCameraShakeStartPosition;
+        private Quaternion bookCameraShakeStartRotation;
         private SpadesMatchController controller;
         private IRuleEngine ruleEngine;
         private BackyardLegendsSession session;
@@ -162,6 +177,9 @@ namespace BackyardLegends.Runtime
         private bool suppressNextHandEntryAnimation;
         private bool optionsMenuOpen;
         private bool exitPromptOpen;
+#if UNITY_EDITOR
+        private float editorDefaultFixedDeltaTime;
+#endif
         private ConfirmationPromptType activePrompt;
 
         private RectTransform AnimationRoot => ResolveVisibleAnimationRoot();
@@ -316,6 +334,9 @@ namespace BackyardLegends.Runtime
         {
             Screen.orientation = ScreenOrientation.Portrait;
             Application.targetFrameRate = 60;
+#if UNITY_EDITOR
+            editorDefaultFixedDeltaTime = Time.fixedDeltaTime / Mathf.Max(0.0001f, Time.timeScale);
+#endif
 
             session = BackyardLegendsSession.GetOrCreateRuntimeInstance();
             theme = themeOverride != null ? themeOverride : session.Theme ?? ThemeConfig.CreateFallback();
@@ -357,12 +378,19 @@ namespace BackyardLegends.Runtime
 
         private RectTransform ResolveVisibleAnimationRoot()
         {
+            var activeCanvas = FindActiveGameplayCanvasRoot();
             if (runtimeAnimationRoot != null)
             {
+                if (activeCanvas != null && runtimeAnimationRoot.parent != activeCanvas)
+                {
+                    runtimeAnimationRoot.SetParent(activeCanvas, false);
+                }
+
+                runtimeAnimationRoot.gameObject.SetActive(true);
+                runtimeAnimationRoot.SetAsLastSibling();
                 return runtimeAnimationRoot;
             }
 
-            var activeCanvas = FindActiveGameplayCanvasRoot();
             var parent = activeCanvas != null ? activeCanvas : transform;
             var existing = parent.Find("Opening Animation Runtime Root") as RectTransform;
             if (existing != null)
@@ -383,6 +411,7 @@ namespace BackyardLegends.Runtime
             runtimeAnimationRoot.offsetMax = Vector2.zero;
             runtimeAnimationRoot.localScale = Vector3.one;
             runtimeAnimationRoot.localRotation = Quaternion.identity;
+            runtimeAnimationRoot.gameObject.SetActive(true);
             runtimeAnimationRoot.SetAsLastSibling();
 
             var group = runtimeAnimationRoot.GetComponent<CanvasGroup>() ?? runtimeAnimationRoot.gameObject.AddComponent<CanvasGroup>();
@@ -631,6 +660,13 @@ namespace BackyardLegends.Runtime
 
         private void Update()
         {
+#if UNITY_EDITOR
+            if (WasSpacePressedThisFrame())
+            {
+                ToggleEditorTimeScale();
+            }
+#endif
+
             if (WasBackPressedThisFrame())
             {
                 if (exitPromptOpen)
@@ -654,6 +690,61 @@ namespace BackyardLegends.Runtime
 
             RestoreSeatRootScales();
         }
+
+#if UNITY_EDITOR
+        private void ToggleEditorTimeScale()
+        {
+            var useFastScale = !Mathf.Approximately(Time.timeScale, EditorFastTimeScale);
+            Time.timeScale = useFastScale ? EditorFastTimeScale : 1f;
+            Time.fixedDeltaTime = editorDefaultFixedDeltaTime * Time.timeScale;
+            if (sceneRefs?.StatusText != null && theme != null)
+            {
+                FlashStatus(useFastScale ? "EDITOR SPEED: 10X" : "EDITOR SPEED: 1X", useFastScale ? theme.gold : theme.primaryText);
+            }
+        }
+
+        private static bool WasSpacePressedThisFrame()
+        {
+            if (WasInputSystemKeyPressedThisFrame("spaceKey"))
+            {
+                return true;
+            }
+
+            try
+            {
+                return Input.GetKeyDown(KeyCode.Space);
+            }
+            catch (System.InvalidOperationException)
+            {
+                return false;
+            }
+        }
+
+        private static bool WasInputSystemKeyPressedThisFrame(string keyPropertyName)
+        {
+            var keyboardType = System.Type.GetType("UnityEngine.InputSystem.Keyboard, Unity.InputSystem");
+            if (keyboardType != null)
+            {
+                var currentKeyboard = keyboardType.GetProperty("current", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                    ?.GetValue(null, null);
+                if (currentKeyboard != null)
+                {
+                    var spaceKey = keyboardType.GetProperty(keyPropertyName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+                        ?.GetValue(currentKeyboard, null);
+                    if (spaceKey != null)
+                    {
+                        var wasPressed = spaceKey.GetType().GetProperty("wasPressedThisFrame", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                        if (wasPressed != null)
+                        {
+                            return (bool)wasPressed.GetValue(spaceKey, null);
+                        }
+                    }
+                }
+            }
+
+            return false;
+        }
+#endif
 
         private static bool WasBackPressedThisFrame()
         {
@@ -718,6 +809,8 @@ namespace BackyardLegends.Runtime
         {
             seatAvatarImages.Clear();
             seatIntroGroups.Clear();
+            seatAuraObjects.Clear();
+            avatarBookLightningFx.Clear();
 
             foreach (var pair in seatViews)
             {
@@ -731,11 +824,25 @@ namespace BackyardLegends.Runtime
                 if (avatarTransform != null && avatarTransform.TryGetComponent<Image>(out var avatarImage))
                 {
                     seatAvatarImages[pair.Key] = avatarImage;
+                    var lightning = FindComponentByTypeName(avatarImage.gameObject, "_2dxFX_LightningBolt");
+                    if (lightning != null)
+                    {
+                        avatarBookLightningFx[pair.Key] = lightning;
+                    }
+
+                    var aura = avatarTransform.Find("Aura");
+                    if (aura != null)
+                    {
+                        seatAuraObjects[pair.Key] = aura.gameObject;
+                        aura.gameObject.SetActive(false);
+                    }
                 }
 
                 var group = ResolveCanvasGroup(view.gameObject);
                 seatIntroGroups[pair.Key] = group;
             }
+
+            DisableBookLightningFxExcept(null);
         }
 
         private void EnsureRuntimeCardArtTargets()
@@ -1032,16 +1139,26 @@ namespace BackyardLegends.Runtime
 
         private void ConfigureFeedbackAudio()
         {
-            feedbackAudioSource = GetComponent<AudioSource>();
-            if (feedbackAudioSource == null)
+            feedbackAudioSource = soundFxAudioSource != null
+                ? soundFxAudioSource
+                : FindSoundFxAudioSource();
+            var usingExternalSoundFxSource = feedbackAudioSource != null;
+            if (!usingExternalSoundFxSource)
             {
-                feedbackAudioSource = gameObject.AddComponent<AudioSource>();
+                feedbackAudioSource = GetComponent<AudioSource>();
+                if (feedbackAudioSource == null)
+                {
+                    feedbackAudioSource = gameObject.AddComponent<AudioSource>();
+                }
             }
 
             feedbackAudioSource.playOnAwake = false;
             feedbackAudioSource.loop = false;
             feedbackAudioSource.spatialBlend = 0f;
-            feedbackAudioSource.volume = 0.18f;
+            if (!usingExternalSoundFxSource)
+            {
+                feedbackAudioSource.volume = 0.18f;
+            }
 
             bidClip = bidClipAsset != null ? bidClipAsset : CreateToneClip("Bid Cue", 680f, 920f, 0.09f, 0.16f);
             selectClip = selectClipAsset != null ? selectClipAsset : CreateToneClip("Select Cue", 520f, 760f, 0.05f, 0.13f);
@@ -1053,6 +1170,17 @@ namespace BackyardLegends.Runtime
             roundScoreClip = roundScoreClipAsset != null ? roundScoreClipAsset : CreateToneClip("Round Score Cue", 560f, 820f, 0.2f, 0.18f);
             matchEndClip = matchEndClipAsset != null ? matchEndClipAsset : CreateToneClip("Match End Cue", 460f, 920f, 0.28f, 0.22f);
             setBookClip = setBookClipAsset != null ? setBookClipAsset : CreateSetBookImpactClip();
+        }
+
+        private AudioSource FindSoundFxAudioSource()
+        {
+            var scene = gameObject.scene;
+            return Resources.FindObjectsOfTypeAll<AudioSource>()
+                .Where(source => source != null &&
+                                 source.gameObject.scene == scene &&
+                                 source.gameObject.name == "Sound FX")
+                .OrderByDescending(source => source.gameObject.activeInHierarchy)
+                .FirstOrDefault();
         }
 
         private static AudioClip CreateToneClip(string clipName, float frequencyA, float frequencyB, float duration, float volume)
@@ -1125,6 +1253,26 @@ namespace BackyardLegends.Runtime
             {
                 feedbackAudioSource.PlayOneShot(clip, Mathf.Clamp(volumeScale, 0f, 1f));
             }
+        }
+
+        private void PlayRandomCardPlaceSound()
+        {
+            if (feedbackAudioSource == null)
+            {
+                return;
+            }
+
+            var clips = cardPlaceClipAssets?
+                .Where(clip => clip != null)
+                .ToArray();
+            if (clips == null || clips.Length == 0)
+            {
+                PlayFeedback(FeedbackCue.Play, 0.18f);
+                return;
+            }
+
+            var clip = clips[Random.Range(0, clips.Length)];
+            feedbackAudioSource.PlayOneShot(clip, 1f);
         }
 
         private void ApplyTheme()
@@ -1478,6 +1626,7 @@ namespace BackyardLegends.Runtime
             UpdateCenterHintLayout();
             RenderSeatPanels();
             RenderTrickArea();
+            RenderOpponentHands();
             RenderHand();
             RenderBidSheet();
             RenderOptionsMenu();
@@ -1659,6 +1808,31 @@ namespace BackyardLegends.Runtime
                 slot.SuitText.text = pair.Value.SuitIcon;
                 slot.SuitText.color = pair.Value.IsRed ? theme.red : theme.primaryText;
                 slot.Panel.color = Color.white;
+            }
+        }
+
+        private void RenderOpponentHands()
+        {
+            if (openingDealPending || openingDealRunning || controller?.State?.RoundState?.HandsBySeat == null)
+            {
+                return;
+            }
+
+            foreach (var seat in SpadesSeatUtility.TurnOrder)
+            {
+                if (seat == SeatId.Bottom)
+                {
+                    continue;
+                }
+
+                var targets = FindAuthoredOpeningDealSeatCards(seat);
+                var handCount = controller.State.RoundState.HandsBySeat.TryGetValue(seat, out var hand)
+                    ? hand.Count
+                    : 0;
+                for (var index = 0; index < targets.Count; index++)
+                {
+                    SetCanvasGroupVisible(targets[index], index < handCount);
+                }
             }
         }
 
@@ -3487,16 +3661,16 @@ namespace BackyardLegends.Runtime
         private IEnumerator AnimateCardPlayRoutine(CardMotionSnapshot motion)
         {
             var ghost = CreateFloatingCard(motion);
-            yield return AnimateFloatingCard(
+            yield return AnimateStreetCardPlay(
                 ghost,
                 motion,
-                Mathf.Max(0.18f, theme.modalDuration * 1.1f),
-                fadeOutNearEnd: false,
+                Mathf.Max(0.34f, theme.modalDuration * 1.45f),
                 revealFromBack: motion.Seat != SeatId.Bottom);
             CleanupFloatingCard(ghost);
             hiddenTrickSlots.Remove(motion.Seat);
             RenderTrickArea();
-            PlayFeedback(FeedbackCue.Play, 0.18f);
+            PlayRandomCardPlaceSound();
+            SpawnStrongCardFx(motion);
             SpawnImpactBurst(GetAnchoredPoint(trickSlots[motion.Seat].Root, new Vector2(0.5f, 0.5f)), motion.Card.IsRed ? theme.red : theme.gold, 32f, 4);
             yield return PulseRect(trickSlots[motion.Seat].Root, 1.06f, Mathf.Max(0.12f, theme.pulseDuration * 0.75f));
         }
@@ -3555,6 +3729,9 @@ namespace BackyardLegends.Runtime
             resolvedTrickCards.Clear();
             RenderTrickArea();
             PlayFeedback(FeedbackCue.Collect, 0.22f);
+            RefreshBookLeaderLightningFx();
+            SetLatestBookAura(winner);
+            StartBookCameraShake();
             SpawnImpactBurst(GetAnchoredPoint(seatViews[winner].Root, GetSeatInnerAnchor(winner)), winner.ToTeam() == TeamId.Home ? theme.green : theme.red, 42f, 5);
             SpawnImpactBurst(GetAnchoredPoint(sceneRefs.DiscardAnchorImage.rectTransform, new Vector2(0.5f, 0.5f)), theme.gold, 28f, 3);
             StartBookTextImpact(winner, null, winner.ToTeam() == TeamId.Home ? theme.green : theme.red, false);
@@ -3596,6 +3773,96 @@ namespace BackyardLegends.Runtime
             }
 
             ApplyFloatingCardPose(ghost, motion, 1f, fadeOutNearEnd, false);
+        }
+
+        private IEnumerator AnimateStreetCardPlay(CardButtonView ghost, CardMotionSnapshot motion, float duration, bool revealFromBack)
+        {
+            if (ghost == null)
+            {
+                yield break;
+            }
+
+            var faceState = CaptureCardFaceState(ghost);
+            var revealedFace = !revealFromBack;
+            if (revealFromBack)
+            {
+                ApplyCardBackVisual(ghost);
+            }
+
+            var elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(elapsed / duration);
+                if (revealFromBack && !revealedFace && t >= 0.36f)
+                {
+                    ApplyCardFaceVisual(ghost, faceState);
+                    revealedFace = true;
+                }
+
+                ApplyStreetCardPlayPose(ghost, motion, t, revealFromBack && !revealedFace);
+                yield return null;
+            }
+
+            if (revealFromBack)
+            {
+                ApplyCardFaceVisual(ghost, faceState);
+            }
+
+            ApplyStreetCardPlayPose(ghost, motion, 1f, false);
+        }
+
+        private void ApplyStreetCardPlayPose(CardButtonView ghost, CardMotionSnapshot motion, float progress, bool backShowing)
+        {
+            if (ghost == null || ghost.CanvasGroup == null)
+            {
+                return;
+            }
+
+            RectTransform root;
+            try
+            {
+                root = ghost.transform as RectTransform;
+            }
+            catch (MissingReferenceException)
+            {
+                return;
+            }
+
+            if (root == null)
+            {
+                return;
+            }
+
+            var windup = Mathf.Clamp01(progress / 0.18f);
+            var travel = Mathf.Clamp01((progress - 0.10f) / 0.74f);
+            var settle = Mathf.Clamp01((progress - 0.78f) / 0.22f);
+            var travelEase = 1f - Mathf.Pow(1f - travel, 3f);
+            var settleEase = Mathf.Sin(settle * Mathf.PI);
+            var seatSide = motion.Seat switch
+            {
+                SeatId.Left => -1f,
+                SeatId.Right => 1f,
+                SeatId.Top => 0.45f,
+                _ => -0.35f
+            };
+            var sourcePull = new Vector2(seatSide * -18f, motion.Seat == SeatId.Top ? 16f : -16f) * Mathf.Sin(windup * Mathf.PI);
+            var arc = Mathf.Sin(travel * Mathf.PI) * motion.ArcHeight;
+            var laneDrift = new Vector2(seatSide * Mathf.Sin(travel * Mathf.PI) * 34f, 0f);
+            var snap = new Vector2(seatSide * Mathf.Sin(settle * Mathf.PI * 2f) * 5f, -Mathf.Sin(settle * Mathf.PI) * 4f);
+
+            root.anchoredPosition = Vector2.Lerp(motion.StartPosition, motion.EndPosition, travelEase) + sourcePull + laneDrift + snap + Vector2.up * arc;
+            root.sizeDelta = Vector2.Lerp(motion.StartSize, motion.EndSize, travelEase);
+
+            var throwTilt = Quaternion.Euler(0f, 0f, seatSide * Mathf.Sin(travel * Mathf.PI) * 18f);
+            var slamTilt = Quaternion.Euler(0f, 0f, -seatSide * settleEase * 7f);
+            root.localRotation = Quaternion.Slerp(motion.StartRotation, motion.EndRotation, travelEase) * throwTilt * slamTilt;
+
+            var lift = Mathf.Sin(travel * Mathf.PI) * 0.10f;
+            var slamPunch = settleEase * 0.075f;
+            var backFlipPulse = backShowing ? Mathf.Sin(progress * Mathf.PI) * 0.035f : 0f;
+            root.localScale = Vector3.one * (1f + lift + slamPunch + backFlipPulse);
+            ghost.CanvasGroup.alpha = Mathf.Lerp(0.88f, 1f, Mathf.Clamp01(progress / 0.2f));
         }
 
         private void ApplyFloatingCardPose(CardButtonView ghost, CardMotionSnapshot motion, float progress, bool fadeOutNearEnd, bool revealFromBack)
@@ -3750,17 +4017,51 @@ namespace BackyardLegends.Runtime
                 }
             }
 
+            var opponentCard = ResolveOpponentPlaySourceRect(seat);
+            if (opponentCard != null)
+            {
+                return opponentCard;
+            }
+
             return seatViews[seat].Root;
+        }
+
+        private RectTransform ResolveOpponentPlaySourceRect(SeatId seat)
+        {
+            if (seat == SeatId.Bottom || controller?.State?.RoundState?.HandsBySeat == null)
+            {
+                return null;
+            }
+
+            var targets = FindAuthoredOpeningDealSeatCards(seat);
+            if (targets.Count == 0)
+            {
+                return null;
+            }
+
+            var remainingCount = controller.State.RoundState.HandsBySeat.TryGetValue(seat, out var hand)
+                ? hand.Count
+                : 0;
+            var sourceIndex = Mathf.Clamp(remainingCount, 0, targets.Count - 1);
+            return targets[sourceIndex] != null
+                ? targets[sourceIndex].transform as RectTransform
+                : null;
         }
 
         private CardButtonView CreateFloatingCard(CardMotionSnapshot motion)
         {
-            var ghost = Instantiate(sceneRefs.CardButtonPrefab, AnimationRoot);
+            var root = AnimationRoot;
+            root.gameObject.SetActive(true);
+            root.SetAsLastSibling();
+            var ghost = Instantiate(sceneRefs.CardButtonPrefab, root);
             ghost.gameObject.name = $"Motion {motion.Card.ShortLabel}";
+            ghost.gameObject.SetActive(true);
             ghost.transform.SetAsLastSibling();
             ghost.Button.onClick.RemoveAllListeners();
             ghost.Button.enabled = false;
+            ghost.CanvasGroup = ghost.CanvasGroup != null ? ghost.CanvasGroup : ResolveCanvasGroup(ghost.gameObject);
             ghost.CanvasGroup.blocksRaycasts = false;
+            ghost.CanvasGroup.interactable = false;
             ghost.Root.anchorMin = new Vector2(0.5f, 0.5f);
             ghost.Root.anchorMax = new Vector2(0.5f, 0.5f);
             ghost.Root.pivot = new Vector2(0.5f, 0.5f);
@@ -3814,6 +4115,70 @@ namespace BackyardLegends.Runtime
             }
 
             floatingCards.Clear();
+        }
+
+        private void SpawnStrongCardFx(CardMotionSnapshot motion)
+        {
+            var prefab = ResolveStrongCardFxPrefab(motion.Card);
+            if (prefab == null || !trickSlots.TryGetValue(motion.Seat, out var slot) || slot?.Root == null)
+            {
+                return;
+            }
+
+            var root = AnimationRoot;
+            var effect = Instantiate(prefab, root);
+            effect.name = $"{prefab.name} Runtime";
+            effect.transform.SetAsLastSibling();
+            effect.transform.localPosition = new Vector3(
+                GetAnchoredPoint(slot.Root, new Vector2(0.5f, 0.5f)).x,
+                GetAnchoredPoint(slot.Root, new Vector2(0.5f, 0.5f)).y,
+                -12f);
+            effect.transform.localRotation = prefab.transform.localRotation;
+            var rootScale = Mathf.Max(0.0001f, root.lossyScale.x);
+            effect.transform.localScale = Vector3.one * (0.78f / rootScale);
+
+            var particles = effect.GetComponentsInChildren<ParticleSystem>(true);
+            foreach (var particle in particles)
+            {
+                particle.Clear(true);
+                particle.Play(true);
+            }
+
+            Destroy(effect, ResolveStrongCardFxLifetime(particles));
+        }
+
+        private GameObject ResolveStrongCardFxPrefab(Card card)
+        {
+            if (card.Rank == 14)
+            {
+                return aceCardFxPrefab;
+            }
+
+            if (card.Rank == 13)
+            {
+                return kingCardFxPrefab;
+            }
+
+            return card.Suit == Suit.Spades && card.Rank >= 11
+                ? highSpadeFxPrefab
+                : null;
+        }
+
+        private static float ResolveStrongCardFxLifetime(IReadOnlyCollection<ParticleSystem> particles)
+        {
+            if (particles == null || particles.Count == 0)
+            {
+                return 2.5f;
+            }
+
+            var lifetime = 0f;
+            foreach (var particle in particles)
+            {
+                var main = particle.main;
+                lifetime = Mathf.Max(lifetime, main.duration + main.startLifetime.constantMax);
+            }
+
+            return Mathf.Clamp(lifetime + 0.35f, 1.25f, 5f);
         }
 
         private void ClearOpeningDealRuntimeSeatCards()
@@ -3942,6 +4307,254 @@ namespace BackyardLegends.Runtime
             transientFx.Clear();
         }
 
+        private void RefreshBookLeaderLightningFx()
+        {
+            var leader = ResolveBookLightningLeader();
+            if (!leader.HasValue ||
+                !seatAvatarImages.TryGetValue(leader.Value, out var avatarImage) ||
+                avatarImage == null)
+            {
+                DisableBookLightningFxExcept(null);
+                return;
+            }
+
+            DisableBookLightningFxExcept(leader.Value);
+            var lightning = EnsureAvatarBookLightningFx(leader.Value, avatarImage);
+            if (lightning == null)
+            {
+                return;
+            }
+
+            ConfigureBookLightningFx(lightning, 1f);
+        }
+
+        private Component EnsureAvatarBookLightningFx(SeatId seat, Image avatarImage)
+        {
+            if (avatarBookLightningFx.TryGetValue(seat, out var existing) && existing != null)
+            {
+                return existing;
+            }
+
+            var lightning = avatarImage
+                .GetComponents<Component>()
+                .FirstOrDefault(component => component != null && component.GetType().Name == "_2dxFX_LightningBolt");
+            if (lightning == null)
+            {
+                var lightningType = Resolve2DxFxType("_2dxFX_LightningBolt");
+                if (lightningType == null)
+                {
+                    return null;
+                }
+
+                lightning = avatarImage.gameObject.AddComponent(lightningType);
+            }
+
+            avatarBookLightningFx[seat] = lightning;
+            return lightning;
+        }
+
+        private SeatId? ResolveBookLightningLeader()
+        {
+            var tricksBySeat = controller?.State?.RoundState?.TricksWonBySeat;
+            if (tricksBySeat == null || tricksBySeat.Count == 0)
+            {
+                return null;
+            }
+
+            SeatId? leader = null;
+            var leaderBooks = int.MinValue;
+            var tiedForLead = false;
+            foreach (var seat in SpadesSeatUtility.TurnOrder)
+            {
+                var books = tricksBySeat.TryGetValue(seat, out var count) ? count : 0;
+                if (books > leaderBooks)
+                {
+                    leaderBooks = books;
+                    leader = seat;
+                    tiedForLead = false;
+                }
+                else if (books == leaderBooks)
+                {
+                    tiedForLead = true;
+                }
+            }
+
+            if (!leader.HasValue || tiedForLead || leaderBooks <= 0)
+            {
+                return null;
+            }
+
+            return leader;
+        }
+
+        private static void ConfigureBookLightningFx(Component lightning, float intensity)
+        {
+            if (lightning == null)
+            {
+                return;
+            }
+
+            if (lightning is Behaviour behaviour)
+            {
+                behaviour.enabled = true;
+            }
+
+            SetFxBool(lightning, "ActiveChange", true);
+            SetFxBool(lightning, "ActiveUpdate", true);
+            SetFxFloat(lightning, "_Alpha", 1f - Mathf.Clamp01(intensity));
+            SetFxFloat(lightning, "_Value1", 144f);
+            SetFxFloat(lightning, "_Value2", 1.65f);
+            SetFxFloat(lightning, "_Value3", 0.88f);
+            SetFxFloat(lightning, "_Value4", Mathf.Repeat(Time.unscaledTime * 2.8f, 1f));
+            CallFxUpdate(lightning);
+        }
+
+        private void DisableBookLightningFxExcept(SeatId? seatToKeep)
+        {
+            foreach (var pair in avatarBookLightningFx.ToArray())
+            {
+                var fx = pair.Value;
+                if (fx == null)
+                {
+                    avatarBookLightningFx.Remove(pair.Key);
+                    continue;
+                }
+
+                if (seatToKeep.HasValue && pair.Key == seatToKeep.Value)
+                {
+                    continue;
+                }
+
+                SetFxFloat(fx, "_Alpha", 1f);
+                CallFxUpdate(fx);
+                SetFxBool(fx, "ActiveUpdate", false);
+                if (fx is Behaviour behaviour)
+                {
+                    behaviour.enabled = false;
+                }
+            }
+        }
+
+        private void SetLatestBookAura(SeatId winner)
+        {
+            foreach (var pair in seatAuraObjects)
+            {
+                if (pair.Value != null)
+                {
+                    pair.Value.SetActive(pair.Key == winner);
+                }
+            }
+        }
+
+        private void ClearLatestBookAura()
+        {
+            foreach (var aura in seatAuraObjects.Values)
+            {
+                if (aura != null)
+                {
+                    aura.SetActive(false);
+                }
+            }
+        }
+
+        private static System.Type Resolve2DxFxType(string typeName)
+        {
+            return System.AppDomain.CurrentDomain.GetAssemblies()
+                .Select(assembly => assembly.GetType(typeName))
+                .FirstOrDefault(type => type != null);
+        }
+
+        private static Component FindComponentByTypeName(GameObject target, string typeName)
+        {
+            return target == null
+                ? null
+                : target.GetComponents<Component>()
+                    .FirstOrDefault(component => component != null && component.GetType().Name == typeName);
+        }
+
+        private static void SetFxBool(Component component, string fieldName, bool value)
+        {
+            component?.GetType()
+                .GetField(fieldName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+                ?.SetValue(component, value);
+        }
+
+        private static void SetFxFloat(Component component, string fieldName, float value)
+        {
+            component?.GetType()
+                .GetField(fieldName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+                ?.SetValue(component, value);
+        }
+
+        private static void CallFxUpdate(Component component)
+        {
+            component?.GetType()
+                .GetMethod("CallUpdate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+                ?.Invoke(component, null);
+        }
+
+        private void ClearBookLightningFx()
+        {
+            DisableBookLightningFxExcept(null);
+        }
+
+        private void StartBookCameraShake()
+        {
+            if (bookCameraShakeLoop != null)
+            {
+                RestoreBookCameraShakeTarget();
+                StopCoroutine(bookCameraShakeLoop);
+                bookCameraShakeLoop = null;
+            }
+
+            var targetCamera = Camera.main ?? FindFirstObjectByType<Camera>();
+            var target = targetCamera != null
+                ? targetCamera.transform
+                : AnimationRoot;
+            if (target == null)
+            {
+                return;
+            }
+
+            bookCameraShakeTarget = target;
+            bookCameraShakeStartPosition = target.localPosition;
+            bookCameraShakeStartRotation = target.localRotation;
+            bookCameraShakeLoop = StartCoroutine(BookCameraShakeRoutine(target));
+        }
+
+        private IEnumerator BookCameraShakeRoutine(Transform target)
+        {
+            var duration = Mathf.Max(0.28f, theme.shakeDuration * 1.9f);
+            var elapsed = 0f;
+            while (elapsed < duration && target != null)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(elapsed / duration);
+                var falloff = 1f - EaseOutCubic(t);
+                var x = Mathf.Sin(elapsed * 112f) * 0.14f * falloff;
+                var y = Mathf.Cos(elapsed * 89f) * 0.09f * falloff;
+                var roll = Mathf.Sin(elapsed * 138f) * 1.35f * falloff;
+                target.localPosition = bookCameraShakeStartPosition + new Vector3(x, y, 0f);
+                target.localRotation = bookCameraShakeStartRotation * Quaternion.Euler(0f, 0f, roll);
+                yield return null;
+            }
+
+            RestoreBookCameraShakeTarget();
+            bookCameraShakeLoop = null;
+        }
+
+        private void RestoreBookCameraShakeTarget()
+        {
+            if (bookCameraShakeTarget == null)
+            {
+                return;
+            }
+
+            bookCameraShakeTarget.localPosition = bookCameraShakeStartPosition;
+            bookCameraShakeTarget.localRotation = bookCameraShakeStartRotation;
+            bookCameraShakeTarget = null;
+        }
+
         private void ClearTransientMotionState(bool stopQueue)
         {
             hiddenTrickSlots.Clear();
@@ -3956,6 +4569,15 @@ namespace BackyardLegends.Runtime
             ClearFloatingCards();
             ClearOpeningDealRuntimeSeatCards();
             ClearTransientFx();
+            ClearBookLightningFx();
+            ClearLatestBookAura();
+            if (bookCameraShakeLoop != null)
+            {
+                StopCoroutine(bookCameraShakeLoop);
+                bookCameraShakeLoop = null;
+            }
+
+            RestoreBookCameraShakeTarget();
             HideAllBidBubbles(true);
             if (deferredSheetStateLoop != null)
             {
@@ -5009,9 +5631,7 @@ namespace BackyardLegends.Runtime
 
         private Vector2 WorldToAnimationPoint(Vector3 worldPoint)
         {
-            var screenPoint = RectTransformUtility.WorldToScreenPoint(null, worldPoint);
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(AnimationRoot, screenPoint, null, out var localPoint);
-            return localPoint;
+            return (Vector2)AnimationRoot.InverseTransformPoint(worldPoint);
         }
 
         private static Vector2 GetSeatInnerAnchor(SeatId seat)
