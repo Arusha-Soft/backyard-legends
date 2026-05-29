@@ -36,8 +36,7 @@ namespace BackyardLegends.Runtime
         {
             "Card_Place_01",
             "Card_Place_02",
-            "Card_Place_03",
-            "Card_Place_04"
+            "Card_Place_03"
         };
         private static readonly Vector2 BidCalloutAnchorMin = new(0.08f, 1.00f);
         private static readonly Vector2 BidCalloutAnchorMax = new(0.92f, 1.42f);
@@ -87,6 +86,9 @@ namespace BackyardLegends.Runtime
         [SerializeField] private AudioClip roundScoreClipAsset;
         [SerializeField] private AudioClip matchEndClipAsset;
         [SerializeField] private AudioClip setBookClipAsset;
+        [SerializeField] private AudioClip avatarRouletteClipAsset;
+        [SerializeField] private AudioClip avatarAssignedClipAsset;
+        [SerializeField] private AudioClip bidPanelOpenClipAsset;
         [SerializeField] private AudioClip[] cardPlaceClipAssets;
         [SerializeField] private AudioSource soundFxAudioSource;
         [Header("Strong Card FX")]
@@ -158,6 +160,9 @@ namespace BackyardLegends.Runtime
         private AudioClip roundScoreClip;
         private AudioClip matchEndClip;
         private AudioClip setBookClip;
+        private AudioClip avatarRouletteClip;
+        private AudioClip avatarAssignedClip;
+        private AudioClip bidPanelOpenClip;
         private AudioClip[] cardPlaceClips;
         private Image lastTrickPanel;
         private Text lastTrickTitleText;
@@ -185,6 +190,8 @@ namespace BackyardLegends.Runtime
         private bool suppressNextHandEntryAnimation;
         private bool optionsMenuOpen;
         private bool exitPromptOpen;
+        private bool bidSheetWasVisible;
+        private float nextAvatarRouletteCueTime;
 #if UNITY_EDITOR
         private float editorDefaultFixedDeltaTime;
 #endif
@@ -206,7 +213,10 @@ namespace BackyardLegends.Runtime
             Invalid,
             RoundScore,
             MatchEnd,
-            SetBook
+            SetBook,
+            AvatarRoulette,
+            AvatarAssigned,
+            BidPanelOpen
         }
 
         private enum ConfirmationPromptType
@@ -231,6 +241,7 @@ namespace BackyardLegends.Runtime
             public float EntryDelay;
             public float RouletteDuration;
             public int RouletteOffset;
+            public int LastRouletteIndex = -1;
         }
 
         private readonly struct CardMotionSnapshot
@@ -1178,6 +1189,9 @@ namespace BackyardLegends.Runtime
             roundScoreClip = ResolveFeedbackClip(roundScoreClipAsset, "Score_Punch", () => CreateToneClip("Round Score Cue", 560f, 820f, 0.2f, 0.18f));
             matchEndClip = ResolveFeedbackClip(matchEndClipAsset, "Match_End", () => CreateToneClip("Match End Cue", 460f, 920f, 0.28f, 0.22f));
             setBookClip = ResolveFeedbackClip(setBookClipAsset, "Set_Book_Impact", CreateSetBookImpactClip);
+            avatarRouletteClip = ResolveFeedbackClip(avatarRouletteClipAsset, "Avatar_Roulette", () => CreateToneClip("Avatar Roulette Cue", 760f, 980f, 0.035f, 0.08f));
+            avatarAssignedClip = ResolveFeedbackClip(avatarAssignedClipAsset, "Avatar_Assigned", () => CreateToneClip("Avatar Assigned Cue", 420f, 840f, 0.16f, 0.14f));
+            bidPanelOpenClip = ResolveFeedbackClip(bidPanelOpenClipAsset, "Bid_Panel_Open", () => CreateToneClip("Bid Panel Open Cue", 300f, 560f, 0.14f, 0.12f));
             cardPlaceClips = ResolveCardPlaceClips();
         }
 
@@ -1281,6 +1295,9 @@ namespace BackyardLegends.Runtime
                 FeedbackCue.RoundScore => roundScoreClip,
                 FeedbackCue.MatchEnd => matchEndClip,
                 FeedbackCue.SetBook => setBookClip,
+                FeedbackCue.AvatarRoulette => avatarRouletteClip,
+                FeedbackCue.AvatarAssigned => avatarAssignedClip,
+                FeedbackCue.BidPanelOpen => bidPanelOpenClip,
                 _ => null
             };
 
@@ -1308,6 +1325,17 @@ namespace BackyardLegends.Runtime
 
             var clip = clips[Random.Range(0, clips.Length)];
             feedbackAudioSource.PlayOneShot(clip, 0.28f);
+        }
+
+        private void PlayAvatarRouletteCue()
+        {
+            if (Time.unscaledTime < nextAvatarRouletteCueTime)
+            {
+                return;
+            }
+
+            nextAvatarRouletteCueTime = Time.unscaledTime + 0.095f;
+            PlayFeedback(FeedbackCue.AvatarRoulette, 0.11f);
         }
 
         private void ApplyTheme()
@@ -1494,7 +1522,7 @@ namespace BackyardLegends.Runtime
             controller.EventRaised += OnMatchEvent;
             controller.StartMatch();
             AddFeedMessage($"Match start: {selectedRule.DisplayName} to {selectedRule.TargetScore}.");
-            SetSheetVisible(sceneRefs.BidSheet, false);
+            SetBidSheetVisible(false);
             SetSheetVisible(sceneRefs.RoundSheet, false);
             SetSheetVisible(sceneRefs.EndSheet, false);
             SetSheetVisible(sceneRefs.OptionsMenu, false);
@@ -2138,14 +2166,14 @@ namespace BackyardLegends.Runtime
         {
             if (openingDealPending || openingDealRunning || handReviewPending || bidTurnDelayPending)
             {
-                SetSheetVisible(sceneRefs.BidSheet, false);
+                SetBidSheetVisible(false);
                 pendingBidSelection = null;
                 return;
             }
 
             var shouldShow = controller.State.Phase == MatchPhase.Bidding &&
                              controller.State.RoundState.BidState.CurrentBidder == SeatId.Bottom;
-            SetSheetVisible(sceneRefs.BidSheet, shouldShow);
+            SetBidSheetVisible(shouldShow);
             if (!shouldShow)
             {
                 pendingBidSelection = null;
@@ -2452,6 +2480,11 @@ namespace BackyardLegends.Runtime
                 ApplyAvatarIntroSeatFinal(state);
             }
 
+            if (states.Count > 0)
+            {
+                PlayFeedback(FeedbackCue.AvatarAssigned, 0.34f);
+            }
+
             yield return new WaitForSecondsRealtime(0.22f);
             CompleteAvatarIntroAndStartDeal(states);
         }
@@ -2506,6 +2539,12 @@ namespace BackyardLegends.Runtime
             }
 
             var rouletteIndex = (state.RouletteOffset + Mathf.FloorToInt(localTime / 0.055f)) % avatarRouletteSprites.Count;
+            if (rouletteIndex != state.LastRouletteIndex)
+            {
+                state.LastRouletteIndex = rouletteIndex;
+                PlayAvatarRouletteCue();
+            }
+
             var sprite = avatarRouletteSprites[rouletteIndex];
             ApplyAvatarIntroSeatSprite(state, sprite);
             if (state.View.NameText != null)
@@ -2736,11 +2775,11 @@ namespace BackyardLegends.Runtime
                 openingStackEffectImage.gameObject.SetActive(false);
             }
 
-            SetSheetVisible(sceneRefs.BidSheet, visible &&
-                                             !openingDealPending &&
-                                             !openingDealRunning &&
-                                             controller?.State?.Phase == MatchPhase.Bidding &&
-                                             controller.State.RoundState.BidState.CurrentBidder == SeatId.Bottom);
+            SetBidSheetVisible(visible &&
+                               !openingDealPending &&
+                               !openingDealRunning &&
+                               controller?.State?.Phase == MatchPhase.Bidding &&
+                               controller.State.RoundState.BidState.CurrentBidder == SeatId.Bottom);
             SetSheetVisible(sceneRefs.RoundSheet, false);
             SetSheetVisible(sceneRefs.EndSheet, false);
             SetSheetVisible(sceneRefs.OptionsMenu, false);
@@ -3079,7 +3118,7 @@ namespace BackyardLegends.Runtime
             }
 
             handReviewPending = true;
-            SetSheetVisible(sceneRefs.BidSheet, false);
+            SetBidSheetVisible(false);
             RenderAll();
             handReviewLoop = StartCoroutine(HandReviewRoutine());
         }
@@ -3101,7 +3140,7 @@ namespace BackyardLegends.Runtime
             }
 
             bidTurnDelayPending = true;
-            SetSheetVisible(sceneRefs.BidSheet, false);
+            SetBidSheetVisible(false);
             RenderAll();
             bidTurnDelayLoop = StartCoroutine(BidTurnDelayRoutine());
         }
@@ -3465,7 +3504,7 @@ namespace BackyardLegends.Runtime
             }
 
             pendingBidSelection = null;
-            SetSheetVisible(sceneRefs.BidSheet, false);
+            SetBidSheetVisible(false);
             HideAllBidBubbles(true);
             RenderAll();
             ScheduleAiLoop();
@@ -6728,6 +6767,21 @@ namespace BackyardLegends.Runtime
             return target != null &&
                    ((sceneRefs.RoundScoreboardView != null && target.IsChildOf(sceneRefs.RoundScoreboardView.transform)) ||
                     (sceneRefs.EndScoreboardView != null && target.IsChildOf(sceneRefs.EndScoreboardView.transform)));
+        }
+
+        private void SetBidSheetVisible(bool visible)
+        {
+            var wasVisible = bidSheetWasVisible &&
+                             sceneRefs.BidSheet != null &&
+                             sceneRefs.BidSheet.gameObject.activeSelf;
+            SetSheetVisible(sceneRefs.BidSheet, visible);
+            var isVisible = sceneRefs.BidSheet != null && sceneRefs.BidSheet.gameObject.activeSelf;
+            if (isVisible && !wasVisible)
+            {
+                PlayFeedback(FeedbackCue.BidPanelOpen, 0.24f);
+            }
+
+            bidSheetWasVisible = isVisible;
         }
 
         private static void SetSheetVisible(RectTransform sheet, bool visible)
