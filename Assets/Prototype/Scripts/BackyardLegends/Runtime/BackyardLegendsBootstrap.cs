@@ -4748,15 +4748,15 @@ namespace BackyardLegends.Runtime
 
             var side = GetBidCameraFocusDirection(seat);
             var travel = targetCamera.orthographic
-                ? Mathf.Max(0.45f, bidFocusDefaultOrthographicSize * 0.18f)
-                : 0.52f;
-            var targetPosition = bidFocusDefaultPosition + new Vector3(side.x * travel, side.y * travel * 0.78f, 0f);
+                ? Mathf.Max(0.62f, bidFocusDefaultOrthographicSize * 0.28f)
+                : 0.72f;
+            var targetPosition = bidFocusDefaultPosition + new Vector3(side.x * travel, side.y * travel * 0.86f, 0f);
             var targetOrthographicSize = targetCamera.orthographic
-                ? bidFocusDefaultOrthographicSize * 0.92f
+                ? bidFocusDefaultOrthographicSize * 0.85f
                 : bidFocusDefaultOrthographicSize;
             var targetFieldOfView = targetCamera.orthographic
                 ? bidFocusDefaultFieldOfView
-                : bidFocusDefaultFieldOfView * 0.94f;
+                : bidFocusDefaultFieldOfView * 0.88f;
 
             bidCameraFocusLoop = StartCoroutine(BidCameraFocusRoutine(
                 targetCamera,
@@ -4764,7 +4764,7 @@ namespace BackyardLegends.Runtime
                 bidFocusDefaultRotation,
                 targetOrthographicSize,
                 targetFieldOfView,
-                0.95f));
+                1.08f));
         }
 
         private void RestoreBidCameraFocus(bool immediate = false)
