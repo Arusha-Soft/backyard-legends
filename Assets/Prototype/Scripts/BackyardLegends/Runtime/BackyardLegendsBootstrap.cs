@@ -2846,7 +2846,7 @@ namespace BackyardLegends.Runtime
 
             PlayFeedback(FeedbackCue.Collect, 0.18f);
             yield return StartCoroutine(OpeningDealFinale());
-            ClearAnimationRootCards();
+            yield return StartCoroutine(AnimateAnimationRootCardsOut());
             BeginHandReview();
         }
 
@@ -3845,6 +3845,76 @@ namespace BackyardLegends.Runtime
                 Destroy(card.gameObject);
             }
 
+        }
+
+        private IEnumerator AnimateAnimationRootCardsOut()
+        {
+            var root = runtimeAnimationRoot;
+            if (root == null)
+            {
+                yield break;
+            }
+
+            var cards = root.GetComponentsInChildren<CardButtonView>(true)
+                .Where(card => card != null)
+                .ToList();
+            if (cards.Count == 0)
+            {
+                yield break;
+            }
+
+            foreach (var card in cards)
+            {
+                if (openingStackPreviewAnimations.TryGetValue(card, out var routine) && routine != null)
+                {
+                    StopCoroutine(routine);
+                }
+
+                openingStackPreviewAnimations.Remove(card);
+                card.gameObject.SetActive(true);
+                card.transform.SetAsLastSibling();
+                card.CanvasGroup = card.CanvasGroup != null ? card.CanvasGroup : ResolveCanvasGroup(card.gameObject);
+                card.CanvasGroup.alpha = 1f;
+                card.CanvasGroup.blocksRaycasts = false;
+            }
+
+            var starts = cards.ToDictionary(card => card, card => card.Root.anchoredPosition);
+            var sizes = cards.ToDictionary(card => card, card => card.Root.sizeDelta);
+            var rotations = cards.ToDictionary(card => card, card => card.Root.localRotation);
+            var rootHeight = Mathf.Max(640f, root.rect.height);
+            var rootWidth = Mathf.Max(360f, root.rect.width);
+            var duration = 0.42f;
+            var elapsed = 0f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(elapsed / duration);
+                var eased = EaseInOutCubic(t);
+                for (var index = 0; index < cards.Count; index++)
+                {
+                    var card = cards[index];
+                    if (card == null)
+                    {
+                        continue;
+                    }
+
+                    var side = index % 2 == 0 ? -1f : 1f;
+                    var target = new Vector2(
+                        side * (rootWidth * 0.75f + index * 3f),
+                        rootHeight * 0.68f + index * 5f);
+                    var arc = Vector2.up * Mathf.Sin(t * Mathf.PI) * 58f;
+                    card.Root.anchoredPosition = Vector2.Lerp(starts[card], target, eased) + arc;
+                    card.Root.sizeDelta = Vector2.Lerp(sizes[card], sizes[card] * 0.72f, EaseOutCubic(t));
+                    card.Root.localRotation = Quaternion.Slerp(rotations[card], Quaternion.Euler(0f, 0f, side * 24f), eased);
+                    card.Root.localScale = Vector3.one * Mathf.Lerp(1f, 0.82f, eased);
+                    card.CanvasGroup.alpha = Mathf.Lerp(1f, 0f, Mathf.Clamp01((t - 0.55f) / 0.45f));
+                }
+
+                yield return null;
+            }
+
+            ClearAnimationRootCards();
         }
 
         private void ClearTransientFx()
