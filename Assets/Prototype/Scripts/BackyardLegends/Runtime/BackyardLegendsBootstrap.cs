@@ -42,8 +42,29 @@ namespace BackyardLegends.Runtime
         private static readonly string[] SetBookAudioResourceNames =
         {
             "Set_Book_Impact",
-            "Set_Book_Impact_Heavy",
+            "Set_Book_Impact_Heavy"
+        };
+        private static readonly string[] BookWinAudioResourceNames =
+        {
+            "Book_Win_01",
+            "Book_Win_02",
+            "Book_Win_03",
+            "Book_Win_04",
+            "Book_Win_05",
+            "Book_Win_06",
+            "Set_Book_Impact"
+        };
+        private static readonly string[] BookWhooshAudioResourceNames =
+        {
+            "Book_Whoosh_01",
+            "Book_Whoosh_02",
             "Set_Book_Whoosh"
+        };
+        private static readonly string[] TableSlamAudioResourceNames =
+        {
+            "Table_Slam_01",
+            "Table_Slam_02",
+            "Table_Slam_03"
         };
         private static readonly Vector2 BidCalloutAnchorMin = new(0.08f, 1.00f);
         private static readonly Vector2 BidCalloutAnchorMax = new(0.92f, 1.42f);
@@ -101,7 +122,15 @@ namespace BackyardLegends.Runtime
         [Header("Strong Card FX")]
         [SerializeField] private GameObject aceCardFxPrefab;
         [SerializeField] private GameObject kingCardFxPrefab;
+        [SerializeField] private GameObject queenCardFxPrefab;
+        [SerializeField] private GameObject jackCardFxPrefab;
         [SerializeField] private GameObject highSpadeFxPrefab;
+        [SerializeField] private GameObject importantCardFxPrefab;
+        [SerializeField] private GameObject cardImpactFxPrefab;
+        [SerializeField] private GameObject cardSmokeFxPrefab;
+        [SerializeField] private GameObject bookWinFxPrefab;
+        [SerializeField] private GameObject setBookFxPrefab;
+        [SerializeField] private GameObject tableSlamFxPrefab;
 
         private readonly Dictionary<SeatId, SeatPanelView> seatViews = new();
         private readonly Dictionary<SeatId, TrickSlotView> trickSlots = new();
@@ -153,6 +182,9 @@ namespace BackyardLegends.Runtime
         private Transform bookCameraShakeTarget;
         private Vector3 bookCameraShakeStartPosition;
         private Quaternion bookCameraShakeStartRotation;
+        private Camera bookCameraShakeCamera;
+        private float bookCameraShakeStartOrthographicSize;
+        private float bookCameraShakeStartFieldOfView;
         private Camera bidFocusCamera;
         private Vector3 bidFocusDefaultPosition;
         private Quaternion bidFocusDefaultRotation;
@@ -179,6 +211,13 @@ namespace BackyardLegends.Runtime
         private AudioClip bidPanelOpenClip;
         private AudioClip[] cardPlaceClips;
         private AudioClip[] setBookClips;
+        private AudioClip[] bookWinClips;
+        private AudioClip[] bookWhooshClips;
+        private AudioClip[] tableSlamClips;
+        private int lastBookWinClipIndex = -1;
+        private int lastBookWhooshClipIndex = -1;
+        private int lastSetBookClipIndex = -1;
+        private int lastTableSlamClipIndex = -1;
         private Image lastTrickPanel;
         private Text lastTrickTitleText;
         private RectTransform lastTrickCardsRoot;
@@ -1214,7 +1253,10 @@ namespace BackyardLegends.Runtime
             avatarAssignedClip = ResolveFeedbackClip(avatarAssignedClipAsset, "Avatar_Assigned", () => CreateToneClip("Avatar Assigned Cue", 420f, 840f, 0.16f, 0.14f));
             bidPanelOpenClip = ResolveFeedbackClip(bidPanelOpenClipAsset, "Bid_Panel_Open", () => CreateToneClip("Bid Panel Open Cue", 300f, 560f, 0.14f, 0.12f));
             cardPlaceClips = ResolveCardPlaceClips();
-            setBookClips = ResolveSetBookClips();
+            setBookClips = ResolveAudioClips(SetBookAudioResourceNames, setBookClip);
+            bookWinClips = ResolveAudioClips(BookWinAudioResourceNames, collectClip);
+            bookWhooshClips = ResolveAudioClips(BookWhooshAudioResourceNames, null);
+            tableSlamClips = ResolveAudioClips(TableSlamAudioResourceNames, setBookClip);
         }
 
         private static AudioClip ResolveFeedbackClip(AudioClip overrideClip, string resourceName, System.Func<AudioClip> fallbackFactory)
@@ -1243,15 +1285,15 @@ namespace BackyardLegends.Runtime
                 .ToArray();
         }
 
-        private AudioClip[] ResolveSetBookClips()
+        private static AudioClip[] ResolveAudioClips(IEnumerable<string> resourceNames, AudioClip fallbackClip)
         {
-            var clips = SetBookAudioResourceNames
+            var clips = resourceNames
                 .Select(BackyardLegendsStreetAudio.LoadSfx)
                 .Where(clip => clip != null)
                 .ToArray();
             return clips.Length > 0
                 ? clips
-                : new[] { setBookClip }.Where(clip => clip != null).ToArray();
+                : new[] { fallbackClip }.Where(clip => clip != null).ToArray();
         }
 
         private AudioSource FindSoundFxAudioSource()
@@ -1378,49 +1420,98 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
-            if (setBookClips == null || setBookClips.Length == 0)
+            var impact = PickRandomClip(setBookClips, ref lastSetBookClipIndex) ??
+                         PickRandomClip(bookWinClips, ref lastBookWinClipIndex);
+            if (impact == null)
             {
                 PlayFeedback(FeedbackCue.SetBook, 1f);
                 return;
             }
 
-            PlaySetBookClips(1.4f);
+            feedbackAudioSource.PlayOneShot(impact, 2.25f);
+            var whoosh = PickRandomClip(bookWhooshClips, ref lastBookWhooshClipIndex);
+            if (whoosh != null)
+            {
+                feedbackAudioSource.PlayOneShot(whoosh, 0.95f);
+            }
+
+            var extra = PickRandomClip(bookWinClips, ref lastBookWinClipIndex);
+            if (extra != null && extra != impact)
+            {
+                feedbackAudioSource.PlayOneShot(extra, 1.05f);
+            }
         }
 
         private void PlayBookWonSound()
         {
-            if (setBookClips == null || setBookClips.Length == 0)
+            if (feedbackAudioSource == null)
+            {
+                return;
+            }
+
+            var impact = PickRandomClip(bookWinClips, ref lastBookWinClipIndex);
+            if (impact == null)
             {
                 PlayFeedback(FeedbackCue.Collect, 0.5f);
                 return;
             }
 
-            PlaySetBookClips(0.72f);
+            feedbackAudioSource.PlayOneShot(impact, 1.18f);
+            if (Random.value < 0.48f)
+            {
+                var whoosh = PickRandomClip(bookWhooshClips, ref lastBookWhooshClipIndex);
+                if (whoosh != null)
+                {
+                    feedbackAudioSource.PlayOneShot(whoosh, 0.38f);
+                }
+            }
         }
 
-        private void PlaySetBookClips(float volumeMultiplier)
+        private void PlayTableSlamSound()
         {
-            if (feedbackAudioSource == null || setBookClips == null)
+            if (feedbackAudioSource == null)
             {
                 return;
             }
 
-            for (var i = 0; i < setBookClips.Length; i++)
+            var impact = PickRandomClip(tableSlamClips, ref lastTableSlamClipIndex) ??
+                         PickRandomClip(setBookClips, ref lastSetBookClipIndex) ??
+                         PickRandomClip(bookWinClips, ref lastBookWinClipIndex);
+            if (impact == null)
             {
-                var clip = setBookClips[i];
-                if (clip == null)
-                {
-                    continue;
-                }
-
-                var volume = i switch
-                {
-                    0 => 1.55f,
-                    1 => 1.9f,
-                    _ => 0.9f
-                };
-                feedbackAudioSource.PlayOneShot(clip, volume * volumeMultiplier);
+                PlayFeedback(FeedbackCue.SetBook, 1f);
+                return;
             }
+
+            feedbackAudioSource.PlayOneShot(impact, 1.72f);
+            var whoosh = PickRandomClip(bookWhooshClips, ref lastBookWhooshClipIndex);
+            if (whoosh != null && Random.value < 0.42f)
+            {
+                feedbackAudioSource.PlayOneShot(whoosh, 0.34f);
+            }
+        }
+
+        private static AudioClip PickRandomClip(AudioClip[] clips, ref int lastIndex)
+        {
+            if (clips == null || clips.Length == 0)
+            {
+                return null;
+            }
+
+            if (clips.Length == 1)
+            {
+                lastIndex = 0;
+                return clips[0];
+            }
+
+            var index = Random.Range(0, clips.Length);
+            if (index == lastIndex)
+            {
+                index = (index + 1) % clips.Length;
+            }
+
+            lastIndex = index;
+            return clips[index];
         }
 
         private void ApplyTheme()
@@ -3891,8 +3982,7 @@ namespace BackyardLegends.Runtime
             hiddenTrickSlots.Remove(motion.Seat);
             RenderTrickArea();
             PlayRandomCardPlaceSound();
-            SpawnStrongCardFx(motion);
-            SpawnImpactBurst(GetAnchoredPoint(trickSlots[motion.Seat].Root, new Vector2(0.5f, 0.5f)), motion.Card.IsRed ? theme.red : theme.gold, 32f, 4);
+            SpawnCardPlayFx(motion);
             yield return PulseRect(trickSlots[motion.Seat].Root, 1.06f, Mathf.Max(0.12f, theme.pulseDuration * 0.75f));
         }
 
@@ -3953,9 +4043,9 @@ namespace BackyardLegends.Runtime
             PlayBookWonSound();
             RefreshBookLeaderLightningFx();
             SetLatestBookAura(winner);
-            StartBookCameraShake();
-            SpawnImpactBurst(GetAnchoredPoint(seatViews[winner].Root, GetSeatInnerAnchor(winner)), winner.ToTeam() == TeamId.Home ? theme.green : theme.red, 42f, 5);
-            SpawnImpactBurst(GetAnchoredPoint(sceneRefs.DiscardAnchorImage.rectTransform, new Vector2(0.5f, 0.5f)), theme.gold, 28f, 3);
+            StartBookCameraShake(winner);
+            SpawnEpicToonFx(bookWinFxPrefab, GetAnchoredPoint(seatViews[winner].Root, GetSeatInnerAnchor(winner)), 1.08f);
+            SpawnEpicToonFx(cardSmokeFxPrefab, GetAnchoredPoint(sceneRefs.DiscardAnchorImage.rectTransform, new Vector2(0.5f, 0.5f)), 0.72f);
             StartBookTextImpact(winner, null, winner.ToTeam() == TeamId.Home ? theme.green : theme.red, false);
             yield return PulseRect(sceneRefs.DiscardAnchorImage.rectTransform, 1.07f, Mathf.Max(0.12f, theme.pulseDuration * 0.8f));
         }
@@ -4339,25 +4429,55 @@ namespace BackyardLegends.Runtime
             floatingCards.Clear();
         }
 
-        private void SpawnStrongCardFx(CardMotionSnapshot motion)
+        private void SpawnCardPlayFx(CardMotionSnapshot motion)
         {
-            var prefab = ResolveStrongCardFxPrefab(motion.Card);
-            if (prefab == null || !trickSlots.TryGetValue(motion.Seat, out var slot) || slot?.Root == null)
+            if (!trickSlots.TryGetValue(motion.Seat, out var slot) || slot?.Root == null)
             {
                 return;
+            }
+
+            var anchoredPosition = GetAnchoredPoint(slot.Root, new Vector2(0.5f, 0.5f));
+            var card = motion.Card;
+            var color = ResolveCardFxColor(card);
+            var important = IsImportantCard(card);
+            var spawnedPrefab = SpawnStrongCardFx(motion, anchoredPosition);
+            if (important)
+            {
+                SpawnEpicToonFx(importantCardFxPrefab, anchoredPosition, card.Suit == Suit.Spades ? 1.16f : 0.98f);
+                SpawnEpicToonFx(cardSmokeFxPrefab, anchoredPosition, card.Suit == Suit.Spades ? 0.86f : 0.7f);
+                if (!spawnedPrefab)
+                {
+                    SpawnEpicToonFx(cardImpactFxPrefab, anchoredPosition + new Vector2(0f, 14f), 0.82f);
+                }
+
+                return;
+            }
+
+            SpawnEpicToonFx(cardImpactFxPrefab, anchoredPosition, 0.58f);
+            SpawnEpicToonFx(cardSmokeFxPrefab, anchoredPosition, 0.48f);
+        }
+
+        private bool SpawnStrongCardFx(CardMotionSnapshot motion, Vector2 anchoredPosition)
+        {
+            var prefab = ResolveStrongCardFxPrefab(motion.Card);
+            return SpawnEpicToonFx(prefab, anchoredPosition, 0.78f);
+        }
+
+        private bool SpawnEpicToonFx(GameObject prefab, Vector2 anchoredPosition, float scaleMultiplier)
+        {
+            if (prefab == null)
+            {
+                return false;
             }
 
             var root = AnimationRoot;
             var effect = Instantiate(prefab, root);
             effect.name = $"{prefab.name} Runtime";
             effect.transform.SetAsLastSibling();
-            effect.transform.localPosition = new Vector3(
-                GetAnchoredPoint(slot.Root, new Vector2(0.5f, 0.5f)).x,
-                GetAnchoredPoint(slot.Root, new Vector2(0.5f, 0.5f)).y,
-                -12f);
+            effect.transform.localPosition = new Vector3(anchoredPosition.x, anchoredPosition.y, -12f);
             effect.transform.localRotation = prefab.transform.localRotation;
             var rootScale = Mathf.Max(0.0001f, root.lossyScale.x);
-            effect.transform.localScale = Vector3.one * (0.78f / rootScale);
+            effect.transform.localScale = Vector3.one * (Mathf.Max(0.05f, scaleMultiplier) / rootScale);
 
             var particles = effect.GetComponentsInChildren<ParticleSystem>(true);
             foreach (var particle in particles)
@@ -4367,6 +4487,7 @@ namespace BackyardLegends.Runtime
             }
 
             Destroy(effect, ResolveStrongCardFxLifetime(particles));
+            return true;
         }
 
         private GameObject ResolveStrongCardFxPrefab(Card card)
@@ -4381,9 +4502,39 @@ namespace BackyardLegends.Runtime
                 return kingCardFxPrefab;
             }
 
-            return card.Suit == Suit.Spades && card.Rank >= 11
+            if (card.Rank == 12)
+            {
+                return queenCardFxPrefab;
+            }
+
+            if (card.Rank == 11)
+            {
+                return jackCardFxPrefab;
+            }
+
+            return card.Suit == Suit.Spades && card.Rank >= 10
                 ? highSpadeFxPrefab
-                : null;
+                : importantCardFxPrefab;
+        }
+
+        private static bool IsImportantCard(Card card)
+        {
+            return card.Rank >= 12 || (card.Suit == Suit.Spades && card.Rank >= 10);
+        }
+
+        private Color ResolveCardFxColor(Card card)
+        {
+            if (card.Suit == Suit.Spades)
+            {
+                return theme.gold;
+            }
+
+            if (card.Rank >= 13)
+            {
+                return theme.red;
+            }
+
+            return card.IsRed ? theme.red : theme.primaryText;
         }
 
         private static float ResolveStrongCardFxLifetime(IReadOnlyCollection<ParticleSystem> particles)
@@ -4898,7 +5049,7 @@ namespace BackyardLegends.Runtime
             };
         }
 
-        private void StartBookCameraShake()
+        private void StartBookCameraShake(SeatId focusSeat)
         {
             if (bookCameraShakeLoop != null)
             {
@@ -4919,17 +5070,35 @@ namespace BackyardLegends.Runtime
             bookCameraShakeTarget = target;
             bookCameraShakeStartPosition = target.localPosition;
             bookCameraShakeStartRotation = target.localRotation;
-            bookCameraShakeLoop = StartCoroutine(BookCameraShakeRoutine(target));
+            bookCameraShakeCamera = targetCamera;
+            if (bookCameraShakeCamera != null)
+            {
+                bookCameraShakeStartOrthographicSize = bookCameraShakeCamera.orthographicSize;
+                bookCameraShakeStartFieldOfView = bookCameraShakeCamera.fieldOfView;
+            }
+
+            bookCameraShakeLoop = StartCoroutine(BookCameraShakeRoutine(target, GetBidCameraFocusDirection(focusSeat)));
         }
 
-        private IEnumerator BookCameraShakeRoutine(Transform target)
+        private IEnumerator BookCameraShakeRoutine(Transform target, Vector2 focusDirection)
         {
             var duration = Mathf.Max(0.44f, theme.shakeDuration * 2.8f);
+            var punchTravel = bookCameraShakeCamera != null && bookCameraShakeCamera.orthographic
+                ? Mathf.Max(0.5f, bookCameraShakeStartOrthographicSize * 0.23f)
+                : 0.66f;
+            var punchOffset = new Vector3(focusDirection.x * punchTravel, focusDirection.y * punchTravel * 0.78f, 0f);
+            var punchOrthographicSize = bookCameraShakeCamera != null && bookCameraShakeCamera.orthographic
+                ? bookCameraShakeStartOrthographicSize * 0.84f
+                : bookCameraShakeStartOrthographicSize;
+            var punchFieldOfView = bookCameraShakeCamera != null && !bookCameraShakeCamera.orthographic
+                ? bookCameraShakeStartFieldOfView * 0.9f
+                : bookCameraShakeStartFieldOfView;
             var elapsed = 0f;
             while (elapsed < duration && target != null)
             {
                 elapsed += Time.unscaledDeltaTime;
                 var t = Mathf.Clamp01(elapsed / duration);
+                var punch = Mathf.Sin(t * Mathf.PI);
                 var falloff = 1f - EaseOutCubic(t);
                 var hit = Mathf.Exp(-18f * t);
                 var x = (Mathf.Sin(elapsed * 118f) * 0.32f + Mathf.Sin(elapsed * 39f) * 0.14f) * falloff;
@@ -4938,8 +5107,20 @@ namespace BackyardLegends.Runtime
                 x += Mathf.Sin(elapsed * 220f) * 0.18f * hit;
                 y += Mathf.Cos(elapsed * 210f) * 0.14f * hit;
                 roll += Mathf.Sin(elapsed * 260f) * 1.8f * hit;
-                target.localPosition = bookCameraShakeStartPosition + new Vector3(x, y, 0f);
+                target.localPosition = bookCameraShakeStartPosition + punchOffset * punch + new Vector3(x, y, 0f);
                 target.localRotation = bookCameraShakeStartRotation * Quaternion.Euler(0f, 0f, roll);
+                if (bookCameraShakeCamera != null)
+                {
+                    if (bookCameraShakeCamera.orthographic)
+                    {
+                        bookCameraShakeCamera.orthographicSize = Mathf.Lerp(bookCameraShakeStartOrthographicSize, punchOrthographicSize, punch);
+                    }
+                    else
+                    {
+                        bookCameraShakeCamera.fieldOfView = Mathf.Lerp(bookCameraShakeStartFieldOfView, punchFieldOfView, punch);
+                    }
+                }
+
                 yield return null;
             }
 
@@ -4956,7 +5137,20 @@ namespace BackyardLegends.Runtime
 
             bookCameraShakeTarget.localPosition = bookCameraShakeStartPosition;
             bookCameraShakeTarget.localRotation = bookCameraShakeStartRotation;
+            if (bookCameraShakeCamera != null)
+            {
+                if (bookCameraShakeCamera.orthographic)
+                {
+                    bookCameraShakeCamera.orthographicSize = bookCameraShakeStartOrthographicSize;
+                }
+                else
+                {
+                    bookCameraShakeCamera.fieldOfView = bookCameraShakeStartFieldOfView;
+                }
+            }
+
             bookCameraShakeTarget = null;
+            bookCameraShakeCamera = null;
         }
 
         private void ClearTransientMotionState(bool stopQueue)
@@ -5542,6 +5736,12 @@ namespace BackyardLegends.Runtime
 
         private void SpawnImpactBurst(Vector2 anchoredPosition, Color color, float size, int pieces)
         {
+            SpawnEpicToonFx(cardImpactFxPrefab, anchoredPosition, Mathf.Clamp(size / 58f, 0.45f, 1.55f));
+        }
+
+        private void SpawnCardSmokeFx(Vector2 anchoredPosition, Color color, float scale, int puffs)
+        {
+            SpawnEpicToonFx(cardSmokeFxPrefab, anchoredPosition, Mathf.Clamp(scale, 0.35f, 1.35f));
         }
 
         private IEnumerator OpeningDealFinale()
@@ -5619,6 +5819,67 @@ namespace BackyardLegends.Runtime
                 {
                     transientFx.Remove(fx);
                     Destroy(fx.gameObject);
+                }
+            }
+        }
+
+        private IEnumerator CardSmokeFxRoutine(Vector2 anchoredPosition, Color color, float scale, int puffs)
+        {
+            var sprite = ResolveSoftPanelSprite();
+            var localPuffs = new List<Graphic>(puffs);
+            for (var index = 0; index < puffs; index++)
+            {
+                var fxGo = new GameObject($"Card Smoke Fx {index}", typeof(RectTransform), typeof(Image));
+                fxGo.transform.SetParent(AnimationRoot, false);
+                fxGo.transform.SetAsLastSibling();
+                var rect = fxGo.GetComponent<RectTransform>();
+                rect.anchorMin = new Vector2(0.5f, 0.5f);
+                rect.anchorMax = new Vector2(0.5f, 0.5f);
+                rect.pivot = new Vector2(0.5f, 0.5f);
+                var spread = 18f * scale;
+                rect.anchoredPosition = anchoredPosition + new Vector2(Random.Range(-spread, spread), Random.Range(-spread * 0.25f, spread * 0.35f));
+                rect.sizeDelta = Vector2.one * Random.Range(30f, 54f) * scale;
+                rect.localRotation = Quaternion.Euler(0f, 0f, Random.Range(-24f, 24f));
+                var image = fxGo.GetComponent<Image>();
+                image.sprite = sprite;
+                image.type = Image.Type.Sliced;
+                image.raycastTarget = false;
+                image.color = color;
+                transientFx.Add(image);
+                localPuffs.Add(image);
+            }
+
+            var elapsed = 0f;
+            var duration = Mathf.Max(0.22f, theme.pulseDuration * 1.45f);
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(elapsed / duration);
+                var eased = EaseOutCubic(t);
+                for (var index = 0; index < localPuffs.Count; index++)
+                {
+                    var puff = localPuffs[index];
+                    if (puff == null)
+                    {
+                        continue;
+                    }
+
+                    var rect = (RectTransform)puff.transform;
+                    var side = index % 2 == 0 ? -1f : 1f;
+                    rect.anchoredPosition += new Vector2(side * 10f, 24f) * Time.unscaledDeltaTime * scale;
+                    rect.localScale = Vector3.one * Mathf.Lerp(0.72f, 1.55f, eased);
+                    puff.color = new Color(color.r, color.g, color.b, Mathf.Lerp(color.a, 0f, t));
+                }
+
+                yield return null;
+            }
+
+            foreach (var puff in localPuffs)
+            {
+                if (puff != null)
+                {
+                    transientFx.Remove(puff);
+                    Destroy(puff.gameObject);
                 }
             }
         }
@@ -6101,6 +6362,7 @@ namespace BackyardLegends.Runtime
             PlaySetBookSound();
             TriggerSetBookHaptic();
             var center = GetAnchoredPoint(sceneRefs.BannerText.rectTransform, new Vector2(0.5f, 0.5f));
+            SpawnEpicToonFx(setBookFxPrefab != null ? setBookFxPrefab : bookWinFxPrefab, center, 1.28f);
             SpawnImpactBurst(center, color, 88f, 10);
             SpawnImpactBurst(center + new Vector2(0f, -18f), theme.gold, 56f, 7);
             foreach (var seat in SpadesSeatUtility.TurnOrder.Where(seat => seat.ToTeam() == team))
