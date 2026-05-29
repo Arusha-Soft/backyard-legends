@@ -843,7 +843,9 @@ namespace BackyardLegends.Runtime
                 if (avatarTransform != null && avatarTransform.TryGetComponent<Image>(out var avatarImage))
                 {
                     seatAvatarImages[pair.Key] = avatarImage;
-                    var lightning = FindComponentByTypeName(avatarImage.gameObject, "_2dxFX_LightningBolt");
+                    var lightningOwner = ResolveAvatarBorderObject(view, avatarImage);
+                    var lightning = FindComponentByTypeName(lightningOwner, "_2dxFX_LightningBolt") ??
+                                    FindComponentByTypeName(avatarImage.gameObject, "_2dxFX_LightningBolt");
                     if (lightning != null)
                     {
                         avatarBookLightningFx[pair.Key] = lightning;
@@ -4409,9 +4411,9 @@ namespace BackyardLegends.Runtime
                 return existing;
             }
 
-            var lightning = avatarImage
-                .GetComponents<Component>()
-                .FirstOrDefault(component => component != null && component.GetType().Name == "_2dxFX_LightningBolt");
+            var lightningOwner = ResolveAvatarBorderObject(seat, avatarImage) ?? avatarImage.gameObject;
+            var lightning = FindComponentByTypeName(lightningOwner, "_2dxFX_LightningBolt") ??
+                            FindComponentByTypeName(avatarImage.gameObject, "_2dxFX_LightningBolt");
             if (lightning == null)
             {
                 var lightningType = Resolve2DxFxType("_2dxFX_LightningBolt");
@@ -4420,11 +4422,33 @@ namespace BackyardLegends.Runtime
                     return null;
                 }
 
-                lightning = avatarImage.gameObject.AddComponent(lightningType);
+                lightning = lightningOwner.AddComponent(lightningType);
             }
 
             avatarBookLightningFx[seat] = lightning;
             return lightning;
+        }
+
+        private GameObject ResolveAvatarBorderObject(SeatId seat, Image avatarImage)
+        {
+            return seatViews.TryGetValue(seat, out var view)
+                ? ResolveAvatarBorderObject(view, avatarImage)
+                : ResolveAvatarBorderObject(null, avatarImage);
+        }
+
+        private static GameObject ResolveAvatarBorderObject(SeatPanelView view, Image avatarImage)
+        {
+            var root = view != null ? view.Root : avatarImage != null ? avatarImage.transform.parent : null;
+            var border = root != null ? root.Find("Avatar Border") : null;
+            if (border != null)
+            {
+                return border.gameObject;
+            }
+
+            border = avatarImage != null && avatarImage.transform.parent != null
+                ? avatarImage.transform.parent.Find("Avatar Border")
+                : null;
+            return border != null ? border.gameObject : null;
         }
 
         private SeatId? ResolveBookLightningLeader()
