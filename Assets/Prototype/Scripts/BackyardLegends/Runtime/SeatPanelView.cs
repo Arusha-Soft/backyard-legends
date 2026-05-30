@@ -11,6 +11,7 @@ namespace BackyardLegends.Runtime
         public Text BidText;
         public Text TricksText;
         public Image BidCalloutPanel;
+        public Image BidCalloutSplash;
         public Text BidCalloutText;
         public CanvasGroup BidCalloutGroup;
 

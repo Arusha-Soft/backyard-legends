@@ -66,6 +66,28 @@ namespace BackyardLegends.Runtime
             "Table_Slam_02",
             "Table_Slam_03"
         };
+        private static readonly string[] GraffitiSprayAudioResourceNames =
+        {
+            "Graffiti_Spray_01",
+            "Graffiti_Spray_02",
+            "Graffiti_Spray_03"
+        };
+        private static readonly string[] SpadesBrokenAudioResourceNames =
+        {
+            "Spades_Broken_Metal_01",
+            "Spades_Broken_Metal_02",
+            "Spades_Broken_Metal_03"
+        };
+        private static readonly string[] TrashTalkTags =
+        {
+            "CLEAN",
+            "NO MERCY",
+            "LOCKED",
+            "STREET RULES"
+        };
+        private const float TrashTalkStrongCardChance = 0.07f;
+        private const float TrashTalkBigBookChance = 0.16f;
+        private const float TrashTalkSpadesBrokenChance = 0.32f;
         private static readonly Vector2 BidCalloutAnchorMin = new(0.08f, 1.00f);
         private static readonly Vector2 BidCalloutAnchorMax = new(0.92f, 1.42f);
         private static readonly string[] AvatarDisplayNames =
@@ -131,6 +153,8 @@ namespace BackyardLegends.Runtime
         [SerializeField] private GameObject bookWinFxPrefab;
         [SerializeField] private GameObject setBookFxPrefab;
         [SerializeField] private GameObject tableSlamFxPrefab;
+        [SerializeField] private GameObject spadesBrokenSmokeFxPrefab;
+        [SerializeField] private GameObject spadesBrokenLightningFxPrefab;
 
         private readonly Dictionary<SeatId, SeatPanelView> seatViews = new();
         private readonly Dictionary<SeatId, TrickSlotView> trickSlots = new();
@@ -214,14 +238,20 @@ namespace BackyardLegends.Runtime
         private AudioClip[] bookWinClips;
         private AudioClip[] bookWhooshClips;
         private AudioClip[] tableSlamClips;
+        private AudioClip[] graffitiSprayClips;
+        private AudioClip[] spadesBrokenClips;
         private int lastBookWinClipIndex = -1;
         private int lastBookWhooshClipIndex = -1;
         private int lastSetBookClipIndex = -1;
         private int lastTableSlamClipIndex = -1;
+        private int lastGraffitiSprayClipIndex = -1;
+        private int lastSpadesBrokenClipIndex = -1;
+        private Sprite graffitiSplashSprite;
         private Image lastTrickPanel;
         private Text lastTrickTitleText;
         private RectTransform lastTrickCardsRoot;
         private CanvasGroup lastTrickGroup;
+        private RectTransform runtimeFxCanvasRoot;
         private RectTransform runtimeAnimationRoot;
         private Sprite bidButtonDefaultSprite;
         private Sprite bidButtonSelectedSprite;
@@ -245,7 +275,9 @@ namespace BackyardLegends.Runtime
         private bool optionsMenuOpen;
         private bool exitPromptOpen;
         private bool bidSheetWasVisible;
+        private bool spadesBrokenMomentShown;
         private float nextAvatarRouletteCueTime;
+        private float nextTrashTalkPopupTime;
 #if UNITY_EDITOR
         private float editorDefaultFixedDeltaTime;
 #endif
@@ -455,7 +487,7 @@ namespace BackyardLegends.Runtime
 
         private RectTransform ResolveVisibleAnimationRoot()
         {
-            var activeCanvas = FindActiveGameplayCanvasRoot();
+            var activeCanvas = ResolveRuntimeFxCanvasRoot();
             if (runtimeAnimationRoot != null)
             {
                 if (activeCanvas != null && runtimeAnimationRoot.parent != activeCanvas)
@@ -497,6 +529,89 @@ namespace BackyardLegends.Runtime
             group.blocksRaycasts = false;
 
             return runtimeAnimationRoot;
+        }
+
+        private RectTransform ResolveRuntimeFxCanvasRoot()
+        {
+            var activeCanvas = FindActiveGameplayCanvasRoot();
+            if (activeCanvas == null)
+            {
+                return transform as RectTransform;
+            }
+
+            if (runtimeFxCanvasRoot != null)
+            {
+                if (!runtimeFxCanvasRoot.gameObject.activeInHierarchy || runtimeFxCanvasRoot.parent != activeCanvas)
+                {
+                    runtimeFxCanvasRoot.SetParent(activeCanvas, false);
+                }
+
+                ConfigureRuntimeFxCanvas(activeCanvas, runtimeFxCanvasRoot);
+                return runtimeFxCanvasRoot;
+            }
+
+            var existing = activeCanvas.Find("Backyard Legends Runtime FX Canvas") as RectTransform;
+            if (existing != null)
+            {
+                runtimeFxCanvasRoot = existing;
+            }
+            else
+            {
+                var canvasObject = new GameObject("Backyard Legends Runtime FX Canvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+                canvasObject.transform.SetParent(activeCanvas, false);
+                runtimeFxCanvasRoot = canvasObject.GetComponent<RectTransform>();
+            }
+
+            ConfigureRuntimeFxCanvas(activeCanvas, runtimeFxCanvasRoot);
+            return runtimeFxCanvasRoot;
+        }
+
+        private static void ConfigureRuntimeFxCanvas(RectTransform sourceCanvasRoot, RectTransform fxCanvasRoot)
+        {
+            if (sourceCanvasRoot == null || fxCanvasRoot == null)
+            {
+                return;
+            }
+
+            fxCanvasRoot.anchorMin = Vector2.zero;
+            fxCanvasRoot.anchorMax = Vector2.one;
+            fxCanvasRoot.pivot = new Vector2(0.5f, 0.5f);
+            fxCanvasRoot.offsetMin = Vector2.zero;
+            fxCanvasRoot.offsetMax = Vector2.zero;
+            fxCanvasRoot.localScale = Vector3.one;
+            fxCanvasRoot.localRotation = Quaternion.identity;
+            fxCanvasRoot.gameObject.SetActive(true);
+            fxCanvasRoot.SetAsLastSibling();
+
+            var sourceCanvas = sourceCanvasRoot.GetComponent<Canvas>();
+            var fxCanvas = fxCanvasRoot.GetComponent<Canvas>();
+            if (sourceCanvas != null && fxCanvas != null)
+            {
+                fxCanvas.renderMode = sourceCanvas.renderMode;
+                fxCanvas.worldCamera = sourceCanvas.worldCamera;
+                fxCanvas.planeDistance = sourceCanvas.planeDistance;
+                fxCanvas.overrideSorting = true;
+                fxCanvas.sortingLayerID = sourceCanvas.sortingLayerID;
+                fxCanvas.sortingOrder = sourceCanvas.sortingOrder + 40;
+            }
+
+            var sourceScaler = sourceCanvasRoot.GetComponent<CanvasScaler>();
+            var fxScaler = fxCanvasRoot.GetComponent<CanvasScaler>();
+            if (sourceScaler != null && fxScaler != null)
+            {
+                fxScaler.uiScaleMode = sourceScaler.uiScaleMode;
+                fxScaler.referenceResolution = sourceScaler.referenceResolution;
+                fxScaler.screenMatchMode = sourceScaler.screenMatchMode;
+                fxScaler.matchWidthOrHeight = sourceScaler.matchWidthOrHeight;
+                fxScaler.referencePixelsPerUnit = sourceScaler.referencePixelsPerUnit;
+                fxScaler.scaleFactor = sourceScaler.scaleFactor;
+            }
+
+            var raycaster = fxCanvasRoot.GetComponent<GraphicRaycaster>();
+            if (raycaster != null)
+            {
+                raycaster.enabled = false;
+            }
         }
 
         private RectTransform FindActiveGameplayCanvasRoot()
@@ -713,6 +828,7 @@ namespace BackyardLegends.Runtime
 
             if (view.BidCalloutPanel != null && view.BidCalloutText != null && view.BidCalloutGroup != null)
             {
+                EnsureBidCalloutSplash(view);
                 ConfigureSeatCalloutLayout(view);
                 return;
             }
@@ -731,8 +847,39 @@ namespace BackyardLegends.Runtime
             bubbleGroup.interactable = false;
             view.BidCalloutPanel = bubbleImage;
             view.BidCalloutGroup = bubbleGroup;
+            EnsureBidCalloutSplash(view);
             view.BidCalloutText = CreateRuntimeText("Label", bubble.transform, "I BID 3", BidCalloutFontSize, FontStyle.Bold, theme.primaryText, TextAnchor.MiddleCenter, new Vector2(0.02f, 0.06f), new Vector2(0.98f, 0.94f));
             ConfigureSeatCalloutLayout(view);
+        }
+
+        private void EnsureBidCalloutSplash(SeatPanelView view)
+        {
+            if (view?.BidCalloutGroup == null)
+            {
+                return;
+            }
+
+            var parent = view.BidCalloutGroup.transform;
+            if (view.BidCalloutSplash == null)
+            {
+                var existing = parent.Find("Graffiti Splash");
+                view.BidCalloutSplash = existing != null
+                    ? existing.GetComponent<Image>()
+                    : null;
+            }
+
+            if (view.BidCalloutSplash == null)
+            {
+                var splashObject = new GameObject("Graffiti Splash", typeof(RectTransform), typeof(Image));
+                splashObject.transform.SetParent(parent, false);
+                view.BidCalloutSplash = splashObject.GetComponent<Image>();
+            }
+
+            view.BidCalloutSplash.sprite = ResolveGraffitiSplashSprite();
+            view.BidCalloutSplash.type = Image.Type.Simple;
+            view.BidCalloutSplash.color = new Color(1f, 1f, 1f, 0f);
+            view.BidCalloutSplash.raycastTarget = false;
+            view.BidCalloutSplash.transform.SetAsFirstSibling();
         }
 
         private void Update()
@@ -1257,6 +1404,8 @@ namespace BackyardLegends.Runtime
             bookWinClips = ResolveAudioClips(BookWinAudioResourceNames, collectClip);
             bookWhooshClips = ResolveAudioClips(BookWhooshAudioResourceNames, null);
             tableSlamClips = ResolveAudioClips(TableSlamAudioResourceNames, setBookClip);
+            graffitiSprayClips = ResolveAudioClips(GraffitiSprayAudioResourceNames, null);
+            spadesBrokenClips = ResolveAudioClips(SpadesBrokenAudioResourceNames, null);
         }
 
         private static AudioClip ResolveFeedbackClip(AudioClip overrideClip, string resourceName, System.Func<AudioClip> fallbackFactory)
@@ -1483,12 +1632,46 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
-            feedbackAudioSource.PlayOneShot(impact, 1.72f);
+            feedbackAudioSource.PlayOneShot(impact, impact.length > 0.8f ? 0.95f : 1.72f);
             var whoosh = PickRandomClip(bookWhooshClips, ref lastBookWhooshClipIndex);
             if (whoosh != null && Random.value < 0.42f)
             {
                 feedbackAudioSource.PlayOneShot(whoosh, 0.34f);
             }
+        }
+
+        private void PlayGraffitiSpraySound()
+        {
+            if (feedbackAudioSource == null)
+            {
+                return;
+            }
+
+            var spray = PickRandomClip(graffitiSprayClips, ref lastGraffitiSprayClipIndex);
+            if (spray == null)
+            {
+                PlayFeedback(FeedbackCue.Bid, 0.16f);
+                return;
+            }
+
+            feedbackAudioSource.PlayOneShot(spray, spray.length > 0.55f ? 0.32f : 0.46f);
+        }
+
+        private void PlaySpadesBrokenSound()
+        {
+            if (feedbackAudioSource == null)
+            {
+                return;
+            }
+
+            var metalHit = PickRandomClip(spadesBrokenClips, ref lastSpadesBrokenClipIndex);
+            if (metalHit == null)
+            {
+                PlayFeedback(FeedbackCue.Invalid, 0.28f);
+                return;
+            }
+
+            feedbackAudioSource.PlayOneShot(metalHit, 1.05f);
         }
 
         private static AudioClip PickRandomClip(AudioClip[] clips, ref int lastIndex)
@@ -1594,6 +1777,12 @@ namespace BackyardLegends.Runtime
                 {
                     ApplyFallbackSprite(view.BidCalloutPanel, theme.buttonSprite != null ? theme.buttonSprite : ResolveSoftPanelSprite());
                     view.BidCalloutPanel.color = new Color(0.15f, 0.16f, 0.18f, 0.96f);
+                }
+
+                if (view?.BidCalloutSplash != null)
+                {
+                    view.BidCalloutSplash.sprite = ResolveGraffitiSplashSprite();
+                    view.BidCalloutSplash.color = new Color(1f, 1f, 1f, 0f);
                 }
 
                 if (view?.BidCalloutText != null)
@@ -1718,6 +1907,7 @@ namespace BackyardLegends.Runtime
                     break;
                 case RoundStartedEvent:
                     ClearTransientMotionState(false);
+                    spadesBrokenMomentShown = false;
                     AddFeedMessage($"Round {controller.State.RoundState.RoundNumber} started. Dealer: {controller.State.SeatNames[controller.State.RoundState.Dealer]}.");
                     if (!openingDealPending && !openingDealRunning)
                     {
@@ -1737,7 +1927,14 @@ namespace BackyardLegends.Runtime
                     break;
                 case CardPlayedEvent playedEvent:
                     AddFeedMessage($"{controller.State.SeatNames[playedEvent.Seat]} dropped {playedEvent.Card.ShortLabel}.");
-                    QueueCardPlayAnimation(playedEvent);
+                    var triggerSpadesBrokenMoment = ShouldTriggerSpadesBrokenMoment(playedEvent);
+                    if (triggerSpadesBrokenMoment)
+                    {
+                        spadesBrokenMomentShown = true;
+                        AddFeedMessage("Street rules changed. Spades are broken.");
+                    }
+
+                    QueueCardPlayAnimation(playedEvent, triggerSpadesBrokenMoment);
                     break;
                 case TrickResolvedEvent trickEvent:
                     AddFeedMessage($"{controller.State.SeatNames[trickEvent.Winner]} took the hand.");
@@ -3917,10 +4114,25 @@ namespace BackyardLegends.Runtime
             aiLoop = null;
         }
 
-        private void QueueCardPlayAnimation(CardPlayedEvent playedEvent)
+        private bool ShouldTriggerSpadesBrokenMoment(CardPlayedEvent playedEvent)
+        {
+            if (spadesBrokenMomentShown || playedEvent == null || playedEvent.Card.Suit != Suit.Spades)
+            {
+                return false;
+            }
+
+            if (selectedRule == null)
+            {
+                return true;
+            }
+
+            return selectedRule.SpadesMustBeBroken && !selectedRule.AllowSpadesAnytime;
+        }
+
+        private void QueueCardPlayAnimation(CardPlayedEvent playedEvent, bool triggerSpadesBrokenMoment)
         {
             hiddenTrickSlots.Add(playedEvent.Seat);
-            EnqueueAnimation(AnimateCardPlayRoutine(BuildCardPlayMotion(playedEvent.Seat, playedEvent.Card)));
+            EnqueueAnimation(AnimateCardPlayRoutine(BuildCardPlayMotion(playedEvent.Seat, playedEvent.Card), triggerSpadesBrokenMoment));
         }
 
         private void QueueTrickCollectionAnimation(TrickResolvedEvent trickEvent)
@@ -3931,10 +4143,11 @@ namespace BackyardLegends.Runtime
                 resolvedTrickCards[play.Seat] = play.Card;
             }
 
+            var bigBook = IsBigBook(trickEvent.CompletedTrick, trickEvent.Winner);
             var motions = trickEvent.CompletedTrick
-                .Select((play, index) => BuildTrickCollectMotion(play, trickEvent.Winner, index))
+                .Select((play, index) => BuildTrickCollectMotion(play, trickEvent.Winner, index, bigBook))
                 .ToList();
-            EnqueueAnimation(AnimateTrickCollectRoutine(trickEvent.Winner, motions));
+            EnqueueAnimation(AnimateTrickCollectRoutine(trickEvent.Winner, motions, bigBook));
         }
 
         private void EnqueueAnimation(IEnumerator animation)
@@ -3970,7 +4183,7 @@ namespace BackyardLegends.Runtime
             ScheduleAiLoop();
         }
 
-        private IEnumerator AnimateCardPlayRoutine(CardMotionSnapshot motion)
+        private IEnumerator AnimateCardPlayRoutine(CardMotionSnapshot motion, bool triggerSpadesBrokenMoment)
         {
             var ghost = CreateFloatingCard(motion);
             yield return AnimateStreetCardPlay(
@@ -3983,10 +4196,21 @@ namespace BackyardLegends.Runtime
             RenderTrickArea();
             PlayRandomCardPlaceSound();
             SpawnCardPlayFx(motion);
+            if (triggerSpadesBrokenMoment)
+            {
+                PlaySpadesBrokenSound();
+                SpawnSpadesBrokenMomentFx(motion);
+                TrySpawnTrashTalkPopup(motion, "STREET RULES", TrashTalkSpadesBrokenChance);
+            }
+            else if (IsTrashTalkStrongMoveCard(motion.Card))
+            {
+                TrySpawnTrashTalkPopup(motion, null, TrashTalkStrongCardChance);
+            }
+
             yield return PulseRect(trickSlots[motion.Seat].Root, 1.06f, Mathf.Max(0.12f, theme.pulseDuration * 0.75f));
         }
 
-        private IEnumerator AnimateTrickCollectRoutine(SeatId winner, IReadOnlyList<CardMotionSnapshot> motions)
+        private IEnumerator AnimateTrickCollectRoutine(SeatId winner, IReadOnlyList<CardMotionSnapshot> motions, bool bigBook)
         {
             if (motions == null || motions.Count == 0)
             {
@@ -4004,7 +4228,9 @@ namespace BackyardLegends.Runtime
 
             RenderTrickArea();
 
-            var duration = Mathf.Max(0.2f, theme.modalDuration * 1.15f);
+            var duration = bigBook
+                ? Mathf.Max(0.16f, theme.modalDuration * 0.82f)
+                : Mathf.Max(0.2f, theme.modalDuration * 1.15f);
             var maxDelay = motions.Max(motion => motion.Delay);
             var elapsed = 0f;
             while (elapsed < duration + maxDelay)
@@ -4025,7 +4251,7 @@ namespace BackyardLegends.Runtime
                         continue;
                     }
 
-                    ApplyFloatingCardPose(ghost, motion, localTime, fadeOutNearEnd: true, revealFromBack: false);
+                    ApplyTrickCollectCardPose(ghost, motion, localTime, bigBook);
                 }
 
                 yield return null;
@@ -4041,12 +4267,34 @@ namespace BackyardLegends.Runtime
             RenderTrickArea();
             PlayFeedback(FeedbackCue.Collect, 0.16f);
             PlayBookWonSound();
+            if (bigBook)
+            {
+                PlayTableSlamSound();
+            }
+
             RefreshBookLeaderLightningFx();
             SetLatestBookAura(winner);
-            StartBookCameraShake(winner);
-            SpawnEpicToonFx(bookWinFxPrefab, GetAnchoredPoint(seatViews[winner].Root, GetSeatInnerAnchor(winner)), 1.08f);
-            SpawnEpicToonFx(cardSmokeFxPrefab, GetAnchoredPoint(sceneRefs.DiscardAnchorImage.rectTransform, new Vector2(0.5f, 0.5f)), 0.72f);
+            StartBookCameraShake(winner, bigBook ? 1.08f : 0.78f);
+            var winnerPoint = GetAnchoredPoint(seatViews[winner].Root, GetSeatInnerAnchor(winner));
+            var discardPoint = GetAnchoredPoint(sceneRefs.DiscardAnchorImage.rectTransform, new Vector2(0.5f, 0.5f));
+            SpawnEpicToonFx(bookWinFxPrefab, winnerPoint, bigBook ? 1.24f : 1.08f);
+            if (bigBook)
+            {
+                SpawnEpicToonFx(tableSlamFxPrefab != null ? tableSlamFxPrefab : cardSmokeFxPrefab, winnerPoint + new Vector2(0f, -8f), 1.12f);
+            }
+
+            SpawnEpicToonFx(cardSmokeFxPrefab, discardPoint, bigBook ? 0.88f : 0.72f);
             StartBookTextImpact(winner, null, winner.ToTeam() == TeamId.Home ? theme.green : theme.red, false);
+            if (bigBook)
+            {
+                TrySpawnTrashTalkPopup(winnerPoint + new Vector2(0f, 40f), null, TrashTalkBigBookChance, theme.gold);
+            }
+
+            if (bigBook && seatViews.TryGetValue(winner, out var winnerView) && winnerView?.Root != null)
+            {
+                StartCoroutine(PulseRect(winnerView.Root, 1.055f, Mathf.Max(0.12f, theme.pulseDuration * 0.7f)));
+            }
+
             yield return PulseRect(sceneRefs.DiscardAnchorImage.rectTransform, 1.07f, Mathf.Max(0.12f, theme.pulseDuration * 0.8f));
         }
 
@@ -4177,6 +4425,53 @@ namespace BackyardLegends.Runtime
             ghost.CanvasGroup.alpha = Mathf.Lerp(0.88f, 1f, Mathf.Clamp01(progress / 0.2f));
         }
 
+        private void ApplyTrickCollectCardPose(CardButtonView ghost, CardMotionSnapshot motion, float progress, bool bigBook)
+        {
+            if (!bigBook)
+            {
+                ApplyFloatingCardPose(ghost, motion, progress, fadeOutNearEnd: true, revealFromBack: false);
+                return;
+            }
+
+            if (ghost == null || ghost.CanvasGroup == null)
+            {
+                return;
+            }
+
+            RectTransform root;
+            try
+            {
+                root = ghost.transform as RectTransform;
+            }
+            catch (MissingReferenceException)
+            {
+                return;
+            }
+
+            if (root == null)
+            {
+                return;
+            }
+
+            var windup = Mathf.Clamp01(progress / 0.12f);
+            var travel = Mathf.Clamp01((progress - 0.04f) / 0.72f);
+            var slam = Mathf.Clamp01((progress - 0.72f) / 0.28f);
+            var travelEase = 1f - Mathf.Pow(1f - travel, 4f);
+            var slamEase = Mathf.Sin(slam * Mathf.PI);
+            var arc = Mathf.Sin(travel * Mathf.PI) * motion.ArcHeight;
+            var pullback = new Vector2(-motion.BurstOffset.x * 0.55f, 10f) * Mathf.Sin(windup * Mathf.PI);
+            var pileSpread = motion.BurstOffset * slamEase;
+            var tablePress = new Vector2(0f, -12f * slamEase);
+
+            root.anchoredPosition = Vector2.Lerp(motion.StartPosition, motion.EndPosition, travelEase) + pullback + pileSpread + tablePress + Vector2.up * arc;
+            root.sizeDelta = Vector2.Lerp(motion.StartSize, motion.EndSize, travelEase);
+
+            var snapTilt = Quaternion.Euler(0f, 0f, Mathf.Sin(slam * Mathf.PI * 2f) * 5f);
+            root.localRotation = Quaternion.Slerp(motion.StartRotation, motion.EndRotation, travelEase) * snapTilt;
+            root.localScale = Vector3.one * (1f + Mathf.Sin(travel * Mathf.PI) * 0.04f + slamEase * 0.12f);
+            ghost.CanvasGroup.alpha = Mathf.Lerp(1f, 0f, Mathf.Clamp01((progress - 0.76f) / 0.24f));
+        }
+
         private void ApplyFloatingCardPose(CardButtonView ghost, CardMotionSnapshot motion, float progress, bool fadeOutNearEnd, bool revealFromBack)
         {
             if (ghost == null || ghost.CanvasGroup == null)
@@ -4233,22 +4528,28 @@ namespace BackyardLegends.Runtime
                 Vector2.zero);
         }
 
-        private CardMotionSnapshot BuildTrickCollectMotion(TrickPlay play, SeatId winner, int index)
+        private CardMotionSnapshot BuildTrickCollectMotion(TrickPlay play, SeatId winner, int index, bool bigBook)
         {
             var trickRect = trickSlots[play.Seat].Root;
             var winnerRect = seatViews[winner].Root;
+            var collectTilt = winner == SeatId.Left ? -10f : winner == SeatId.Right ? 10f : 0f;
+            if (bigBook)
+            {
+                collectTilt += (index - 1.5f) * 3.2f;
+            }
+
             return new CardMotionSnapshot(
                 play.Card,
                 play.Seat,
                 GetAnchoredPoint(trickRect, new Vector2(0.5f, 0.5f)),
                 GetAnchoredPoint(winnerRect, GetSeatInnerAnchor(winner)),
                 GetAnchoredSize(trickRect),
-                GetAnchoredSize(trickRect) * 0.54f,
+                GetAnchoredSize(trickRect) * (bigBook ? 0.48f : 0.54f),
                 Quaternion.identity,
-                Quaternion.Euler(0f, 0f, winner == SeatId.Left ? -10f : winner == SeatId.Right ? 10f : 0f),
-                54f,
-                Vector2.zero,
-                index * 0.04f);
+                Quaternion.Euler(0f, 0f, collectTilt),
+                bigBook ? 34f : 54f,
+                bigBook ? new Vector2((index - 1.5f) * 13f, 5f - index * 3f) : Vector2.zero,
+                index * (bigBook ? 0.018f : 0.04f));
         }
 
         private IEnumerable<SeatId> BuildOpeningDealOrder(SeatId dealer)
@@ -4438,13 +4739,10 @@ namespace BackyardLegends.Runtime
 
             var anchoredPosition = GetAnchoredPoint(slot.Root, new Vector2(0.5f, 0.5f));
             var card = motion.Card;
-            var color = ResolveCardFxColor(card);
             var important = IsImportantCard(card);
             var spawnedPrefab = SpawnStrongCardFx(motion, anchoredPosition);
             if (important)
             {
-                SpawnEpicToonFx(importantCardFxPrefab, anchoredPosition, card.Suit == Suit.Spades ? 1.16f : 0.98f);
-                SpawnEpicToonFx(cardSmokeFxPrefab, anchoredPosition, card.Suit == Suit.Spades ? 0.86f : 0.7f);
                 if (!spawnedPrefab)
                 {
                     SpawnEpicToonFx(cardImpactFxPrefab, anchoredPosition + new Vector2(0f, 14f), 0.82f);
@@ -4454,13 +4752,201 @@ namespace BackyardLegends.Runtime
             }
 
             SpawnEpicToonFx(cardImpactFxPrefab, anchoredPosition, 0.58f);
-            SpawnEpicToonFx(cardSmokeFxPrefab, anchoredPosition, 0.48f);
+        }
+
+        private void TrySpawnTrashTalkPopup(CardMotionSnapshot motion, string forcedTag, float chance)
+        {
+            if (!trickSlots.TryGetValue(motion.Seat, out var slot) || slot?.Root == null)
+            {
+                return;
+            }
+
+            var point = GetAnchoredPoint(slot.Root, new Vector2(0.5f, 0.68f));
+            TrySpawnTrashTalkPopup(point, forcedTag, chance, ResolveTrashTalkColor(motion.Card));
+        }
+
+        private void TrySpawnTrashTalkPopup(Vector2 anchoredPosition, string forcedTag, float chance, Color color)
+        {
+            if (Time.unscaledTime < nextTrashTalkPopupTime || Random.value > chance)
+            {
+                return;
+            }
+
+            var tag = string.IsNullOrEmpty(forcedTag)
+                ? TrashTalkTags[Random.Range(0, TrashTalkTags.Length)]
+                : forcedTag;
+            nextTrashTalkPopupTime = Time.unscaledTime + Random.Range(2.8f, 4.8f);
+            PlayFeedback(FeedbackCue.Select, 0.055f);
+            StartCoroutine(TrashTalkPopupRoutine(anchoredPosition, tag, color));
+        }
+
+        private IEnumerator TrashTalkPopupRoutine(Vector2 anchoredPosition, string tag, Color color)
+        {
+            var root = AnimationRoot;
+            if (root == null)
+            {
+                yield break;
+            }
+
+            var go = new GameObject("Trash Talk Tag Runtime", typeof(RectTransform), typeof(Text), typeof(CanvasGroup), typeof(Outline), typeof(Shadow));
+            go.transform.SetParent(root, false);
+            go.transform.SetAsLastSibling();
+
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(430f, 118f);
+            var startPosition = anchoredPosition + new Vector2(Random.Range(-26f, 26f), Random.Range(18f, 34f));
+            rect.anchoredPosition = startPosition;
+            rect.localScale = Vector3.one * 0.18f;
+            var startAngle = Random.Range(-12f, 12f);
+            rect.localRotation = Quaternion.Euler(0f, 0f, startAngle);
+
+            var text = go.GetComponent<Text>();
+            text.font = theme.ResolveFont();
+            text.text = tag;
+            text.fontSize = tag.Length > 8 ? 48 : 58;
+            text.fontStyle = FontStyle.BoldAndItalic;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.color = color;
+            text.raycastTarget = false;
+
+            var outline = go.GetComponent<Outline>();
+            outline.effectColor = new Color(0.015f, 0.015f, 0.016f, 0.96f);
+            outline.effectDistance = new Vector2(4.4f, -4.4f);
+            var shadow = go.GetComponent<Shadow>();
+            shadow.effectColor = new Color(0f, 0f, 0f, 0.46f);
+            shadow.effectDistance = new Vector2(9f, -9f);
+
+            var group = go.GetComponent<CanvasGroup>();
+            group.blocksRaycasts = false;
+            group.interactable = false;
+            group.alpha = 0f;
+
+            transientFx.Add(text);
+            var introDuration = 0.34f;
+            var holdDuration = 0.82f;
+            var outroDuration = 0.42f;
+            var duration = introDuration + holdDuration + outroDuration;
+            var elapsed = 0f;
+            var holdPosition = startPosition + new Vector2(Random.Range(-8f, 8f), 18f);
+            var exitPosition = holdPosition + new Vector2(Random.Range(-22f, 22f), 48f);
+            var holdAngle = startAngle * 0.4f;
+            var exitAngle = holdAngle + Random.Range(-10f, 10f);
+            while (elapsed < duration && rect != null)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                if (elapsed < introDuration)
+                {
+                    var t = Mathf.Clamp01(elapsed / introDuration);
+                    var snap = EaseOutBack(t);
+                    var wobble = Mathf.Sin(t * Mathf.PI * 4f) * (1f - t) * 6f;
+                    rect.localScale = Vector3.one * Mathf.LerpUnclamped(0.18f, 1.28f, snap);
+                    rect.anchoredPosition = Vector2.Lerp(startPosition - new Vector2(0f, 18f), holdPosition, 1f - Mathf.Pow(1f - t, 3f));
+                    rect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Lerp(startAngle * 2.4f, holdAngle, snap) + wobble);
+                    group.alpha = Mathf.Clamp01(t * 3.2f);
+                }
+                else if (elapsed < introDuration + holdDuration)
+                {
+                    var t = Mathf.Clamp01((elapsed - introDuration) / holdDuration);
+                    var breathe = Mathf.Sin(t * Mathf.PI * 2f) * 0.035f;
+                    var swagger = Mathf.Sin(t * Mathf.PI * 3f) * 2.2f;
+                    rect.localScale = Vector3.one * (1.12f + breathe);
+                    rect.anchoredPosition = holdPosition + new Vector2(Mathf.Sin(t * Mathf.PI * 2f) * 4f, Mathf.Sin(t * Mathf.PI) * 8f);
+                    rect.localRotation = Quaternion.Euler(0f, 0f, holdAngle + swagger);
+                    group.alpha = 1f;
+                }
+                else
+                {
+                    var t = Mathf.Clamp01((elapsed - introDuration - holdDuration) / outroDuration);
+                    var ease = 1f - Mathf.Pow(1f - t, 2f);
+                    rect.localScale = Vector3.one * Mathf.Lerp(1.12f, 0.58f, ease);
+                    rect.anchoredPosition = Vector2.Lerp(holdPosition, exitPosition, ease);
+                    rect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Lerp(holdAngle, exitAngle, ease));
+                    group.alpha = 1f - ease;
+                }
+
+                yield return null;
+            }
+
+            transientFx.Remove(text);
+            if (go != null)
+            {
+                Destroy(go);
+            }
+        }
+
+        private Color ResolveTrashTalkColor(Card card)
+        {
+            if (card.Suit == Suit.Spades)
+            {
+                return theme.gold;
+            }
+
+            if (card.Rank >= 13)
+            {
+                return theme.green;
+            }
+
+            return card.IsRed ? theme.red : theme.primaryText;
         }
 
         private bool SpawnStrongCardFx(CardMotionSnapshot motion, Vector2 anchoredPosition)
         {
             var prefab = ResolveStrongCardFxPrefab(motion.Card);
             return SpawnEpicToonFx(prefab, anchoredPosition, 0.78f);
+        }
+
+        private void SpawnSpadesBrokenMomentFx(CardMotionSnapshot motion)
+        {
+            if (!trickSlots.TryGetValue(motion.Seat, out var slot) || slot?.Root == null)
+            {
+                return;
+            }
+
+            var anchoredPosition = GetAnchoredPoint(slot.Root, new Vector2(0.5f, 0.5f));
+            SpawnEpicToonFx(spadesBrokenSmokeFxPrefab != null ? spadesBrokenSmokeFxPrefab : cardSmokeFxPrefab, anchoredPosition + new Vector2(0f, -4f), 1.16f);
+            SpawnEpicToonFx(spadesBrokenLightningFxPrefab != null ? spadesBrokenLightningFxPrefab : highSpadeFxPrefab, anchoredPosition + new Vector2(0f, 16f), 0.86f);
+            StartCoroutine(SpadesBrokenFlashRoutine());
+        }
+
+        private IEnumerator SpadesBrokenFlashRoutine()
+        {
+            var root = AnimationRoot;
+            if (root == null)
+            {
+                yield break;
+            }
+
+            var flashObject = new GameObject("Spades Broken Lightning Flicker", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
+            flashObject.transform.SetParent(root, false);
+            flashObject.transform.SetAsLastSibling();
+            var rect = (RectTransform)flashObject.transform;
+            SetAnchors(rect, Vector2.zero, Vector2.one);
+            var image = flashObject.GetComponent<Image>();
+            image.sprite = ResolveSoftPanelSprite();
+            image.type = Image.Type.Simple;
+            image.color = new Color(0.52f, 0.78f, 1f, 1f);
+            image.raycastTarget = false;
+            var group = flashObject.GetComponent<CanvasGroup>();
+            group.blocksRaycasts = false;
+            group.interactable = false;
+
+            var duration = 0.22f;
+            var elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(elapsed / duration);
+                var strobe = Mathf.Abs(Mathf.Sin(t * Mathf.PI * 5.5f));
+                group.alpha = strobe * (1f - t) * 0.34f;
+                yield return null;
+            }
+
+            Destroy(flashObject);
         }
 
         private bool SpawnEpicToonFx(GameObject prefab, Vector2 anchoredPosition, float scaleMultiplier)
@@ -4514,12 +5000,34 @@ namespace BackyardLegends.Runtime
 
             return card.Suit == Suit.Spades && card.Rank >= 10
                 ? highSpadeFxPrefab
-                : importantCardFxPrefab;
+                : null;
         }
 
         private static bool IsImportantCard(Card card)
         {
             return card.Rank >= 12 || (card.Suit == Suit.Spades && card.Rank >= 10);
+        }
+
+        private static bool IsTrashTalkStrongMoveCard(Card card)
+        {
+            return IsImportantCard(card) || card.Rank == 11;
+        }
+
+        private static bool IsBigBook(IReadOnlyList<TrickPlay> trick, SeatId winner)
+        {
+            if (trick == null || trick.Count == 0)
+            {
+                return false;
+            }
+
+            var winningPlay = trick.FirstOrDefault(play => play != null && play.Seat == winner);
+            if (winningPlay != null &&
+                (winningPlay.Card.Rank >= 13 || (winningPlay.Card.Suit == Suit.Spades && winningPlay.Card.Rank >= 10)))
+            {
+                return true;
+            }
+
+            return trick.Count(play => play != null && IsImportantCard(play.Card)) >= 2;
         }
 
         private Color ResolveCardFxColor(Card card)
@@ -5049,7 +5557,7 @@ namespace BackyardLegends.Runtime
             };
         }
 
-        private void StartBookCameraShake(SeatId focusSeat)
+        private void StartBookCameraShake(SeatId focusSeat, float intensity = 1f)
         {
             if (bookCameraShakeLoop != null)
             {
@@ -5077,21 +5585,21 @@ namespace BackyardLegends.Runtime
                 bookCameraShakeStartFieldOfView = bookCameraShakeCamera.fieldOfView;
             }
 
-            bookCameraShakeLoop = StartCoroutine(BookCameraShakeRoutine(target, GetBidCameraFocusDirection(focusSeat)));
+            bookCameraShakeLoop = StartCoroutine(BookCameraShakeRoutine(target, GetBidCameraFocusDirection(focusSeat), Mathf.Max(0.2f, intensity)));
         }
 
-        private IEnumerator BookCameraShakeRoutine(Transform target, Vector2 focusDirection)
+        private IEnumerator BookCameraShakeRoutine(Transform target, Vector2 focusDirection, float intensity)
         {
-            var duration = Mathf.Max(0.44f, theme.shakeDuration * 2.8f);
+            var duration = Mathf.Max(0.34f, theme.shakeDuration * Mathf.Lerp(2.05f, 2.78f, Mathf.Clamp01(intensity)));
             var punchTravel = bookCameraShakeCamera != null && bookCameraShakeCamera.orthographic
-                ? Mathf.Max(0.5f, bookCameraShakeStartOrthographicSize * 0.23f)
-                : 0.66f;
+                ? Mathf.Max(0.34f, bookCameraShakeStartOrthographicSize * 0.2f) * intensity
+                : 0.58f * intensity;
             var punchOffset = new Vector3(focusDirection.x * punchTravel, focusDirection.y * punchTravel * 0.78f, 0f);
             var punchOrthographicSize = bookCameraShakeCamera != null && bookCameraShakeCamera.orthographic
-                ? bookCameraShakeStartOrthographicSize * 0.84f
+                ? bookCameraShakeStartOrthographicSize * Mathf.Lerp(0.91f, 0.83f, Mathf.Clamp01(intensity))
                 : bookCameraShakeStartOrthographicSize;
             var punchFieldOfView = bookCameraShakeCamera != null && !bookCameraShakeCamera.orthographic
-                ? bookCameraShakeStartFieldOfView * 0.9f
+                ? bookCameraShakeStartFieldOfView * Mathf.Lerp(0.94f, 0.89f, Mathf.Clamp01(intensity))
                 : bookCameraShakeStartFieldOfView;
             var elapsed = 0f;
             while (elapsed < duration && target != null)
@@ -5101,12 +5609,12 @@ namespace BackyardLegends.Runtime
                 var punch = Mathf.Sin(t * Mathf.PI);
                 var falloff = 1f - EaseOutCubic(t);
                 var hit = Mathf.Exp(-18f * t);
-                var x = (Mathf.Sin(elapsed * 118f) * 0.32f + Mathf.Sin(elapsed * 39f) * 0.14f) * falloff;
-                var y = (Mathf.Cos(elapsed * 96f) * 0.24f + Mathf.Sin(elapsed * 51f) * 0.08f) * falloff;
-                var roll = (Mathf.Sin(elapsed * 142f) * 3.2f + Mathf.Sin(elapsed * 28f) * 1.1f) * falloff;
-                x += Mathf.Sin(elapsed * 220f) * 0.18f * hit;
-                y += Mathf.Cos(elapsed * 210f) * 0.14f * hit;
-                roll += Mathf.Sin(elapsed * 260f) * 1.8f * hit;
+                var x = (Mathf.Sin(elapsed * 118f) * 0.28f + Mathf.Sin(elapsed * 39f) * 0.12f) * falloff * intensity;
+                var y = (Mathf.Cos(elapsed * 96f) * 0.2f + Mathf.Sin(elapsed * 51f) * 0.07f) * falloff * intensity;
+                var roll = (Mathf.Sin(elapsed * 142f) * 2.4f + Mathf.Sin(elapsed * 28f) * 0.84f) * falloff * intensity;
+                x += Mathf.Sin(elapsed * 220f) * 0.14f * hit * intensity;
+                y += Mathf.Cos(elapsed * 210f) * 0.11f * hit * intensity;
+                roll += Mathf.Sin(elapsed * 260f) * 1.4f * hit * intensity;
                 target.localPosition = bookCameraShakeStartPosition + punchOffset * punch + new Vector3(x, y, 0f);
                 target.localRotation = bookCameraShakeStartRotation * Quaternion.Euler(0f, 0f, roll);
                 if (bookCameraShakeCamera != null)
@@ -5161,6 +5669,8 @@ namespace BackyardLegends.Runtime
             pendingRoundSheetOpen = false;
             pendingEndSheetOpen = false;
             setBookMomentRunning = false;
+            spadesBrokenMomentShown = false;
+            nextTrashTalkPopupTime = 0f;
             ClearBookTextAnimations();
             StopOpeningStackIntro();
             ClearOpeningStackPreviewCards();
@@ -5625,9 +6135,39 @@ namespace BackyardLegends.Runtime
                 seat,
                 bid == 0 ? "I BID NIL" : $"I BID {bid}",
                 1.3f,
-                new Color(0.15f, 0.16f, 0.18f, 0.96f),
-                theme.primaryText,
-                holdForPlayerDecision);
+                ResolveBidTagColor(seat, bid),
+                new Color(0.045f, 0.05f, 0.052f, 1f),
+                holdForPlayerDecision,
+                graffitiTag: true);
+        }
+
+        private Color ResolveBidTagColor(SeatId seat, int bid)
+        {
+            if (bid == 0)
+            {
+                return new Color(1f, 0.42f, 0.2f, 0.96f);
+            }
+
+            return seat switch
+            {
+                SeatId.Bottom => new Color(1f, 0.82f, 0.18f, 0.96f),
+                SeatId.Left => new Color(1f, 0.28f, 0.48f, 0.96f),
+                SeatId.Top => new Color(0.24f, 0.92f, 0.58f, 0.96f),
+                SeatId.Right => new Color(0.2f, 0.76f, 1f, 0.96f),
+                _ => theme.gold
+            };
+        }
+
+        private static float ResolveBidTagRotation(SeatId seat)
+        {
+            return seat switch
+            {
+                SeatId.Bottom => 2.2f,
+                SeatId.Left => -3.4f,
+                SeatId.Top => -1.7f,
+                SeatId.Right => 3.1f,
+                _ => 0f
+            };
         }
 
         private bool ShouldHoldBidCalloutForPlayerDecision(SeatId seat)
@@ -5640,7 +6180,7 @@ namespace BackyardLegends.Runtime
             return controller.State.RoundState.BidState.BidsBySeat.TryGetValue(SeatId.Bottom, out var playerBid) && !playerBid.HasValue;
         }
 
-        private void ShowSeatCallout(SeatId seat, string text, float holdSeconds, Color panelColor, Color textColor, bool holdVisible = false)
+        private void ShowSeatCallout(SeatId seat, string text, float holdSeconds, Color panelColor, Color textColor, bool holdVisible = false, bool graffitiTag = false)
         {
             if (!seatViews.TryGetValue(seat, out var view) || view?.BidCalloutGroup == null || view.BidCalloutText == null || view.BidCalloutPanel == null)
             {
@@ -5650,26 +6190,100 @@ namespace BackyardLegends.Runtime
             if (bidBubbleLoops.TryGetValue(seat, out var runningLoop) && runningLoop != null)
             {
                 StopCoroutine(runningLoop);
+                ResetCalloutVisual(view);
             }
 
-            view.BidCalloutPanel.color = panelColor;
+            if (graffitiTag)
+            {
+                ApplyGraffitiCalloutVisual(view, panelColor, textColor);
+                PlayGraffitiSpraySound();
+            }
+            else
+            {
+                ApplyFallbackSprite(view.BidCalloutPanel, theme.buttonSprite != null ? theme.buttonSprite : ResolveSoftPanelSprite());
+                view.BidCalloutPanel.type = Image.Type.Sliced;
+                view.BidCalloutPanel.color = panelColor;
+                if (view.BidCalloutSplash != null)
+                {
+                    view.BidCalloutSplash.color = new Color(1f, 1f, 1f, 0f);
+                }
+            }
+
             view.BidCalloutText.color = textColor;
             view.BidCalloutText.text = text;
-            SpawnImpactBurst(GetAnchoredPoint(view.BidCalloutGroup.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f)), textColor, 24f, 3);
-            bidBubbleLoops[seat] = StartCoroutine(BidCalloutRoutine(view, seat, holdSeconds, holdVisible));
+            if (!graffitiTag)
+            {
+                SpawnImpactBurst(GetAnchoredPoint(view.BidCalloutGroup.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f)), textColor, 24f, 3);
+            }
+
+            bidBubbleLoops[seat] = StartCoroutine(BidCalloutRoutine(view, seat, holdSeconds, holdVisible, graffitiTag));
         }
 
-        private IEnumerator BidCalloutRoutine(SeatPanelView view, SeatId seat, float holdSeconds, bool holdVisible)
+        private void ApplyGraffitiCalloutVisual(SeatPanelView view, Color tagColor, Color textColor)
         {
-            view.BidCalloutGroup.alpha = 0f;
-            yield return PulseRect(view.BidCalloutGroup.GetComponent<RectTransform>(), 1.05f, Mathf.Max(0.1f, theme.pulseDuration * 0.85f));
+            ApplyFallbackSprite(view.BidCalloutPanel, ResolveSoftPanelSprite());
+            view.BidCalloutPanel.type = Image.Type.Sliced;
+            view.BidCalloutPanel.color = new Color(0.015f, 0.018f, 0.02f, 0.72f);
+            EnsureBidCalloutSplash(view);
+            if (view.BidCalloutSplash != null)
+            {
+                view.BidCalloutSplash.sprite = ResolveGraffitiSplashSprite();
+                view.BidCalloutSplash.color = tagColor;
+                view.BidCalloutSplash.transform.SetAsFirstSibling();
+            }
+
+            if (view.BidCalloutText != null)
+            {
+                view.BidCalloutText.fontStyle = FontStyle.BoldAndItalic;
+                view.BidCalloutText.color = textColor;
+                view.BidCalloutText.transform.SetAsLastSibling();
+            }
+        }
+
+        private IEnumerator GraffitiBidTagIntroRoutine(SeatPanelView view, SeatId seat)
+        {
+            var rect = view.BidCalloutGroup.GetComponent<RectTransform>();
+            var tagRotation = ResolveBidTagRotation(seat);
+            var duration = Mathf.Max(0.18f, theme.pulseDuration * 1.05f);
             var elapsed = 0f;
-            var fadeIn = Mathf.Max(0.08f, theme.pulseDuration * 0.45f);
-            while (elapsed < fadeIn)
+            while (elapsed < duration)
             {
                 elapsed += Time.unscaledDeltaTime;
-                view.BidCalloutGroup.alpha = Mathf.Clamp01(elapsed / fadeIn);
+                var t = Mathf.Clamp01(elapsed / duration);
+                var ease = 1f - Mathf.Pow(1f - t, 3f);
+                var overshoot = Mathf.Sin(t * Mathf.PI) * 0.18f;
+                var stencilJitter = Mathf.Sin(t * Mathf.PI * 9f) * (1f - t) * 2.2f;
+                view.BidCalloutGroup.alpha = Mathf.Clamp01(t * 1.7f);
+                rect.localScale = Vector3.one * (Mathf.Lerp(0.68f, 1f, ease) + overshoot);
+                rect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Lerp(tagRotation * 2.1f, tagRotation, ease) + stencilJitter);
                 yield return null;
+            }
+
+            view.BidCalloutGroup.alpha = 1f;
+            rect.localScale = Vector3.one;
+            rect.localRotation = Quaternion.Euler(0f, 0f, tagRotation);
+        }
+
+        private IEnumerator BidCalloutRoutine(SeatPanelView view, SeatId seat, float holdSeconds, bool holdVisible, bool graffitiTag)
+        {
+            var groupRect = view.BidCalloutGroup.GetComponent<RectTransform>();
+            view.BidCalloutGroup.alpha = 0f;
+            var originalRotation = groupRect.localRotation;
+            if (graffitiTag)
+            {
+                yield return GraffitiBidTagIntroRoutine(view, seat);
+            }
+            else
+            {
+                yield return PulseRect(groupRect, 1.05f, Mathf.Max(0.1f, theme.pulseDuration * 0.85f));
+                var fadeInElapsed = 0f;
+                var fadeIn = Mathf.Max(0.08f, theme.pulseDuration * 0.45f);
+                while (fadeInElapsed < fadeIn)
+                {
+                    fadeInElapsed += Time.unscaledDeltaTime;
+                    view.BidCalloutGroup.alpha = Mathf.Clamp01(fadeInElapsed / fadeIn);
+                    yield return null;
+                }
             }
 
             view.BidCalloutGroup.alpha = 1f;
@@ -5680,16 +6294,24 @@ namespace BackyardLegends.Runtime
             }
 
             yield return new WaitForSecondsRealtime(Mathf.Max(0.05f, holdSeconds));
-            elapsed = 0f;
+            var elapsed = 0f;
             var fadeOut = Mathf.Max(0.18f, theme.modalDuration * 0.9f);
             while (elapsed < fadeOut)
             {
                 elapsed += Time.unscaledDeltaTime;
-                view.BidCalloutGroup.alpha = 1f - Mathf.Clamp01(elapsed / fadeOut);
+                var t = Mathf.Clamp01(elapsed / fadeOut);
+                view.BidCalloutGroup.alpha = 1f - t;
+                if (graffitiTag)
+                {
+                    groupRect.localScale = Vector3.one * Mathf.Lerp(1f, 0.94f, t);
+                }
+
                 yield return null;
             }
 
             view.BidCalloutGroup.alpha = 0f;
+            groupRect.localScale = Vector3.one;
+            groupRect.localRotation = originalRotation;
             ResetCalloutVisual(view);
             bidBubbleLoops.Remove(seat);
         }
@@ -5725,12 +6347,27 @@ namespace BackyardLegends.Runtime
         {
             if (view?.BidCalloutPanel != null)
             {
+                ApplyFallbackSprite(view.BidCalloutPanel, theme.buttonSprite != null ? theme.buttonSprite : ResolveSoftPanelSprite());
+                view.BidCalloutPanel.type = Image.Type.Sliced;
                 view.BidCalloutPanel.color = new Color(0.15f, 0.16f, 0.18f, 0.96f);
+            }
+
+            if (view?.BidCalloutSplash != null)
+            {
+                view.BidCalloutSplash.color = new Color(1f, 1f, 1f, 0f);
             }
 
             if (view?.BidCalloutText != null)
             {
                 view.BidCalloutText.color = theme.primaryText;
+                view.BidCalloutText.fontStyle = FontStyle.Bold;
+            }
+
+            if (view?.BidCalloutGroup != null)
+            {
+                var rect = (RectTransform)view.BidCalloutGroup.transform;
+                rect.localScale = Vector3.one;
+                rect.localRotation = Quaternion.identity;
             }
         }
 
@@ -6979,6 +7616,12 @@ namespace BackyardLegends.Runtime
                 SetAnchors((RectTransform)view.BidCalloutGroup.transform, BidCalloutAnchorMin, BidCalloutAnchorMax);
             }
 
+            if (view?.BidCalloutSplash != null)
+            {
+                SetAnchors(view.BidCalloutSplash.rectTransform, new Vector2(-0.08f, -0.14f), new Vector2(1.08f, 1.12f));
+                view.BidCalloutSplash.transform.SetAsFirstSibling();
+            }
+
             if (view?.BidCalloutText == null)
             {
                 return;
@@ -6993,6 +7636,7 @@ namespace BackyardLegends.Runtime
             view.BidCalloutText.resizeTextForBestFit = true;
             view.BidCalloutText.resizeTextMinSize = 34;
             view.BidCalloutText.resizeTextMaxSize = BidCalloutFontSize;
+            view.BidCalloutText.transform.SetAsLastSibling();
         }
 
         private void EnsureFallbackFont(Text label)
@@ -7172,6 +7816,81 @@ namespace BackyardLegends.Runtime
             return theme.softPanelSprite != null
                 ? theme.softPanelSprite
                 : ThemeSpriteFactory.CreateRoundedRectSprite(new Color(0f, 0f, 0f, 0.08f), theme.panelStroke, 512, 256, 22);
+        }
+
+        private Sprite ResolveGraffitiSplashSprite()
+        {
+            if (graffitiSplashSprite != null)
+            {
+                return graffitiSplashSprite;
+            }
+
+            const int width = 256;
+            const int height = 128;
+            var pixels = new Color32[width * height];
+            for (var i = 0; i < pixels.Length; i++)
+            {
+                pixels[i] = new Color32(255, 255, 255, 0);
+            }
+
+            StampGraffitiEllipse(pixels, width, height, 128f, 64f, 116f, 42f, 230);
+            StampGraffitiEllipse(pixels, width, height, 86f, 48f, 44f, 30f, 205);
+            StampGraffitiEllipse(pixels, width, height, 174f, 78f, 52f, 28f, 210);
+            StampGraffitiEllipse(pixels, width, height, 52f, 72f, 20f, 16f, 170);
+            StampGraffitiEllipse(pixels, width, height, 211f, 48f, 22f, 17f, 175);
+            StampGraffitiEllipse(pixels, width, height, 98f, 104f, 10f, 20f, 145);
+            StampGraffitiEllipse(pixels, width, height, 155f, 106f, 8f, 18f, 130);
+            for (var i = 0; i < 54; i++)
+            {
+                var angle = i * 2.399963f;
+                var orbit = 26f + (i * 37 % 84);
+                var cx = 128f + Mathf.Cos(angle) * orbit;
+                var cy = 64f + Mathf.Sin(angle) * orbit * 0.46f;
+                var radius = 2f + (i * 19 % 9);
+                var alpha = (byte)(92 + (i * 23 % 118));
+                StampGraffitiEllipse(pixels, width, height, cx, cy, radius, radius * (0.72f + (i % 4) * 0.18f), alpha);
+            }
+
+            var texture = new Texture2D(width, height, TextureFormat.ARGB32, false)
+            {
+                name = "Graffiti Bid Splash Runtime",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp
+            };
+            texture.SetPixels32(pixels);
+            texture.Apply();
+            graffitiSplashSprite = Sprite.Create(texture, new Rect(0f, 0f, width, height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(24f, 18f, 24f, 18f));
+            return graffitiSplashSprite;
+        }
+
+        private static void StampGraffitiEllipse(Color32[] pixels, int width, int height, float centerX, float centerY, float radiusX, float radiusY, byte alpha)
+        {
+            var minX = Mathf.Clamp(Mathf.FloorToInt(centerX - radiusX), 0, width - 1);
+            var maxX = Mathf.Clamp(Mathf.CeilToInt(centerX + radiusX), 0, width - 1);
+            var minY = Mathf.Clamp(Mathf.FloorToInt(centerY - radiusY), 0, height - 1);
+            var maxY = Mathf.Clamp(Mathf.CeilToInt(centerY + radiusY), 0, height - 1);
+            for (var y = minY; y <= maxY; y++)
+            {
+                var dy = (y - centerY) / Mathf.Max(1f, radiusY);
+                for (var x = minX; x <= maxX; x++)
+                {
+                    var dx = (x - centerX) / Mathf.Max(1f, radiusX);
+                    var distance = dx * dx + dy * dy;
+                    if (distance > 1f)
+                    {
+                        continue;
+                    }
+
+                    var edge = Mathf.Clamp01((1f - distance) * 2.8f);
+                    var grain = 0.72f + Mathf.Abs(Mathf.Sin((x * 12.9898f + y * 78.233f) * 0.15f)) * 0.28f;
+                    var value = (byte)Mathf.Clamp(Mathf.RoundToInt(alpha * edge * grain), 0, 255);
+                    var index = y * width + x;
+                    if (value > pixels[index].a)
+                    {
+                        pixels[index] = new Color32(255, 255, 255, value);
+                    }
+                }
+            }
         }
 
         private Sprite ResolveCardBackSprite()
