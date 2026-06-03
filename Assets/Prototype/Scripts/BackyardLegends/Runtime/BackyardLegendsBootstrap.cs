@@ -28,9 +28,6 @@ namespace BackyardLegends.Runtime
         private const float OpeningDeckStackSizeMultiplier = 2.15f;
         private const float OpeningDeckStackXOffset = 0.62f;
         private const float OpeningDeckStackYOffset = -0.42f;
-#if UNITY_EDITOR
-        private const float EditorFastTimeScale = 10f;
-#endif
         private const string AvatarResourceRoot = "BackyardLegends/Avatars";
         private const string AvatarAssetFolder = "Assets/Prototype/Art/Update3/avatar";
         private static readonly string[] CardPlaceAudioResourceNames =
@@ -77,6 +74,17 @@ namespace BackyardLegends.Runtime
             "Spades_Broken_Metal_01",
             "Spades_Broken_Metal_02",
             "Spades_Broken_Metal_03"
+        };
+        private static readonly string[] CrowdReactionAudioResourceNames =
+        {
+            "Crowd_Reaction_Clap_01",
+            "Crowd_Reaction_Clap_02",
+            "Crowd_Reaction_Clap_03",
+            "Crowd_Reaction_Clap_04",
+            "Crowd_Reaction_Hooray_01",
+            "Crowd_Reaction_Hooray_02",
+            "Crowd_Reaction_Hooray_03",
+            "Crowd_Reaction_Hooray_04"
         };
         private static readonly string[] TrashTalkTags =
         {
@@ -161,12 +169,14 @@ namespace BackyardLegends.Runtime
         private readonly List<CardButtonView> handPool = new();
         private readonly List<CardButtonView> lastTrickCardViews = new();
         private readonly Dictionary<CardButtonView, Coroutine> handAnimations = new();
+        private readonly List<LastTrickCardPose> lastTrickCardTargetPoses = new();
         private readonly List<CardButtonView> openingStackPreviewCards = new();
         private readonly Dictionary<CardButtonView, Coroutine> openingStackPreviewAnimations = new();
         private readonly Dictionary<int, Button> bidButtons = new();
         private readonly Dictionary<SeatId, Coroutine> bidBubbleLoops = new();
         private readonly Dictionary<SeatId, Coroutine> bookTextLoops = new();
         private readonly Dictionary<SeatId, BookTextVisualState> bookTextDefaults = new();
+        private readonly Dictionary<SeatId, int> consecutiveBookStreaks = new();
         private readonly Dictionary<SeatId, Image> seatAvatarImages = new();
         private readonly Dictionary<SeatId, CanvasGroup> seatIntroGroups = new();
         private readonly Dictionary<SeatId, Component> avatarBookLightningFx = new();
@@ -203,6 +213,7 @@ namespace BackyardLegends.Runtime
         private Coroutine exitPromptFadeLoop;
         private Coroutine bookCameraShakeLoop;
         private Coroutine bidCameraFocusLoop;
+        private Coroutine lastTrickDisplayLoop;
         private Transform bookCameraShakeTarget;
         private Vector3 bookCameraShakeStartPosition;
         private Quaternion bookCameraShakeStartRotation;
@@ -240,17 +251,20 @@ namespace BackyardLegends.Runtime
         private AudioClip[] tableSlamClips;
         private AudioClip[] graffitiSprayClips;
         private AudioClip[] spadesBrokenClips;
+        private AudioClip[] crowdReactionClips;
         private int lastBookWinClipIndex = -1;
         private int lastBookWhooshClipIndex = -1;
         private int lastSetBookClipIndex = -1;
         private int lastTableSlamClipIndex = -1;
         private int lastGraffitiSprayClipIndex = -1;
         private int lastSpadesBrokenClipIndex = -1;
+        private int lastCrowdReactionClipIndex = -1;
         private Sprite graffitiSplashSprite;
         private Image lastTrickPanel;
         private Text lastTrickTitleText;
         private RectTransform lastTrickCardsRoot;
         private CanvasGroup lastTrickGroup;
+        private string lastTrickSignature;
         private RectTransform runtimeFxCanvasRoot;
         private RectTransform runtimeAnimationRoot;
         private Sprite bidButtonDefaultSprite;
@@ -278,6 +292,7 @@ namespace BackyardLegends.Runtime
         private bool spadesBrokenMomentShown;
         private float nextAvatarRouletteCueTime;
         private float nextTrashTalkPopupTime;
+        private float nextCrowdReactionTime;
 #if UNITY_EDITOR
         private float editorDefaultFixedDeltaTime;
 #endif
@@ -373,6 +388,22 @@ namespace BackyardLegends.Runtime
             public float ArcHeight { get; }
             public Vector2 BurstOffset { get; }
             public float Delay { get; }
+        }
+
+        private readonly struct LastTrickCardPose
+        {
+            public LastTrickCardPose(Vector2 position, Vector2 size, Quaternion rotation, Vector3 scale)
+            {
+                Position = position;
+                Size = size;
+                Rotation = rotation;
+                Scale = scale;
+            }
+
+            public Vector2 Position { get; }
+            public Vector2 Size { get; }
+            public Quaternion Rotation { get; }
+            public Vector3 Scale { get; }
         }
 
         private readonly struct CardVisualState
@@ -776,10 +807,11 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
+            CaptureAuthoredLastTrickCardPoses();
+
             lastTrickPanel.raycastTarget = false;
             if (lastTrickGroup != null)
             {
-                lastTrickGroup.alpha = 0f;
                 lastTrickGroup.blocksRaycasts = false;
                 lastTrickGroup.interactable = false;
             }
@@ -792,6 +824,24 @@ namespace BackyardLegends.Runtime
             if (sceneRefs.LastTrickText != null)
             {
                 sceneRefs.LastTrickText.gameObject.SetActive(false);
+            }
+        }
+
+        private void CaptureAuthoredLastTrickCardPoses()
+        {
+            lastTrickCardTargetPoses.Clear();
+            foreach (var view in lastTrickCardViews)
+            {
+                if (view == null)
+                {
+                    continue;
+                }
+
+                lastTrickCardTargetPoses.Add(new LastTrickCardPose(
+                    view.Root.anchoredPosition,
+                    view.Root.sizeDelta,
+                    view.Root.localRotation,
+                    view.Root.localScale));
             }
         }
 
@@ -887,7 +937,7 @@ namespace BackyardLegends.Runtime
 #if UNITY_EDITOR
             if (WasSpacePressedThisFrame())
             {
-                ToggleEditorTimeScale();
+                ForceEndMatchForEditorTest();
             }
 #endif
 
@@ -916,15 +966,114 @@ namespace BackyardLegends.Runtime
         }
 
 #if UNITY_EDITOR
-        private void ToggleEditorTimeScale()
+        private void ForceEndMatchForEditorTest()
         {
-            var useFastScale = !Mathf.Approximately(Time.timeScale, EditorFastTimeScale);
-            Time.timeScale = useFastScale ? EditorFastTimeScale : 1f;
-            Time.fixedDeltaTime = editorDefaultFixedDeltaTime * Time.timeScale;
-            if (sceneRefs?.StatusText != null && theme != null)
+            if (!CanRunEditorEndShortcut() || controller == null || controller.State.RoundState == null)
             {
-                FlashStatus(useFastScale ? "EDITOR SPEED: 10X" : "EDITOR SPEED: 1X", useFastScale ? theme.gold : theme.primaryText);
+                return;
             }
+
+            Time.timeScale = 1f;
+            Time.fixedDeltaTime = editorDefaultFixedDeltaTime;
+            StopAllCoroutines();
+            ResetEditorShortcutCoroutineRefs();
+            avatarIntroRunning = false;
+            openingDealPending = false;
+            openingDealRunning = false;
+            handReviewPending = false;
+            bidTurnDelayPending = false;
+            optionsMenuOpen = false;
+            exitPromptOpen = false;
+            activePrompt = ConfirmationPromptType.None;
+            selectedCard = null;
+            pendingBidSelection = null;
+            lastRenderedHand.Clear();
+
+            ClearTransientMotionState(true);
+            SetBidSheetVisible(false);
+            SetSheetVisible(sceneRefs.RoundSheet, false);
+            SetSheetVisible(sceneRefs.OptionsMenu, false);
+            SetSheetVisible(sceneRefs.ExitPromptOverlay, false);
+
+            ApplyEditorTestEndState(TeamId.Home);
+            OnMatchEvent(new MatchEndedEvent(controller.State, TeamId.Home));
+            ApplyDeferredSheetState();
+            if (sceneRefs.EndSheet != null)
+            {
+                sceneRefs.EndSheet.SetAsLastSibling();
+            }
+
+            FlashStatus("EDITOR TEST: MATCH ENDED", theme != null ? theme.gold : Color.white);
+        }
+
+        private bool CanRunEditorEndShortcut()
+        {
+            var canvas = sceneRefs?.EndSheet != null
+                ? sceneRefs.EndSheet.GetComponentInParent<Canvas>()
+                : GetComponentInParent<Canvas>();
+            return canvas == null || canvas.enabled;
+        }
+
+        private void ResetEditorShortcutCoroutineRefs()
+        {
+            aiLoop = null;
+            animationQueueLoop = null;
+            openingStackIntroLoop = null;
+            avatarIntroLoop = null;
+            deferredSheetStateLoop = null;
+            bannerLoop = null;
+            flashLoop = null;
+            homeDeltaLoop = null;
+            awayDeltaLoop = null;
+            dealButtonFadeLoop = null;
+            handReviewLoop = null;
+            bidTurnDelayLoop = null;
+            exitPromptFadeLoop = null;
+            bookCameraShakeLoop = null;
+            bidCameraFocusLoop = null;
+        }
+
+        private void ApplyEditorTestEndState(TeamId winningTeam)
+        {
+            var targetScore = controller.State.TargetScore > 0
+                ? controller.State.TargetScore
+                : selectedRule != null && selectedRule.TargetScore > 0
+                    ? selectedRule.TargetScore
+                    : 100;
+            controller.State.TargetScore = Mathf.Max(1, targetScore);
+            controller.State.WinningTeam = winningTeam;
+            controller.State.Phase = MatchPhase.MatchEnded;
+            controller.State.RoundState.LastStatusMessage = "Editor test match ended.";
+            controller.State.RoundState.TrickState.Plays.Clear();
+            controller.State.RoundState.TrickState.LeadSuit = null;
+            controller.State.RoundState.RenegeSeats.Clear();
+
+            var losingTeam = winningTeam == TeamId.Home ? TeamId.Away : TeamId.Home;
+            ApplyEditorTestScore(winningTeam, 6, 7, 70, Mathf.Max(controller.State.TargetScore, GetEditorScore(winningTeam).Score + 70));
+            ApplyEditorTestScore(losingTeam, 5, 4, -50, Mathf.Min(controller.State.TargetScore - 10, GetEditorScore(losingTeam).Score - 50));
+        }
+
+        private ScoreSnapshot GetEditorScore(TeamId team)
+        {
+            if (!controller.State.Scores.TryGetValue(team, out var score) || score == null)
+            {
+                score = new ScoreSnapshot { Team = team };
+                controller.State.Scores[team] = score;
+            }
+
+            return score;
+        }
+
+        private void ApplyEditorTestScore(TeamId team, int contractBid, int tricksWon, int roundDelta, int finalScore)
+        {
+            var score = GetEditorScore(team);
+            score.ContractBid = contractBid;
+            score.TricksWon = tricksWon;
+            score.RoundDelta = roundDelta;
+            score.NilDelta = 0;
+            score.BagsEarned = Mathf.Max(0, tricksWon - contractBid);
+            score.BagPenaltyDelta = 0;
+            score.Score = finalScore;
         }
 
         private static bool WasSpacePressedThisFrame()
@@ -1406,6 +1555,7 @@ namespace BackyardLegends.Runtime
             tableSlamClips = ResolveAudioClips(TableSlamAudioResourceNames, setBookClip);
             graffitiSprayClips = ResolveAudioClips(GraffitiSprayAudioResourceNames, null);
             spadesBrokenClips = ResolveAudioClips(SpadesBrokenAudioResourceNames, null);
+            crowdReactionClips = ResolveAudioClips(CrowdReactionAudioResourceNames, null);
         }
 
         private static AudioClip ResolveFeedbackClip(AudioClip overrideClip, string resourceName, System.Func<AudioClip> fallbackFactory)
@@ -1672,6 +1822,50 @@ namespace BackyardLegends.Runtime
             }
 
             feedbackAudioSource.PlayOneShot(metalHit, 1.05f);
+        }
+
+        private void TryPlayCrowdReaction(float chance, float volumeScale, float delaySeconds = 0f, bool ignoreCooldown = false)
+        {
+            if (feedbackAudioSource == null || Random.value > chance)
+            {
+                return;
+            }
+
+            if (!ignoreCooldown && Time.unscaledTime < nextCrowdReactionTime)
+            {
+                return;
+            }
+
+            nextCrowdReactionTime = Time.unscaledTime + Mathf.Max(0.45f, delaySeconds) + Random.Range(1.05f, 1.85f);
+            if (delaySeconds > 0f)
+            {
+                StartCoroutine(PlayCrowdReactionAfterDelay(delaySeconds, volumeScale));
+                return;
+            }
+
+            PlayCrowdReactionNow(volumeScale);
+        }
+
+        private IEnumerator PlayCrowdReactionAfterDelay(float delaySeconds, float volumeScale)
+        {
+            yield return new WaitForSecondsRealtime(Mathf.Max(0.01f, delaySeconds));
+            PlayCrowdReactionNow(volumeScale);
+        }
+
+        private void PlayCrowdReactionNow(float volumeScale)
+        {
+            if (feedbackAudioSource == null)
+            {
+                return;
+            }
+
+            var reaction = PickRandomClip(crowdReactionClips, ref lastCrowdReactionClipIndex);
+            if (reaction == null)
+            {
+                return;
+            }
+
+            feedbackAudioSource.PlayOneShot(reaction, Mathf.Clamp(volumeScale * Random.Range(0.94f, 1.18f), 0.24f, 1.15f));
         }
 
         private static AudioClip PickRandomClip(AudioClip[] clips, ref int lastIndex)
@@ -2094,13 +2288,14 @@ namespace BackyardLegends.Runtime
             lastTrickPanel.gameObject.SetActive(hasLastTrick);
             if (lastTrickGroup != null)
             {
-                lastTrickGroup.alpha = hasLastTrick ? 0.74f : 0f;
                 lastTrickGroup.blocksRaycasts = false;
                 lastTrickGroup.interactable = false;
             }
 
             if (!hasLastTrick)
             {
+                StopLastTrickDisplayAnimation();
+                lastTrickSignature = null;
                 foreach (var view in lastTrickCardViews)
                 {
                     view.gameObject.SetActive(false);
@@ -2114,7 +2309,12 @@ namespace BackyardLegends.Runtime
                 lastTrickTitleText.text = "LAST HAND PLAYED";
             }
 
-            LayoutLastTrickCards(lastTrick.Count);
+            var signature = BuildLastTrickSignature(lastTrick);
+            var shouldAnimate = signature != lastTrickSignature;
+            if (lastTrickDisplayLoop == null || shouldAnimate)
+            {
+                ApplyLastTrickTargetLayout(lastTrick.Count);
+            }
             for (var index = 0; index < lastTrickCardViews.Count; index++)
             {
                 var view = lastTrickCardViews[index];
@@ -2125,25 +2325,29 @@ namespace BackyardLegends.Runtime
                     ConfigureLastTrickCardView(view, lastTrick[index]);
                 }
             }
+
+            if (shouldAnimate)
+            {
+                lastTrickSignature = signature;
+                PlayLastTrickDisplayAnimation(lastTrick.Count);
+            }
         }
 
-        private void LayoutLastTrickCards(int visibleCount)
+        private void ApplyLastTrickTargetLayout(int visibleCount)
         {
             if (visibleCount <= 0)
             {
                 return;
             }
 
-            var cardSize = ResolveLastTrickCardSize();
-            var spacing = Mathf.Clamp(cardSize.x * 0.18f, 6f, 12f);
-            var totalWidth = visibleCount * cardSize.x + (visibleCount - 1) * spacing;
             for (var index = 0; index < lastTrickCardViews.Count; index++)
             {
                 var view = lastTrickCardViews[index];
-                view.Root.sizeDelta = cardSize;
-                view.Root.anchoredPosition = new Vector2(-totalWidth * 0.5f + cardSize.x * 0.5f + index * (cardSize.x + spacing), 0f);
-                view.Root.localRotation = Quaternion.Euler(0f, 0f, Mathf.Lerp(-3f, 3f, index / 3f));
-                view.Root.localScale = Vector3.one;
+                var pose = ResolveLastTrickTargetPose(index, visibleCount);
+                view.Root.sizeDelta = pose.Size;
+                view.Root.anchoredPosition = pose.Position;
+                view.Root.localRotation = pose.Rotation;
+                view.Root.localScale = pose.Scale;
             }
         }
 
@@ -2176,6 +2380,137 @@ namespace BackyardLegends.Runtime
                 SetGraphicAlpha(view.RankText, 1f);
                 SetGraphicAlpha(view.SuitText, 1f);
             }
+        }
+
+        private string BuildLastTrickSignature(IReadOnlyList<TrickPlay> trick)
+        {
+            return trick == null || trick.Count == 0
+                ? string.Empty
+                : string.Join("|", trick.Select(play => $"{play.Seat}:{play.Card.Suit}:{play.Card.Rank}"));
+        }
+
+        private LastTrickCardPose ResolveLastTrickTargetPose(int index, int visibleCount)
+        {
+            if (index >= 0 && index < lastTrickCardTargetPoses.Count)
+            {
+                return lastTrickCardTargetPoses[index];
+            }
+
+            var cardSize = ResolveLastTrickCardSize();
+            if (visibleCount == 4)
+            {
+                var positions = new[]
+                {
+                    new Vector2(0f, cardSize.y * 0.42f),
+                    new Vector2(-cardSize.x * 0.72f, 0f),
+                    new Vector2(cardSize.x * 0.72f, 0f),
+                    new Vector2(0f, -cardSize.y * 0.42f)
+                };
+                var rotations = new[] { 0f, 23f, -23f, 0f };
+                return new LastTrickCardPose(
+                    index < positions.Length ? positions[index] : Vector2.zero,
+                    cardSize,
+                    Quaternion.Euler(0f, 0f, index < rotations.Length ? rotations[index] : 0f),
+                    Vector3.one);
+            }
+
+            var spacing = Mathf.Clamp(cardSize.x * 0.18f, 6f, 12f);
+            var totalWidth = visibleCount * cardSize.x + (visibleCount - 1) * spacing;
+            var position = new Vector2(-totalWidth * 0.5f + cardSize.x * 0.5f + index * (cardSize.x + spacing), 0f);
+            var rotation = Quaternion.Euler(0f, 0f, Mathf.Lerp(-3f, 3f, index / Mathf.Max(1f, visibleCount - 1f)));
+            return new LastTrickCardPose(position, cardSize, rotation, Vector3.one);
+        }
+
+        private void PlayLastTrickDisplayAnimation(int visibleCount)
+        {
+            StopLastTrickDisplayAnimation();
+            if (!isActiveAndEnabled || visibleCount <= 0)
+            {
+                return;
+            }
+
+            lastTrickDisplayLoop = StartCoroutine(LastTrickDisplayAnimationRoutine(visibleCount));
+        }
+
+        private void StopLastTrickDisplayAnimation()
+        {
+            if (lastTrickDisplayLoop != null)
+            {
+                StopCoroutine(lastTrickDisplayLoop);
+                lastTrickDisplayLoop = null;
+            }
+        }
+
+        private IEnumerator LastTrickDisplayAnimationRoutine(int visibleCount)
+        {
+            var duration = Mathf.Max(0.28f, theme != null ? theme.modalDuration * 1.18f : 0.36f);
+            const float staggerSeconds = 0.045f;
+
+            if (lastTrickPanel != null)
+            {
+                lastTrickPanel.gameObject.SetActive(true);
+            }
+
+            var poses = new List<LastTrickCardPose>();
+            for (var index = 0; index < visibleCount && index < lastTrickCardViews.Count; index++)
+            {
+                var view = lastTrickCardViews[index];
+                var pose = ResolveLastTrickTargetPose(index, visibleCount);
+                poses.Add(pose);
+
+                view.Root.sizeDelta = pose.Size;
+                view.Root.anchoredPosition = pose.Position + new Vector2(-18f + index * 10f, -20f);
+                view.Root.localRotation = pose.Rotation * Quaternion.Euler(0f, 0f, index % 2 == 0 ? -10f : 10f);
+                view.Root.localScale = pose.Scale * 0.74f;
+                if (view.CanvasGroup != null)
+                {
+                    view.CanvasGroup.alpha = 0f;
+                }
+            }
+
+            var elapsed = 0f;
+            var totalDuration = duration + Mathf.Max(0, visibleCount - 1) * staggerSeconds;
+            while (elapsed < totalDuration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+
+                for (var index = 0; index < visibleCount && index < lastTrickCardViews.Count; index++)
+                {
+                    var localT = Mathf.Clamp01((elapsed - index * staggerSeconds) / duration);
+                    var eased = EaseOutBack(localT);
+                    var settle = Mathf.Sin(localT * Mathf.PI);
+                    var view = lastTrickCardViews[index];
+                    var pose = poses[index];
+                    var entryPosition = pose.Position + new Vector2(-18f + index * 10f, -20f);
+                    var entryRotation = pose.Rotation * Quaternion.Euler(0f, 0f, index % 2 == 0 ? -10f : 10f);
+
+                    view.Root.anchoredPosition = Vector2.LerpUnclamped(entryPosition, pose.Position, eased) + Vector2.up * (settle * 5f);
+                    view.Root.localRotation = Quaternion.Slerp(entryRotation, pose.Rotation, Mathf.Clamp01(eased));
+                    view.Root.localScale = pose.Scale * (Mathf.LerpUnclamped(0.74f, 1f, eased) + settle * 0.045f);
+                    if (view.CanvasGroup != null)
+                    {
+                        view.CanvasGroup.alpha = Mathf.Lerp(0f, 0.92f, EaseOutCubic(localT));
+                    }
+                }
+
+                yield return null;
+            }
+
+            for (var index = 0; index < visibleCount && index < lastTrickCardViews.Count; index++)
+            {
+                var view = lastTrickCardViews[index];
+                var pose = poses[index];
+                view.Root.sizeDelta = pose.Size;
+                view.Root.anchoredPosition = pose.Position;
+                view.Root.localRotation = pose.Rotation;
+                view.Root.localScale = pose.Scale;
+                if (view.CanvasGroup != null)
+                {
+                    view.CanvasGroup.alpha = 0.92f;
+                }
+            }
+
+            lastTrickDisplayLoop = null;
         }
 
         private void RenderScoreboard(EndOfHandScoreboardView view, bool matchComplete, TeamId? winningTeam)
@@ -4265,6 +4600,8 @@ namespace BackyardLegends.Runtime
             hiddenTrickSlots.Clear();
             resolvedTrickCards.Clear();
             RenderTrickArea();
+            var bookStreak = RegisterBookStreak(winner);
+            var streakBoost = ResolveBookStreakBoost(bookStreak);
             PlayFeedback(FeedbackCue.Collect, 0.16f);
             PlayBookWonSound();
             if (bigBook)
@@ -4272,15 +4609,17 @@ namespace BackyardLegends.Runtime
                 PlayTableSlamSound();
             }
 
+            TryPlayCrowdReaction(0.25f, ResolveBookStreakCrowdVolume(bookStreak, bigBook), 0.24f, true);
+
             RefreshBookLeaderLightningFx();
             SetLatestBookAura(winner);
-            StartBookCameraShake(winner, bigBook ? 1.08f : 0.78f);
+            StartBookCameraShake(winner, (bigBook ? 1.75f : 1.18f) * streakBoost);
             var winnerPoint = GetAnchoredPoint(seatViews[winner].Root, GetSeatInnerAnchor(winner));
             var discardPoint = GetAnchoredPoint(sceneRefs.DiscardAnchorImage.rectTransform, new Vector2(0.5f, 0.5f));
-            SpawnEpicToonFx(bookWinFxPrefab, winnerPoint, bigBook ? 1.24f : 1.08f);
+            SpawnBookStreakFx(winnerPoint, bookStreak, bigBook);
             if (bigBook)
             {
-                SpawnEpicToonFx(tableSlamFxPrefab != null ? tableSlamFxPrefab : cardSmokeFxPrefab, winnerPoint + new Vector2(0f, -8f), 1.12f);
+                SpawnEpicToonFx(tableSlamFxPrefab != null ? tableSlamFxPrefab : cardImpactFxPrefab, discardPoint + new Vector2(0f, -8f), 0.98f + Mathf.Min(bookStreak - 1, 5) * 0.08f);
             }
 
             SpawnEpicToonFx(cardSmokeFxPrefab, discardPoint, bigBook ? 0.88f : 0.72f);
@@ -4296,6 +4635,147 @@ namespace BackyardLegends.Runtime
             }
 
             yield return PulseRect(sceneRefs.DiscardAnchorImage.rectTransform, 1.07f, Mathf.Max(0.12f, theme.pulseDuration * 0.8f));
+        }
+
+        private int RegisterBookStreak(SeatId winner)
+        {
+            var previous = consecutiveBookStreaks.TryGetValue(winner, out var count) ? count : 0;
+            var next = Mathf.Clamp(previous + 1, 1, 8);
+            consecutiveBookStreaks[SeatId.Bottom] = winner == SeatId.Bottom ? next : 0;
+            consecutiveBookStreaks[SeatId.Left] = winner == SeatId.Left ? next : 0;
+            consecutiveBookStreaks[SeatId.Top] = winner == SeatId.Top ? next : 0;
+            consecutiveBookStreaks[SeatId.Right] = winner == SeatId.Right ? next : 0;
+            return next;
+        }
+
+        private void ResetBookStreaks()
+        {
+            consecutiveBookStreaks[SeatId.Bottom] = 0;
+            consecutiveBookStreaks[SeatId.Left] = 0;
+            consecutiveBookStreaks[SeatId.Top] = 0;
+            consecutiveBookStreaks[SeatId.Right] = 0;
+        }
+
+        private static float ResolveBookStreakBoost(int streak)
+        {
+            var step = Mathf.Clamp(streak - 1, 0, 6);
+            return 1f + step * 0.34f + Mathf.Max(0, step - 2) * 0.08f;
+        }
+
+        private static float ResolveBookStreakCrowdVolume(int streak, bool bigBook)
+        {
+            return Mathf.Clamp((bigBook ? 1.02f : 0.82f) + Mathf.Clamp(streak - 1, 0, 5) * 0.13f, 0.7f, 1.24f);
+        }
+
+        private void SpawnBookStreakFx(Vector2 winnerPoint, int streak, bool bigBook)
+        {
+            var streakStep = Mathf.Clamp(streak - 1, 0, 5);
+            StartCoroutine(BookStreakStickerRoutine(winnerPoint, streak, bigBook, streakStep));
+        }
+
+        private IEnumerator BookStreakStickerRoutine(Vector2 winnerPoint, int streak, bool bigBook, int streakStep)
+        {
+            var root = AnimationRoot;
+            if (root == null)
+            {
+                yield break;
+            }
+
+            var fxObject = new GameObject("Book Streak Sticker Runtime", typeof(RectTransform), typeof(CanvasGroup));
+            fxObject.transform.SetParent(root, false);
+            fxObject.transform.SetAsLastSibling();
+            var fxRect = (RectTransform)fxObject.transform;
+            fxRect.anchorMin = new Vector2(0.5f, 0.5f);
+            fxRect.anchorMax = new Vector2(0.5f, 0.5f);
+            fxRect.pivot = new Vector2(0.5f, 0.5f);
+            fxRect.sizeDelta = new Vector2(180f + streakStep * 18f, 88f + streakStep * 9f);
+            fxRect.anchoredPosition = winnerPoint + new Vector2(0f, 12f + streakStep * 5f);
+            fxRect.localScale = Vector3.one * 0.5f;
+            fxRect.localRotation = Quaternion.Euler(0f, 0f, Random.Range(-7f, 7f));
+
+            var group = fxObject.GetComponent<CanvasGroup>();
+            group.blocksRaycasts = false;
+            group.interactable = false;
+            group.alpha = 0f;
+
+            var plate = CreateStickerImage("Book Streak Plate", fxRect, new Vector2(0.12f, 0.18f), new Vector2(0.88f, 0.82f), new Color(0.02f, 0.024f, 0.025f, 0.8f));
+            var flash = CreateStickerImage("Book Streak Flash", fxRect, new Vector2(0f, 0f), new Vector2(1f, 1f), new Color(theme.gold.r, theme.gold.g, theme.gold.b, 0.28f));
+            var strikeA = CreateStickerImage("Book Streak Strike A", fxRect, new Vector2(0.04f, 0.44f), new Vector2(0.96f, 0.56f), new Color(theme.gold.r, theme.gold.g, theme.gold.b, 0.9f));
+            var strikeB = CreateStickerImage("Book Streak Strike B", fxRect, new Vector2(0.18f, 0.31f), new Vector2(0.82f, 0.42f), new Color(theme.green.r, theme.green.g, theme.green.b, 0.75f));
+            strikeA.rectTransform.localRotation = Quaternion.Euler(0f, 0f, -8f);
+            strikeB.rectTransform.localRotation = Quaternion.Euler(0f, 0f, 7f);
+
+            var labelObject = new GameObject("Book Streak Label", typeof(RectTransform), typeof(Text), typeof(Outline), typeof(Shadow));
+            labelObject.transform.SetParent(fxRect, false);
+            labelObject.transform.SetAsLastSibling();
+            var labelRect = (RectTransform)labelObject.transform;
+            SetAnchors(labelRect, new Vector2(0.08f, 0.04f), new Vector2(0.92f, 0.96f));
+            var label = labelObject.GetComponent<Text>();
+            label.font = theme.ResolveFont();
+            label.text = streak >= 2 ? $"BOOK x{streak}" : "BOOK";
+            label.fontSize = streak >= 2 ? 31 + streakStep * 2 : 34;
+            label.fontStyle = FontStyle.BoldAndItalic;
+            label.alignment = TextAnchor.MiddleCenter;
+            label.horizontalOverflow = HorizontalWrapMode.Overflow;
+            label.verticalOverflow = VerticalWrapMode.Overflow;
+            label.color = bigBook ? theme.gold : theme.primaryText;
+            label.raycastTarget = false;
+            var outline = labelObject.GetComponent<Outline>();
+            outline.effectColor = new Color(0f, 0f, 0f, 0.9f);
+            outline.effectDistance = new Vector2(2.8f, -2.8f);
+            var shadow = labelObject.GetComponent<Shadow>();
+            shadow.effectColor = new Color(0f, 0f, 0f, 0.42f);
+            shadow.effectDistance = new Vector2(7f, -7f);
+
+            transientFx.Add(plate);
+            transientFx.Add(flash);
+            transientFx.Add(strikeA);
+            transientFx.Add(strikeB);
+            transientFx.Add(label);
+
+            var duration = 0.82f;
+            var elapsed = 0f;
+            var startRotation = fxRect.localRotation;
+            var endRotation = startRotation * Quaternion.Euler(0f, 0f, Random.Range(-4f, 4f));
+            while (elapsed < duration && fxRect != null)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(elapsed / duration);
+                var intro = Mathf.Clamp01(t / 0.28f);
+                var outT = Mathf.Clamp01((t - 0.66f) / 0.34f);
+                var punch = EaseOutBack(intro);
+                var swagger = Mathf.Sin(t * Mathf.PI * 4f) * (1f - t) * 2.8f;
+                fxRect.localScale = Vector3.one * Mathf.LerpUnclamped(0.5f, 1.05f + streakStep * 0.06f, punch) * Mathf.Lerp(1f, 0.74f, outT);
+                fxRect.anchoredPosition = winnerPoint + new Vector2(0f, 12f + streakStep * 5f + Mathf.Sin(t * Mathf.PI) * 18f + outT * 22f);
+                fxRect.localRotation = Quaternion.Lerp(startRotation, endRotation, t) * Quaternion.Euler(0f, 0f, swagger);
+                group.alpha = Mathf.Min(Mathf.Clamp01(intro * 2.4f), 1f - outT);
+                flash.color = new Color(flash.color.r, flash.color.g, flash.color.b, Mathf.Lerp(0.38f, 0f, t));
+                yield return null;
+            }
+
+            transientFx.Remove(plate);
+            transientFx.Remove(flash);
+            transientFx.Remove(strikeA);
+            transientFx.Remove(strikeB);
+            transientFx.Remove(label);
+            if (fxObject != null)
+            {
+                Destroy(fxObject);
+            }
+        }
+
+        private Image CreateStickerImage(string name, Transform parent, Vector2 anchorMin, Vector2 anchorMax, Color color)
+        {
+            var imageObject = new GameObject(name, typeof(RectTransform), typeof(Image));
+            imageObject.transform.SetParent(parent, false);
+            var rect = (RectTransform)imageObject.transform;
+            SetAnchors(rect, anchorMin, anchorMax);
+            var image = imageObject.GetComponent<Image>();
+            image.sprite = ResolveSoftPanelSprite();
+            image.type = Image.Type.Sliced;
+            image.color = color;
+            image.raycastTarget = false;
+            return image;
         }
 
         private IEnumerator AnimateFloatingCard(CardButtonView ghost, CardMotionSnapshot motion, float duration, bool fadeOutNearEnd, bool revealFromBack)
@@ -5590,31 +6070,38 @@ namespace BackyardLegends.Runtime
 
         private IEnumerator BookCameraShakeRoutine(Transform target, Vector2 focusDirection, float intensity)
         {
-            var duration = Mathf.Max(0.34f, theme.shakeDuration * Mathf.Lerp(2.05f, 2.78f, Mathf.Clamp01(intensity)));
+            var shakePower = Mathf.Clamp(intensity, 0.35f, 4.25f);
+            var shake01 = Mathf.InverseLerp(0.35f, 4.25f, shakePower);
+            var duration = Mathf.Max(0.48f, theme.shakeDuration * Mathf.Lerp(3.35f, 5.15f, shake01));
             var punchTravel = bookCameraShakeCamera != null && bookCameraShakeCamera.orthographic
-                ? Mathf.Max(0.34f, bookCameraShakeStartOrthographicSize * 0.2f) * intensity
-                : 0.58f * intensity;
-            var punchOffset = new Vector3(focusDirection.x * punchTravel, focusDirection.y * punchTravel * 0.78f, 0f);
+                ? Mathf.Max(0.62f, bookCameraShakeStartOrthographicSize * 0.32f) * shakePower
+                : 1.05f * shakePower;
+            var punchOffset = new Vector3(focusDirection.x * punchTravel, focusDirection.y * punchTravel * 0.92f, 0f);
             var punchOrthographicSize = bookCameraShakeCamera != null && bookCameraShakeCamera.orthographic
-                ? bookCameraShakeStartOrthographicSize * Mathf.Lerp(0.91f, 0.83f, Mathf.Clamp01(intensity))
+                ? bookCameraShakeStartOrthographicSize * Mathf.Lerp(0.83f, 0.68f, shake01)
                 : bookCameraShakeStartOrthographicSize;
             var punchFieldOfView = bookCameraShakeCamera != null && !bookCameraShakeCamera.orthographic
-                ? bookCameraShakeStartFieldOfView * Mathf.Lerp(0.94f, 0.89f, Mathf.Clamp01(intensity))
+                ? bookCameraShakeStartFieldOfView * Mathf.Lerp(0.9f, 0.78f, shake01)
                 : bookCameraShakeStartFieldOfView;
             var elapsed = 0f;
             while (elapsed < duration && target != null)
             {
                 elapsed += Time.unscaledDeltaTime;
                 var t = Mathf.Clamp01(elapsed / duration);
-                var punch = Mathf.Sin(t * Mathf.PI);
+                var primaryPunch = Mathf.Sin(Mathf.Clamp01(t / 0.58f) * Mathf.PI);
+                var afterPunch = Mathf.Sin(Mathf.Clamp01((t - 0.32f) / 0.68f) * Mathf.PI) * 0.34f;
+                var punch = Mathf.Clamp01(primaryPunch + afterPunch);
                 var falloff = 1f - EaseOutCubic(t);
-                var hit = Mathf.Exp(-18f * t);
-                var x = (Mathf.Sin(elapsed * 118f) * 0.28f + Mathf.Sin(elapsed * 39f) * 0.12f) * falloff * intensity;
-                var y = (Mathf.Cos(elapsed * 96f) * 0.2f + Mathf.Sin(elapsed * 51f) * 0.07f) * falloff * intensity;
-                var roll = (Mathf.Sin(elapsed * 142f) * 2.4f + Mathf.Sin(elapsed * 28f) * 0.84f) * falloff * intensity;
-                x += Mathf.Sin(elapsed * 220f) * 0.14f * hit * intensity;
-                y += Mathf.Cos(elapsed * 210f) * 0.11f * hit * intensity;
-                roll += Mathf.Sin(elapsed * 260f) * 1.4f * hit * intensity;
+                var hit = Mathf.Exp(-12f * t);
+                var rumble = Mathf.Sin(t * Mathf.PI) * 0.45f;
+                var x = (Mathf.Sin(elapsed * 128f) * 0.54f + Mathf.Sin(elapsed * 43f) * 0.22f) * falloff * shakePower;
+                var y = (Mathf.Cos(elapsed * 106f) * 0.38f + Mathf.Sin(elapsed * 57f) * 0.16f) * falloff * shakePower;
+                var roll = (Mathf.Sin(elapsed * 152f) * 4.6f + Mathf.Sin(elapsed * 31f) * 1.55f) * falloff * shakePower;
+                x += Mathf.Sin(elapsed * 235f) * 0.36f * hit * shakePower;
+                y += Mathf.Cos(elapsed * 225f) * 0.28f * hit * shakePower;
+                roll += Mathf.Sin(elapsed * 275f) * 3.6f * hit * shakePower;
+                x += focusDirection.x * rumble * 0.32f * shakePower;
+                y += focusDirection.y * rumble * 0.22f * shakePower;
                 target.localPosition = bookCameraShakeStartPosition + punchOffset * punch + new Vector3(x, y, 0f);
                 target.localRotation = bookCameraShakeStartRotation * Quaternion.Euler(0f, 0f, roll);
                 if (bookCameraShakeCamera != null)
@@ -5671,6 +6158,8 @@ namespace BackyardLegends.Runtime
             setBookMomentRunning = false;
             spadesBrokenMomentShown = false;
             nextTrashTalkPopupTime = 0f;
+            nextCrowdReactionTime = 0f;
+            ResetBookStreaks();
             ClearBookTextAnimations();
             StopOpeningStackIntro();
             ClearOpeningStackPreviewCards();

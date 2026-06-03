@@ -1,0 +1,25 @@
+Booking crowd reaction stingers replaced with trimmed Mixkit preview SFX.
+Source pages checked June 4, 2026:
+- Mixkit Crowd Sound Effects: https://mixkit.co/free-sound-effects/crowd/
+- Mixkit Human Sound Effects: https://mixkit.co/free-sound-effects/human/
+- Mixkit License: https://mixkit.co/license/
+
+Only clap and hooray/cheer clips are referenced by the game.
+Playback is only triggered when a book is won.
+Playback chance is 25% per book.
+All clips are 2.65-2.95 seconds long.
+
+Project clips and Mixkit source IDs:
+- Crowd_Reaction_Clap_01.wav: Mixkit 476, Conference audience clapping strongly
+- Crowd_Reaction_Clap_02.wav: Mixkit 442, Crowd clapping
+- Crowd_Reaction_Clap_03.wav: Mixkit 3036, Small young crowd clapping
+- Crowd_Reaction_Clap_04.wav: Mixkit 485, Medium size crowd applause
+- Crowd_Reaction_Hooray_01.wav: Mixkit 462, Huge crowd cheering victory
+- Crowd_Reaction_Hooray_02.wav: Mixkit 610, Cheering crowd loud whistle
+- Crowd_Reaction_Hooray_03.wav: Mixkit 518, Small group cheer and applause
+- Crowd_Reaction_Hooray_04.wav: Mixkit 502, Auditorium moderate applause and cheering
+
+Edits made in-project:
+- Downloaded Mixkit preview MP3s.
+- Trimmed to 2.65-2.95 second WAVs.
+- Added short fade-in/fade-out and volume lift.
