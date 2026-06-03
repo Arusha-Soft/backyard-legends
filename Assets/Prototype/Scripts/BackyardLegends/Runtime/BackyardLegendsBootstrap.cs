@@ -2147,15 +2147,17 @@ namespace BackyardLegends.Runtime
                     PlayFeedback(FeedbackCue.RoundScore, 0.22f);
                     break;
                 case RoundScoredEvent:
-                    if (sceneRefs.RoundSummaryText != null)
+                    var roundWinner = ResolveCurrentLeadingTeam();
+                    if (sceneRefs.EndSummaryText != null)
                     {
-                        sceneRefs.RoundSummaryText.text = BuildRoundSummaryText();
+                        sceneRefs.EndSummaryText.text = BuildMatchSummaryText(roundWinner);
                     }
 
-                    RenderScoreboard(sceneRefs.RoundScoreboardView, false, null);
-                    AddFeedMessage("Round scored and wrapped.");
+                    RenderScoreboard(sceneRefs.EndScoreboardView, true, roundWinner);
+                    AddFeedMessage(roundWinner == TeamId.Home ? "Home team closed the match." : "Rivals closed the match.");
                     PlayFeedback(FeedbackCue.RoundScore, 0.2f);
-                    pendingRoundSheetOpen = true;
+                    pendingRoundSheetOpen = false;
+                    pendingEndSheetOpen = true;
                     ScheduleDeferredSheetState();
                     break;
                 case MatchEndedEvent ended:
@@ -8184,10 +8186,26 @@ namespace BackyardLegends.Runtime
         {
             var winnerLabel = winningTeam == TeamId.Home ? "You and your partner" : "The rivals";
             return
-                $"{winnerLabel} reached the finish line.\n\n" +
+                $"{winnerLabel} closed the table.\n\n" +
                 $"Home: {controller.State.Scores[TeamId.Home].Score}\n" +
                 $"Away: {controller.State.Scores[TeamId.Away].Score}\n\n" +
                 $"{BuildRoundSummaryText()}";
+        }
+
+        private TeamId ResolveCurrentLeadingTeam()
+        {
+            if (controller?.State?.Scores == null)
+            {
+                return TeamId.Home;
+            }
+
+            var homeScore = controller.State.Scores.TryGetValue(TeamId.Home, out var home) && home != null
+                ? home.Score
+                : 0;
+            var awayScore = controller.State.Scores.TryGetValue(TeamId.Away, out var away) && away != null
+                ? away.Score
+                : 0;
+            return awayScore > homeScore ? TeamId.Away : TeamId.Home;
         }
 
         private void ApplyThemeText(Text label, Color color, int fontSize, FontStyle style)
