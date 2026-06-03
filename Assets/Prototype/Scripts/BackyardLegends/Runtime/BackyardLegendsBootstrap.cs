@@ -176,6 +176,7 @@ namespace BackyardLegends.Runtime
         private readonly Dictionary<SeatId, Coroutine> bidBubbleLoops = new();
         private readonly Dictionary<SeatId, Coroutine> bookTextLoops = new();
         private readonly Dictionary<SeatId, BookTextVisualState> bookTextDefaults = new();
+        private readonly Dictionary<SeatId, Coroutine> bookAvatarLoops = new();
         private readonly Dictionary<SeatId, int> consecutiveBookStreaks = new();
         private readonly Dictionary<SeatId, Image> seatAvatarImages = new();
         private readonly Dictionary<SeatId, CanvasGroup> seatIntroGroups = new();
@@ -4613,7 +4614,8 @@ namespace BackyardLegends.Runtime
 
             RefreshBookLeaderLightningFx();
             SetLatestBookAura(winner);
-            StartBookCameraShake(winner, (bigBook ? 1.75f : 1.18f) * streakBoost);
+            StartBookCameraShake(winner, (bigBook ? 0.95f : 0.62f) * streakBoost);
+            StartBookAvatarHit(winner, bookStreak, bigBook);
             var winnerPoint = GetAnchoredPoint(seatViews[winner].Root, GetSeatInnerAnchor(winner));
             var discardPoint = GetAnchoredPoint(sceneRefs.DiscardAnchorImage.rectTransform, new Vector2(0.5f, 0.5f));
             SpawnBookStreakFx(winnerPoint, bookStreak, bigBook);
@@ -4635,6 +4637,117 @@ namespace BackyardLegends.Runtime
             }
 
             yield return PulseRect(sceneRefs.DiscardAnchorImage.rectTransform, 1.07f, Mathf.Max(0.12f, theme.pulseDuration * 0.8f));
+        }
+
+        private void StartBookAvatarHit(SeatId seat, int streak, bool bigBook)
+        {
+            if (bookAvatarLoops.TryGetValue(seat, out var activeLoop) && activeLoop != null)
+            {
+                return;
+            }
+
+            if (!seatAvatarImages.TryGetValue(seat, out var avatarImage) || avatarImage == null)
+            {
+                return;
+            }
+
+            var avatarRect = avatarImage.rectTransform;
+            if (avatarRect == null)
+            {
+                return;
+            }
+
+            var borderObject = ResolveAvatarBorderObject(seat, avatarImage);
+            var borderRect = borderObject != null ? borderObject.transform as RectTransform : null;
+            bookAvatarLoops[seat] = StartCoroutine(BookAvatarHitRoutine(seat, avatarImage, avatarRect, borderRect, streak, bigBook));
+        }
+
+        private IEnumerator BookAvatarHitRoutine(
+            SeatId seat,
+            Image avatarImage,
+            RectTransform avatarRect,
+            RectTransform borderRect,
+            int streak,
+            bool bigBook)
+        {
+            var avatarStartScale = avatarRect.localScale;
+            var avatarStartRotation = avatarRect.localRotation;
+            var borderStartScale = borderRect != null ? borderRect.localScale : Vector3.one;
+            var borderStartRotation = borderRect != null ? borderRect.localRotation : Quaternion.identity;
+            var avatarStartColor = avatarImage.color;
+            var borderGraphics = borderRect != null ? borderRect.GetComponentsInChildren<Graphic>(true) : System.Array.Empty<Graphic>();
+            var borderStartColors = borderGraphics.Select(graphic => graphic != null ? graphic.color : Color.white).ToArray();
+            var teamColor = seat.ToTeam() == TeamId.Home ? theme.green : theme.red;
+            var streak01 = Mathf.Clamp01((Mathf.Max(1, streak) - 1) / 5f);
+            var peakScale = bigBook
+                ? Mathf.Lerp(1.18f, 1.28f, streak01)
+                : Mathf.Lerp(1.12f, 1.2f, streak01);
+            var borderPeakScale = peakScale + 0.06f;
+            var tilt = (seat == SeatId.Left || seat == SeatId.Top ? -1f : 1f) * Mathf.Lerp(7f, 12f, streak01) * (bigBook ? 1.12f : 1f);
+            var duration = bigBook ? 0.54f : 0.44f;
+            var elapsed = 0f;
+
+            while (elapsed < duration && avatarRect != null)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(elapsed / duration);
+                var intro = Mathf.Clamp01(t / 0.34f);
+                var settle = Mathf.Clamp01((t - 0.28f) / 0.72f);
+                var pop = EaseOutBack(intro);
+                var settleWave = Mathf.Sin(settle * Mathf.PI);
+                var avatarScale = Mathf.LerpUnclamped(1f, peakScale, pop) - settleWave * 0.055f;
+                var borderScale = Mathf.LerpUnclamped(1f, borderPeakScale, pop) - settleWave * 0.075f;
+                var rotation = Mathf.Sin(t * Mathf.PI) * tilt + Mathf.Sin(t * Mathf.PI * 3.2f) * 2.1f * (1f - t);
+                avatarRect.localScale = avatarStartScale * avatarScale;
+                avatarRect.localRotation = avatarStartRotation * Quaternion.Euler(0f, 0f, rotation);
+                avatarImage.color = Color.Lerp(avatarStartColor, Color.Lerp(Color.white, teamColor, 0.42f), Mathf.Sin(t * Mathf.PI));
+
+                if (borderRect != null)
+                {
+                    borderRect.localScale = borderStartScale * borderScale;
+                    borderRect.localRotation = borderStartRotation * Quaternion.Euler(0f, 0f, -rotation * 0.62f);
+                }
+
+                for (var index = 0; index < borderGraphics.Length; index++)
+                {
+                    var graphic = borderGraphics[index];
+                    if (graphic == null)
+                    {
+                        continue;
+                    }
+
+                    graphic.color = Color.Lerp(borderStartColors[index], Color.Lerp(theme.gold, teamColor, 0.35f), Mathf.Sin(t * Mathf.PI));
+                }
+
+                yield return null;
+            }
+
+            if (avatarRect != null)
+            {
+                avatarRect.localScale = avatarStartScale;
+                avatarRect.localRotation = avatarStartRotation;
+            }
+
+            if (avatarImage != null)
+            {
+                avatarImage.color = avatarStartColor;
+            }
+
+            if (borderRect != null)
+            {
+                borderRect.localScale = borderStartScale;
+                borderRect.localRotation = borderStartRotation;
+            }
+
+            for (var index = 0; index < borderGraphics.Length; index++)
+            {
+                if (borderGraphics[index] != null)
+                {
+                    borderGraphics[index].color = borderStartColors[index];
+                }
+            }
+
+            bookAvatarLoops[seat] = null;
         }
 
         private int RegisterBookStreak(SeatId winner)
@@ -6070,18 +6183,18 @@ namespace BackyardLegends.Runtime
 
         private IEnumerator BookCameraShakeRoutine(Transform target, Vector2 focusDirection, float intensity)
         {
-            var shakePower = Mathf.Clamp(intensity, 0.35f, 4.25f);
-            var shake01 = Mathf.InverseLerp(0.35f, 4.25f, shakePower);
-            var duration = Mathf.Max(0.48f, theme.shakeDuration * Mathf.Lerp(3.35f, 5.15f, shake01));
+            var shakePower = Mathf.Clamp(intensity, 0.2f, 1.8f);
+            var shake01 = Mathf.InverseLerp(0.2f, 1.8f, shakePower);
+            var duration = Mathf.Max(0.28f, theme.shakeDuration * Mathf.Lerp(1.25f, 2.05f, shake01));
             var punchTravel = bookCameraShakeCamera != null && bookCameraShakeCamera.orthographic
-                ? Mathf.Max(0.62f, bookCameraShakeStartOrthographicSize * 0.32f) * shakePower
-                : 1.05f * shakePower;
-            var punchOffset = new Vector3(focusDirection.x * punchTravel, focusDirection.y * punchTravel * 0.92f, 0f);
+                ? Mathf.Max(0.13f, bookCameraShakeStartOrthographicSize * 0.065f) * shakePower
+                : 0.26f * shakePower;
+            var punchOffset = new Vector3(focusDirection.x * punchTravel, focusDirection.y * punchTravel * 0.72f, 0f);
             var punchOrthographicSize = bookCameraShakeCamera != null && bookCameraShakeCamera.orthographic
-                ? bookCameraShakeStartOrthographicSize * Mathf.Lerp(0.83f, 0.68f, shake01)
+                ? bookCameraShakeStartOrthographicSize * Mathf.Lerp(0.975f, 0.925f, shake01)
                 : bookCameraShakeStartOrthographicSize;
             var punchFieldOfView = bookCameraShakeCamera != null && !bookCameraShakeCamera.orthographic
-                ? bookCameraShakeStartFieldOfView * Mathf.Lerp(0.9f, 0.78f, shake01)
+                ? bookCameraShakeStartFieldOfView * Mathf.Lerp(0.975f, 0.935f, shake01)
                 : bookCameraShakeStartFieldOfView;
             var elapsed = 0f;
             while (elapsed < duration && target != null)
@@ -6089,19 +6202,19 @@ namespace BackyardLegends.Runtime
                 elapsed += Time.unscaledDeltaTime;
                 var t = Mathf.Clamp01(elapsed / duration);
                 var primaryPunch = Mathf.Sin(Mathf.Clamp01(t / 0.58f) * Mathf.PI);
-                var afterPunch = Mathf.Sin(Mathf.Clamp01((t - 0.32f) / 0.68f) * Mathf.PI) * 0.34f;
+                var afterPunch = Mathf.Sin(Mathf.Clamp01((t - 0.32f) / 0.68f) * Mathf.PI) * 0.14f;
                 var punch = Mathf.Clamp01(primaryPunch + afterPunch);
                 var falloff = 1f - EaseOutCubic(t);
                 var hit = Mathf.Exp(-12f * t);
-                var rumble = Mathf.Sin(t * Mathf.PI) * 0.45f;
-                var x = (Mathf.Sin(elapsed * 128f) * 0.54f + Mathf.Sin(elapsed * 43f) * 0.22f) * falloff * shakePower;
-                var y = (Mathf.Cos(elapsed * 106f) * 0.38f + Mathf.Sin(elapsed * 57f) * 0.16f) * falloff * shakePower;
-                var roll = (Mathf.Sin(elapsed * 152f) * 4.6f + Mathf.Sin(elapsed * 31f) * 1.55f) * falloff * shakePower;
-                x += Mathf.Sin(elapsed * 235f) * 0.36f * hit * shakePower;
-                y += Mathf.Cos(elapsed * 225f) * 0.28f * hit * shakePower;
-                roll += Mathf.Sin(elapsed * 275f) * 3.6f * hit * shakePower;
-                x += focusDirection.x * rumble * 0.32f * shakePower;
-                y += focusDirection.y * rumble * 0.22f * shakePower;
+                var rumble = Mathf.Sin(t * Mathf.PI) * 0.22f;
+                var x = (Mathf.Sin(elapsed * 128f) * 0.12f + Mathf.Sin(elapsed * 43f) * 0.05f) * falloff * shakePower;
+                var y = (Mathf.Cos(elapsed * 106f) * 0.09f + Mathf.Sin(elapsed * 57f) * 0.04f) * falloff * shakePower;
+                var roll = (Mathf.Sin(elapsed * 152f) * 0.95f + Mathf.Sin(elapsed * 31f) * 0.32f) * falloff * shakePower;
+                x += Mathf.Sin(elapsed * 235f) * 0.08f * hit * shakePower;
+                y += Mathf.Cos(elapsed * 225f) * 0.065f * hit * shakePower;
+                roll += Mathf.Sin(elapsed * 275f) * 0.72f * hit * shakePower;
+                x += focusDirection.x * rumble * 0.08f * shakePower;
+                y += focusDirection.y * rumble * 0.055f * shakePower;
                 target.localPosition = bookCameraShakeStartPosition + punchOffset * punch + new Vector3(x, y, 0f);
                 target.localRotation = bookCameraShakeStartRotation * Quaternion.Euler(0f, 0f, roll);
                 if (bookCameraShakeCamera != null)
