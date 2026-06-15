@@ -100,11 +100,11 @@ namespace BackyardLegends.Runtime
                 existing,
                 "Lobby Sheet/Score Row/Score 100",
                 "Lobby Sheet/Score Row/Score 200",
-                "Lobby Sheet/Score Row/Score 300");
+                "Lobby Sheet/Score Row/Score 500");
 
             if (resolved.Length > 2 && resolved[2] == null)
             {
-                resolved[2] = FindByPath<Button>("Lobby Sheet/Score Row/Score 500");
+                resolved[2] = FindByPath<Button>("Lobby Sheet/Score Row/Score 300");
             }
 
             return resolved;

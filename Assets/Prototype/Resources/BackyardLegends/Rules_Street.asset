@@ -24,6 +24,6 @@ MonoBehaviour:
   maxBid: 13
   bagPenaltyThreshold: 10
   bagPenaltyPoints: -100
-  targetScoreOptions: 64000000c80000002c010000
+  targetScoreOptions: 64000000c8000000f4010000
   enableFutureTurnTimer: 0
   reservedTurnTimerSeconds: 30
