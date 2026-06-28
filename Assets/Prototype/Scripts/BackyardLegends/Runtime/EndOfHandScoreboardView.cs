@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using BackyardLegends.Core;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
 namespace BackyardLegends.Runtime
@@ -145,12 +146,26 @@ namespace BackyardLegends.Runtime
             if (NextHandButton != null)
             {
                 NextHandButton.gameObject.SetActive(!matchComplete);
+                SetButtonLabel(NextHandButton, "Continue");
             }
 
             if (PlayAgainButton != null)
             {
                 PlayAgainButton.gameObject.SetActive(matchComplete);
             }
+
+            if (LeaveTableButton != null)
+            {
+                LeaveTableButton.gameObject.SetActive(matchComplete);
+            }
+        }
+
+        public void BindActions(UnityAction onViewHand, UnityAction onNextHand, UnityAction onPlayAgain, UnityAction onLeaveTable)
+        {
+            BindButton(ViewHandButton, onViewHand);
+            BindButton(NextHandButton, onNextHand);
+            BindButton(PlayAgainButton, onPlayAgain);
+            BindButton(LeaveTableButton, onLeaveTable);
         }
 
         private void CaptureAnimationValues(ScoreSnapshot home, ScoreSnapshot away)
@@ -616,6 +631,29 @@ namespace BackyardLegends.Runtime
             if (target != null)
             {
                 target.text = value;
+            }
+        }
+
+        private static void SetButtonLabel(Button button, string value)
+        {
+            var label = button != null ? button.GetComponentInChildren<Text>(true) : null;
+            if (label != null)
+            {
+                label.text = value;
+            }
+        }
+
+        private static void BindButton(Button button, UnityAction action)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.onClick.RemoveAllListeners();
+            if (action != null)
+            {
+                button.onClick.AddListener(action);
             }
         }
 

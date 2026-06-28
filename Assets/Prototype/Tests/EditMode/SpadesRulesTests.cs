@@ -691,6 +691,63 @@ namespace BackyardLegends.Tests
             Object.DestroyImmediate(host);
         }
 
+        [Test]
+        public void EndOfHandScoreboardTogglesContinuePlayAgainAndLeaveByMatchState()
+        {
+            var state = CreateScoringState(RuleSetConfig.CreateStreet(100));
+            var host = new GameObject("Scoreboard Toggle Test");
+            var view = host.AddComponent<EndOfHandScoreboardView>();
+            view.NextHandButton = CreateTestButton("Next Hand", host.transform);
+            view.PlayAgainButton = CreateTestButton("Play Again", host.transform);
+            view.LeaveTableButton = CreateTestButton("Leave Table", host.transform);
+
+            view.Render(state, RuleSetConfig.CreateStreet(100), false, null);
+
+            Assert.That(view.NextHandButton.gameObject.activeSelf, Is.True);
+            Assert.That(view.NextHandButton.GetComponentInChildren<Text>().text, Is.EqualTo("Continue"));
+            Assert.That(view.PlayAgainButton.gameObject.activeSelf, Is.False);
+            Assert.That(view.LeaveTableButton.gameObject.activeSelf, Is.False);
+
+            view.Render(state, RuleSetConfig.CreateStreet(100), true, TeamId.Home);
+
+            Assert.That(view.NextHandButton.gameObject.activeSelf, Is.False);
+            Assert.That(view.PlayAgainButton.gameObject.activeSelf, Is.True);
+            Assert.That(view.LeaveTableButton.gameObject.activeSelf, Is.True);
+            Object.DestroyImmediate(host);
+        }
+
+        [Test]
+        public void EndOfHandScoreboardBindsActionsToExpectedButtons()
+        {
+            var host = new GameObject("Scoreboard Button Binding Test");
+            var view = host.AddComponent<EndOfHandScoreboardView>();
+            view.ViewHandButton = CreateTestButton("View Hand", host.transform);
+            view.NextHandButton = CreateTestButton("Next Hand", host.transform);
+            view.PlayAgainButton = CreateTestButton("Play Again", host.transform);
+            view.LeaveTableButton = CreateTestButton("Leave Game", host.transform);
+            var viewHandClicks = 0;
+            var nextHandClicks = 0;
+            var playAgainClicks = 0;
+            var leaveClicks = 0;
+
+            view.BindActions(
+                () => viewHandClicks++,
+                () => nextHandClicks++,
+                () => playAgainClicks++,
+                () => leaveClicks++);
+
+            view.ViewHandButton.onClick.Invoke();
+            view.NextHandButton.onClick.Invoke();
+            view.PlayAgainButton.onClick.Invoke();
+            view.LeaveTableButton.onClick.Invoke();
+
+            Assert.That(viewHandClicks, Is.EqualTo(1));
+            Assert.That(nextHandClicks, Is.EqualTo(1));
+            Assert.That(playAgainClicks, Is.EqualTo(1));
+            Assert.That(leaveClicks, Is.EqualTo(1));
+            Object.DestroyImmediate(host);
+        }
+
         private static int ChooseSimpleAiBid(IReadOnlyList<Card> hand)
         {
             return new SimpleAiAgent().ChooseBid(new AiBidContext
@@ -741,6 +798,20 @@ namespace BackyardLegends.Tests
                 var card = controller.GetLegalCardsForSeat(seat).First();
                 Assert.That(controller.TryPlayCard(seat, card, out _), Is.True);
             }
+        }
+
+        private static Button CreateTestButton(string name, Transform parent)
+        {
+            var buttonObject = new GameObject(name, typeof(RectTransform), typeof(Button));
+            buttonObject.transform.SetParent(parent, false);
+            var labelObject = new GameObject("Label", typeof(RectTransform), typeof(Text));
+            labelObject.transform.SetParent(buttonObject.transform, false);
+            var label = labelObject.GetComponent<Text>();
+            Assert.That(label, Is.Not.Null);
+            label.text = name;
+            var button = buttonObject.GetComponent<Button>();
+            Assert.That(button, Is.Not.Null);
+            return button;
         }
 
         private static void SetClaimHands(RoundState round, int count)

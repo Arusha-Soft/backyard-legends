@@ -1435,19 +1435,18 @@ namespace BackyardLegends.Runtime
 
         private void ConfigureUiCallbacks()
         {
-            sceneRefs.NextRoundButton.onClick.RemoveAllListeners();
-            sceneRefs.NextRoundButton.onClick.AddListener(() =>
+            if (sceneRefs.NextRoundButton != null)
             {
-                SetSheetVisible(sceneRefs.RoundSheet, false);
-                lastRenderedHand.Clear();
-                selectedCard = null;
-                controller.StartNextRound();
-                RenderAll();
-                ScheduleAiLoop();
-            });
+                SetButtonLabel(sceneRefs.NextRoundButton, "Continue");
+                sceneRefs.NextRoundButton.onClick.RemoveAllListeners();
+                sceneRefs.NextRoundButton.onClick.AddListener(StartNextHandFromScoreboard);
+            }
 
-            sceneRefs.RematchButton.onClick.RemoveAllListeners();
-            sceneRefs.RematchButton.onClick.AddListener(StartConfiguredMatch);
+            if (sceneRefs.RematchButton != null)
+            {
+                sceneRefs.RematchButton.onClick.RemoveAllListeners();
+                sceneRefs.RematchButton.onClick.AddListener(StartConfiguredMatch);
+            }
 
             if (sceneRefs.ReturnToLobbyButton != null)
             {
@@ -1511,6 +1510,35 @@ namespace BackyardLegends.Runtime
                 pair.Value.onClick.RemoveAllListeners();
                 pair.Value.onClick.AddListener(() => SelectBid(localBid));
             }
+
+            BindScoreboardActions(sceneRefs.RoundScoreboardView);
+            BindScoreboardActions(sceneRefs.EndScoreboardView);
+        }
+
+        private void BindScoreboardActions(EndOfHandScoreboardView scoreboardView)
+        {
+            if (scoreboardView == null)
+            {
+                return;
+            }
+
+            scoreboardView.BindActions(null, StartNextHandFromScoreboard, StartConfiguredMatch, OpenBackWarning);
+        }
+
+        private void StartNextHandFromScoreboard()
+        {
+            if (controller == null)
+            {
+                return;
+            }
+
+            SetSheetVisible(sceneRefs.RoundSheet, false);
+            SetSheetVisible(sceneRefs.EndSheet, false);
+            lastRenderedHand.Clear();
+            selectedCard = null;
+            controller.StartNextRound();
+            RenderAll();
+            ScheduleAiLoop();
         }
 
         private void ConfigureFeedbackAudio()
@@ -2147,17 +2175,21 @@ namespace BackyardLegends.Runtime
                     PlayFeedback(FeedbackCue.RoundScore, 0.22f);
                     break;
                 case RoundScoredEvent:
-                    var roundWinner = ResolveCurrentLeadingTeam();
-                    if (sceneRefs.EndSummaryText != null)
+                    if (controller.State.Phase == MatchPhase.MatchEnded)
                     {
-                        sceneRefs.EndSummaryText.text = BuildMatchSummaryText(roundWinner);
+                        break;
                     }
 
-                    RenderScoreboard(sceneRefs.EndScoreboardView, true, roundWinner);
-                    AddFeedMessage(roundWinner == TeamId.Home ? "Home team closed the match." : "Rivals closed the match.");
+                    if (sceneRefs.RoundSummaryText != null)
+                    {
+                        sceneRefs.RoundSummaryText.text = BuildRoundSummaryText();
+                    }
+
+                    RenderScoreboard(sceneRefs.RoundScoreboardView, false, null);
+                    AddFeedMessage("Round scored. Review the wrap and keep playing.");
                     PlayFeedback(FeedbackCue.RoundScore, 0.2f);
-                    pendingRoundSheetOpen = false;
-                    pendingEndSheetOpen = true;
+                    pendingRoundSheetOpen = true;
+                    pendingEndSheetOpen = false;
                     ScheduleDeferredSheetState();
                     break;
                 case MatchEndedEvent ended:
