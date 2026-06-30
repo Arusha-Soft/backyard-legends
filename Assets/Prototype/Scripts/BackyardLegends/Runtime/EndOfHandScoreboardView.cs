@@ -69,11 +69,14 @@ namespace BackyardLegends.Runtime
         private const float ValueStepDelay = 0.08f;
 
         private readonly List<CanvasGroup> animatedGroups = new();
+        private readonly List<RectTransformSnapshot> nextHandButtonLayout = new();
         private Coroutine revealRoutine;
         private CanvasGroup rootGroup;
         private RectTransform rootRect;
+        private Button cachedNextHandButton;
         private Vector3 rootBaseScale = Vector3.one;
         private bool hasCachedRootScale;
+        private bool hasCachedNextHandButtonLayout;
         private ScoreAnimationValues animationValues;
         private bool hasAnimationValues;
 
@@ -91,9 +94,22 @@ namespace BackyardLegends.Runtime
             public int AwayTotalEnd;
         }
 
+        private struct RectTransformSnapshot
+        {
+            public RectTransform Target;
+            public Vector2 AnchorMin;
+            public Vector2 AnchorMax;
+            public Vector2 AnchoredPosition;
+            public Vector2 SizeDelta;
+            public Vector2 Pivot;
+            public Vector3 LocalScale;
+            public Quaternion LocalRotation;
+        }
+
         private void Awake()
         {
             CacheRootMotion();
+            CacheNextHandButtonLayoutIfNeeded();
         }
 
         private void OnEnable()
@@ -122,6 +138,11 @@ namespace BackyardLegends.Runtime
             RestoreRevealState();
         }
 
+        private void LateUpdate()
+        {
+            RestoreNextHandButtonLayout();
+        }
+
         public void Render(MatchState state, RuleSetDefinition rules, bool matchComplete, TeamId? winningTeam)
         {
             if (state?.Scores == null || !state.Scores.TryGetValue(TeamId.Home, out var home) || !state.Scores.TryGetValue(TeamId.Away, out var away))
@@ -129,6 +150,7 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
+            CacheNextHandButtonLayoutIfNeeded();
             rules ??= state.RuleSet;
             var modeName = rules != null ? rules.DisplayName : state.RuleSet != null ? state.RuleSet.DisplayName : "Spades";
             var targetScore = ResolveTargetScore(state, rules);
@@ -145,6 +167,7 @@ namespace BackyardLegends.Runtime
 
             if (NextHandButton != null)
             {
+                RestoreNextHandButtonLayout();
                 NextHandButton.gameObject.SetActive(!matchComplete);
                 SetButtonLabel(NextHandButton, "Continue");
             }
@@ -478,7 +501,84 @@ namespace BackyardLegends.Runtime
 
             var group = ResolveGroup(button.transform);
             group.alpha = 1f;
+            if (button == NextHandButton)
+            {
+                RestoreNextHandButtonLayout();
+                return;
+            }
+
             button.transform.localScale = Vector3.one;
+        }
+
+        private void CacheNextHandButtonLayoutIfNeeded()
+        {
+            if (NextHandButton == null)
+            {
+                cachedNextHandButton = null;
+                nextHandButtonLayout.Clear();
+                hasCachedNextHandButtonLayout = false;
+                return;
+            }
+
+            if (hasCachedNextHandButtonLayout && cachedNextHandButton == NextHandButton)
+            {
+                return;
+            }
+
+            cachedNextHandButton = NextHandButton;
+            nextHandButtonLayout.Clear();
+            var rects = NextHandButton.GetComponentsInChildren<RectTransform>(true);
+            for (var i = 0; i < rects.Length; i++)
+            {
+                nextHandButtonLayout.Add(CaptureRectTransform(rects[i]));
+            }
+
+            hasCachedNextHandButtonLayout = true;
+        }
+
+        private void RestoreNextHandButtonLayout()
+        {
+            CacheNextHandButtonLayoutIfNeeded();
+            if (!hasCachedNextHandButtonLayout)
+            {
+                return;
+            }
+
+            for (var i = 0; i < nextHandButtonLayout.Count; i++)
+            {
+                RestoreRectTransform(nextHandButtonLayout[i]);
+            }
+        }
+
+        private static RectTransformSnapshot CaptureRectTransform(RectTransform rect)
+        {
+            return new RectTransformSnapshot
+            {
+                Target = rect,
+                AnchorMin = rect.anchorMin,
+                AnchorMax = rect.anchorMax,
+                AnchoredPosition = rect.anchoredPosition,
+                SizeDelta = rect.sizeDelta,
+                Pivot = rect.pivot,
+                LocalScale = rect.localScale,
+                LocalRotation = rect.localRotation
+            };
+        }
+
+        private static void RestoreRectTransform(RectTransformSnapshot snapshot)
+        {
+            if (snapshot.Target == null)
+            {
+                return;
+            }
+
+            snapshot.Target.anchorMin = snapshot.AnchorMin;
+            snapshot.Target.anchorMax = snapshot.AnchorMax;
+            snapshot.Target.anchoredPosition = snapshot.AnchoredPosition;
+            snapshot.Target.sizeDelta = snapshot.SizeDelta;
+            snapshot.Target.pivot = snapshot.Pivot;
+            snapshot.Target.localScale = snapshot.LocalScale;
+            snapshot.Target.localRotation = snapshot.LocalRotation;
         }
 
         private CanvasGroup ResolveGroup(Transform target)

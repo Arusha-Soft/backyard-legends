@@ -1274,6 +1274,41 @@ namespace BackyardLegends.Tests
         }
 
         [Test]
+        public void NewRoundKeepsHumanLastInBiddingOrder()
+        {
+            var controller = CreateController();
+            controller.StartMatch();
+            var firstDealer = controller.State.RoundState.Dealer;
+            Assert.That(controller.State.RoundState.BidState.CurrentBidder, Is.EqualTo(SeatId.Left));
+            ForceBids(controller, 4, 4, 4, 4);
+            var round = controller.State.RoundState;
+            round.TrickState.Plays.Clear();
+            round.TrickState.CurrentTurn = SeatId.Bottom;
+            round.HandsBySeat[SeatId.Bottom] = new List<Card> { new(Suit.Hearts, 14) };
+            round.HandsBySeat[SeatId.Left] = new List<Card> { new(Suit.Hearts, 2) };
+            round.HandsBySeat[SeatId.Top] = new List<Card> { new(Suit.Hearts, 13) };
+            round.HandsBySeat[SeatId.Right] = new List<Card> { new(Suit.Hearts, 3) };
+            PlayCurrentTrick(controller);
+
+            Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.RoundSummary));
+
+            controller.StartNextRound();
+
+            Assert.That(controller.State.RoundState.RoundNumber, Is.EqualTo(2));
+            Assert.That(controller.State.RoundState.Dealer, Is.EqualTo(firstDealer.NextClockwise()));
+            Assert.That(controller.State.RoundState.BidState.CurrentBidder, Is.EqualTo(SeatId.Left));
+            Assert.That(controller.TrySubmitBid(SeatId.Left, 4, out var leftError), Is.True, leftError);
+            Assert.That(controller.State.RoundState.BidState.CurrentBidder, Is.EqualTo(SeatId.Top));
+            Assert.That(controller.TrySubmitBid(SeatId.Top, 4, out var topError), Is.True, topError);
+            Assert.That(controller.State.RoundState.BidState.CurrentBidder, Is.EqualTo(SeatId.Right));
+            Assert.That(controller.State.RoundState.BidState.BidsBySeat[SeatId.Bottom], Is.Null);
+            Assert.That(controller.TrySubmitBid(SeatId.Right, 4, out var rightError), Is.True, rightError);
+            Assert.That(controller.State.RoundState.BidState.CurrentBidder, Is.EqualTo(SeatId.Bottom));
+            Assert.That(controller.TrySubmitBid(SeatId.Bottom, 4, out var bottomError), Is.True, bottomError);
+            Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.TrickPlay));
+        }
+
+        [Test]
         public void MatchCanAdvanceEndToEndWithoutSoftLock()
         {
             var controller = CreateController();
@@ -1386,6 +1421,57 @@ namespace BackyardLegends.Tests
         }
 
         [Test]
+        public void EndOfHandScoreboardPreservesContinueButtonAuthoredLayout()
+        {
+            var state = CreateScoringState(RuleSetConfig.CreateStreet(100));
+            var host = new GameObject("Scoreboard Continue Layout Test");
+            var view = host.AddComponent<EndOfHandScoreboardView>();
+            view.NextHandButton = CreateTestButton("Next Hand", host.transform);
+            var buttonRect = view.NextHandButton.GetComponent<RectTransform>();
+            var labelRect = view.NextHandButton.GetComponentInChildren<Text>().rectTransform;
+            var authoredButtonPosition = new Vector2(17.5f, -24.25f);
+            var authoredButtonSize = new Vector2(188f, 52f);
+            var authoredButtonScale = new Vector3(0.82f, 0.91f, 1f);
+            var authoredButtonRotation = Quaternion.Euler(0f, 0f, 4.5f);
+            var authoredLabelPosition = new Vector2(0f, 12f);
+            var authoredLabelScale = new Vector3(1.35f, 1.2f, 1f);
+
+            buttonRect.anchorMin = new Vector2(0.38f, 0.26f);
+            buttonRect.anchorMax = new Vector2(0.62f, 0.32f);
+            buttonRect.anchoredPosition = authoredButtonPosition;
+            buttonRect.sizeDelta = authoredButtonSize;
+            buttonRect.pivot = new Vector2(0.5f, 0.45f);
+            buttonRect.localScale = authoredButtonScale;
+            buttonRect.localRotation = authoredButtonRotation;
+            labelRect.anchoredPosition = authoredLabelPosition;
+            labelRect.localScale = authoredLabelScale;
+
+            try
+            {
+                view.Render(state, RuleSetConfig.CreateStreet(100), false, null);
+                buttonRect.anchoredPosition = new Vector2(999f, -999f);
+                buttonRect.sizeDelta = new Vector2(10f, 10f);
+                buttonRect.localScale = Vector3.one * 2f;
+                buttonRect.localRotation = Quaternion.Euler(0f, 0f, -30f);
+                labelRect.anchoredPosition = new Vector2(-80f, 80f);
+                labelRect.localScale = Vector3.one * 0.25f;
+
+                InvokePrivate(view, "LateUpdate");
+
+                Assert.That(Vector2.Distance(buttonRect.anchoredPosition, authoredButtonPosition), Is.LessThan(0.001f));
+                Assert.That(Vector2.Distance(buttonRect.sizeDelta, authoredButtonSize), Is.LessThan(0.001f));
+                Assert.That(Vector3.Distance(buttonRect.localScale, authoredButtonScale), Is.LessThan(0.001f));
+                Assert.That(Quaternion.Angle(buttonRect.localRotation, authoredButtonRotation), Is.LessThan(0.001f));
+                Assert.That(Vector2.Distance(labelRect.anchoredPosition, authoredLabelPosition), Is.LessThan(0.001f));
+                Assert.That(Vector3.Distance(labelRect.localScale, authoredLabelScale), Is.LessThan(0.001f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
         public void EndOfHandScoreboardBindsActionsToExpectedButtons()
         {
             var host = new GameObject("Scoreboard Button Binding Test");
@@ -1450,6 +1536,112 @@ namespace BackyardLegends.Tests
             finally
             {
                 PlayerPrefs.DeleteKey(BackyardLegendsBootstrap.SfxMutedPlayerPrefsKey);
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void OptionsMenuButtonStaysHiddenUntilOpeningAndBiddingAreFinished()
+        {
+            var host = new GameObject("Options Menu Gate Test");
+            var bootstrap = host.AddComponent<BackyardLegendsBootstrap>();
+            var refs = host.AddComponent<BackyardLegendsSceneRefs>();
+            refs.BackButton = CreateTestButton("Menu", host.transform);
+            var controller = CreateController();
+            controller.StartMatch();
+            SetPrivateField(bootstrap, "sceneRefs", refs);
+            SetPrivateField(bootstrap, "controller", controller);
+
+            try
+            {
+                SetPrivateField(bootstrap, "openingDealPending", true);
+                InvokePrivate(bootstrap, "RenderOptionsMenuButton");
+                Assert.That(refs.BackButton.gameObject.activeSelf, Is.False);
+
+                SetPrivateField(bootstrap, "openingDealPending", false);
+                SetPrivateField(bootstrap, "handReviewPending", true);
+                InvokePrivate(bootstrap, "RenderOptionsMenuButton");
+                Assert.That(refs.BackButton.gameObject.activeSelf, Is.False);
+
+                SetPrivateField(bootstrap, "handReviewPending", false);
+                SetPrivateField(bootstrap, "bidTurnDelayPending", true);
+                InvokePrivate(bootstrap, "RenderOptionsMenuButton");
+                Assert.That(refs.BackButton.gameObject.activeSelf, Is.False);
+
+                SetPrivateField(bootstrap, "bidTurnDelayPending", false);
+                InvokePrivate(bootstrap, "RenderOptionsMenuButton");
+                Assert.That(refs.BackButton.gameObject.activeSelf, Is.False);
+
+                ForceBids(controller, 4, 4, 4, 4);
+                InvokePrivate(bootstrap, "RenderOptionsMenuButton");
+
+                Assert.That(refs.BackButton.gameObject.activeSelf, Is.True);
+                Assert.That(refs.BackButton.interactable, Is.True);
+                Assert.That(refs.BackButton.GetComponentInChildren<Text>().text, Is.EqualTo("MENU"));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void OptionsMenuButtonWaitsForFinalBidCalloutAfterBidding()
+        {
+            var host = new GameObject("Options Menu Bid Callout Gate Test");
+            var bootstrap = host.AddComponent<BackyardLegendsBootstrap>();
+            var refs = host.AddComponent<BackyardLegendsSceneRefs>();
+            refs.BackButton = CreateTestButton("Menu", host.transform);
+            var controller = CreateController();
+            controller.StartMatch();
+            ForceBids(controller, 4, 4, 4, 4);
+            SetPrivateField(bootstrap, "sceneRefs", refs);
+            SetPrivateField(bootstrap, "controller", controller);
+            var bidBubbleLoops = GetPrivateField<Dictionary<SeatId, Coroutine>>(bootstrap, "bidBubbleLoops");
+
+            try
+            {
+                bidBubbleLoops[SeatId.Bottom] = null;
+                InvokePrivate(bootstrap, "RenderOptionsMenuButton");
+                Assert.That(refs.BackButton.gameObject.activeSelf, Is.False);
+
+                bidBubbleLoops.Clear();
+                InvokePrivate(bootstrap, "RenderOptionsMenuButton");
+
+                Assert.That(refs.BackButton.gameObject.activeSelf, Is.True);
+                Assert.That(refs.BackButton.interactable, Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void ScoreboardOpeningClearsPlayerScoreOverlayFx()
+        {
+            var host = new GameObject("Score Overlay Cleanup Test");
+            var bootstrap = host.AddComponent<BackyardLegendsBootstrap>();
+            var aura = new GameObject("Aura");
+            aura.transform.SetParent(host.transform, false);
+            aura.SetActive(true);
+            var lightningObject = new GameObject("Lightning", typeof(RectTransform), typeof(Image));
+            lightningObject.transform.SetParent(host.transform, false);
+            var lightning = lightningObject.GetComponent<Image>();
+            lightning.enabled = true;
+
+            GetPrivateField<Dictionary<SeatId, GameObject>>(bootstrap, "seatAuraObjects")[SeatId.Bottom] = aura;
+            GetPrivateField<Dictionary<SeatId, Component>>(bootstrap, "avatarBookLightningFx")[SeatId.Bottom] = lightning;
+
+            try
+            {
+                InvokePrivate(bootstrap, "ClearPlayerScoreOverlayFx");
+
+                Assert.That(aura.activeSelf, Is.False);
+                Assert.That(lightning.enabled, Is.False);
+            }
+            finally
+            {
                 Object.DestroyImmediate(host);
             }
         }
@@ -1544,6 +1736,13 @@ namespace BackyardLegends.Tests
             var field = target.GetType().GetField(fieldName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null);
             field.SetValue(target, value);
+        }
+
+        private static T GetPrivateField<T>(object target, string fieldName)
+        {
+            var field = target.GetType().GetField(fieldName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null);
+            return (T)field.GetValue(target);
         }
 
         private static void SetClaimHands(RoundState round, int count)

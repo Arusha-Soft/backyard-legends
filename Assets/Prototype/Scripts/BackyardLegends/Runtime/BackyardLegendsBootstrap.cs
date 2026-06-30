@@ -28,6 +28,11 @@ namespace BackyardLegends.Runtime
         private const float OpeningDeckStackSizeMultiplier = 2.15f;
         private const float OpeningDeckStackXOffset = 0.62f;
         private const float OpeningDeckStackYOffset = -0.42f;
+        private const float BookCollectSmokeChance = 0.38f;
+        private const float BigBookCollectSmokeChance = 0.62f;
+        private const float OptionsMenuOpenAnimationSeconds = 0.34f;
+        private const float OptionsMenuCloseAnimationSeconds = 0.24f;
+        private const float OptionsMenuEntryYOffset = -34f;
         private const string AvatarResourceRoot = "BackyardLegends/Avatars";
         private const string AvatarAssetFolder = "Assets/Prototype/Art/Update3/avatar";
         public const string SfxMutedPlayerPrefsKey = "BackyardLegends.SfxMuted";
@@ -148,6 +153,8 @@ namespace BackyardLegends.Runtime
         [SerializeField] private AudioClip avatarRouletteClipAsset;
         [SerializeField] private AudioClip avatarAssignedClipAsset;
         [SerializeField] private AudioClip bidPanelOpenClipAsset;
+        [SerializeField] private AudioClip optionsMenuOpenClipAsset;
+        [SerializeField] private AudioClip optionsMenuCloseClipAsset;
         [SerializeField] private AudioClip[] cardPlaceClipAssets;
         [SerializeField] private AudioSource soundFxAudioSource;
         [Header("Strong Card FX")]
@@ -193,6 +200,7 @@ namespace BackyardLegends.Runtime
         private readonly List<CardButtonView> floatingCards = new();
         private readonly List<CardButtonView> openingDealRuntimeSeatCards = new();
         private readonly List<Graphic> transientFx = new();
+        private readonly List<GameObject> activeRuntimeParticleFx = new();
         private readonly HashSet<Image> preservedSeatPanelVisuals = new();
         private readonly Dictionary<SeatId, Vector3> preservedSeatRootScales = new();
 
@@ -213,6 +221,7 @@ namespace BackyardLegends.Runtime
         private Coroutine handReviewLoop;
         private Coroutine bidTurnDelayLoop;
         private Coroutine exitPromptFadeLoop;
+        private Coroutine optionsMenuAnimationLoop;
         private Coroutine bookCameraShakeLoop;
         private Coroutine bidCameraFocusLoop;
         private Coroutine lastTrickDisplayLoop;
@@ -246,6 +255,8 @@ namespace BackyardLegends.Runtime
         private AudioClip avatarRouletteClip;
         private AudioClip avatarAssignedClip;
         private AudioClip bidPanelOpenClip;
+        private AudioClip optionsMenuOpenClip;
+        private AudioClip optionsMenuCloseClip;
         private AudioClip[] cardPlaceClips;
         private AudioClip[] setBookClips;
         private AudioClip[] bookWinClips;
@@ -269,6 +280,11 @@ namespace BackyardLegends.Runtime
         private string lastTrickSignature;
         private RectTransform runtimeFxCanvasRoot;
         private RectTransform runtimeAnimationRoot;
+        private RectTransform optionsMenuAnimationTarget;
+        private CanvasGroup optionsMenuCanvasGroup;
+        private Vector2 optionsMenuBaseAnchoredPosition;
+        private Vector3 optionsMenuBaseScale = Vector3.one;
+        private Quaternion optionsMenuBaseRotation = Quaternion.identity;
         private Sprite bidButtonDefaultSprite;
         private Sprite bidButtonSelectedSprite;
         private int bannerDefaultFontSize;
@@ -288,6 +304,7 @@ namespace BackyardLegends.Runtime
         private bool bidTurnDelayPending;
         private bool openingStackIntroRunning;
         private bool suppressNextHandEntryAnimation;
+        private bool optionsMenuAnimationDefaultsCaptured;
         private bool optionsMenuOpen;
         private bool exitPromptOpen;
         private bool bidSheetWasVisible;
@@ -320,7 +337,9 @@ namespace BackyardLegends.Runtime
             SetBook,
             AvatarRoulette,
             AvatarAssigned,
-            BidPanelOpen
+            BidPanelOpen,
+            OptionsMenuOpen,
+            OptionsMenuClose
         }
 
         private enum ConfirmationPromptType
@@ -766,7 +785,7 @@ namespace BackyardLegends.Runtime
             RenderSfxToggleLabel();
             SetButtonLabel(sceneRefs.CloseOptionsMenuButton, "RESUME");
 
-            SetSheetVisible(sceneRefs.OptionsMenu, false);
+            SetOptionsMenuVisibleImmediate(false);
         }
 
         private void BindAuthoredBidConfirmationWidget()
@@ -1017,7 +1036,7 @@ namespace BackyardLegends.Runtime
             ClearTransientMotionState(true);
             SetBidSheetVisible(false);
             SetSheetVisible(sceneRefs.RoundSheet, false);
-            SetSheetVisible(sceneRefs.OptionsMenu, false);
+            SetOptionsMenuVisibleImmediate(false);
             SetSheetVisible(sceneRefs.ExitPromptOverlay, false);
 
             ApplyEditorTestEndState(TeamId.Home);
@@ -1054,6 +1073,7 @@ namespace BackyardLegends.Runtime
             handReviewLoop = null;
             bidTurnDelayLoop = null;
             exitPromptFadeLoop = null;
+            optionsMenuAnimationLoop = null;
             bookCameraShakeLoop = null;
             bidCameraFocusLoop = null;
         }
@@ -1613,6 +1633,8 @@ namespace BackyardLegends.Runtime
             avatarRouletteClip = ResolveFeedbackClip(avatarRouletteClipAsset, "Avatar_Roulette", () => CreateToneClip("Avatar Roulette Cue", 760f, 980f, 0.035f, 0.08f));
             avatarAssignedClip = ResolveFeedbackClip(avatarAssignedClipAsset, "Avatar_Assigned", () => CreateToneClip("Avatar Assigned Cue", 420f, 840f, 0.16f, 0.14f));
             bidPanelOpenClip = ResolveFeedbackClip(bidPanelOpenClipAsset, "Bid_Panel_Open", () => CreateToneClip("Bid Panel Open Cue", 300f, 560f, 0.14f, 0.12f));
+            optionsMenuOpenClip = ResolveFeedbackClip(optionsMenuOpenClipAsset, "Ui_Menu_Open", () => CreateToneClip("Options Menu Open Cue", 420f, 900f, 0.16f, 0.13f));
+            optionsMenuCloseClip = ResolveFeedbackClip(optionsMenuCloseClipAsset, "Ui_Menu_Close", () => CreateToneClip("Options Menu Close Cue", 720f, 280f, 0.13f, 0.11f));
             cardPlaceClips = ResolveCardPlaceClips();
             setBookClips = ResolveAudioClips(SetBookAudioResourceNames, setBookClip);
             bookWinClips = ResolveAudioClips(BookWinAudioResourceNames, collectClip);
@@ -1770,6 +1792,8 @@ namespace BackyardLegends.Runtime
                 FeedbackCue.AvatarRoulette => avatarRouletteClip,
                 FeedbackCue.AvatarAssigned => avatarAssignedClip,
                 FeedbackCue.BidPanelOpen => bidPanelOpenClip,
+                FeedbackCue.OptionsMenuOpen => optionsMenuOpenClip,
+                FeedbackCue.OptionsMenuClose => optionsMenuCloseClip,
                 _ => null
             };
 
@@ -2184,7 +2208,7 @@ namespace BackyardLegends.Runtime
             SetBidSheetVisible(false);
             SetSheetVisible(sceneRefs.RoundSheet, false);
             SetSheetVisible(sceneRefs.EndSheet, false);
-            SetSheetVisible(sceneRefs.OptionsMenu, false);
+            SetOptionsMenuVisibleImmediate(false);
             SetSheetVisible(sceneRefs.ExitPromptOverlay, false);
             ResetExitPromptVisualState();
             RenderAll();
@@ -2371,6 +2395,7 @@ namespace BackyardLegends.Runtime
             RenderOpponentHands();
             RenderHand();
             RenderBidSheet();
+            RenderOptionsMenuButton();
             RenderOptionsMenu();
             ApplyAvatarIntroVisibility();
         }
@@ -3024,10 +3049,19 @@ namespace BackyardLegends.Runtime
 
         private void RenderOptionsMenu()
         {
-            SetSheetVisible(sceneRefs.OptionsMenu, optionsMenuOpen);
-            if (sceneRefs.OptionsMenu != null && optionsMenuOpen)
+            if (sceneRefs.OptionsMenu != null)
             {
-                sceneRefs.OptionsMenu.SetAsLastSibling();
+                var shouldShowMenu = optionsMenuOpen || optionsMenuAnimationLoop != null;
+                SetSheetVisible(sceneRefs.OptionsMenu, shouldShowMenu);
+                if (shouldShowMenu)
+                {
+                    sceneRefs.OptionsMenu.SetAsLastSibling();
+                }
+
+                if (optionsMenuOpen && optionsMenuAnimationLoop == null)
+                {
+                    ApplyOptionsMenuVisiblePose(true);
+                }
             }
 
             if (sceneRefs.ClaimTheRestButton != null)
@@ -3047,6 +3081,23 @@ namespace BackyardLegends.Runtime
             }
 
             RenderSfxToggleLabel();
+        }
+
+        private void RenderOptionsMenuButton()
+        {
+            if (sceneRefs.BackButton == null)
+            {
+                return;
+            }
+
+            var canOpen = CanOpenOptionsMenu();
+            var shouldShow = optionsMenuOpen || optionsMenuAnimationLoop != null || canOpen;
+            sceneRefs.BackButton.gameObject.SetActive(shouldShow);
+            sceneRefs.BackButton.interactable = optionsMenuOpen || canOpen;
+            if (shouldShow)
+            {
+                SetButtonLabel(sceneRefs.BackButton, optionsMenuOpen ? "CLOSE" : "MENU");
+            }
         }
 
         private void SelectBid(int bid)
@@ -3158,6 +3209,28 @@ namespace BackyardLegends.Runtime
         private bool IsGameplayInputBlocked()
         {
             return exitPromptOpen || optionsMenuOpen || avatarIntroRunning;
+        }
+
+        private bool CanOpenOptionsMenu()
+        {
+            return !exitPromptOpen &&
+                   !optionsMenuOpen &&
+                   optionsMenuAnimationLoop == null &&
+                   !IsOptionsMenuLockedByOpeningFlow();
+        }
+
+        private bool IsOptionsMenuLockedByOpeningFlow()
+        {
+            return controller == null ||
+                   controller.State?.RoundState == null ||
+                   avatarIntroRunning ||
+                   openingDealPending ||
+                   openingDealRunning ||
+                   openingStackIntroRunning ||
+                   handReviewPending ||
+                   bidTurnDelayPending ||
+                   controller.State.Phase == MatchPhase.Bidding ||
+                   bidBubbleLoops.Count > 0;
         }
 
         private bool CanClaimRemainingBooks()
@@ -3678,7 +3751,7 @@ namespace BackyardLegends.Runtime
                                controller.State.RoundState.BidState.CurrentBidder == SeatId.Bottom);
             SetSheetVisible(sceneRefs.RoundSheet, false);
             SetSheetVisible(sceneRefs.EndSheet, false);
-            SetSheetVisible(sceneRefs.OptionsMenu, false);
+            SetOptionsMenuVisibleImmediate(false);
             SetSheetVisible(sceneRefs.ExitPromptOverlay, false);
             if (sceneRefs.DealButton != null)
             {
@@ -4749,7 +4822,7 @@ namespace BackyardLegends.Runtime
                 SpawnEpicToonFx(tableSlamFxPrefab != null ? tableSlamFxPrefab : cardImpactFxPrefab, discardPoint + new Vector2(0f, -8f), 0.98f + Mathf.Min(bookStreak - 1, 5) * 0.08f);
             }
 
-            SpawnEpicToonFx(cardSmokeFxPrefab, discardPoint, bigBook ? 0.88f : 0.72f);
+            TrySpawnBookCollectSmoke(discardPoint, bigBook);
             StartBookTextImpact(winner, null, winner.ToTeam() == TeamId.Home ? theme.green : theme.red, false);
             if (bigBook)
             {
@@ -5690,8 +5763,21 @@ namespace BackyardLegends.Runtime
                 particle.Play(true);
             }
 
+            activeRuntimeParticleFx.RemoveAll(fx => fx == null);
+            activeRuntimeParticleFx.Add(effect);
             Destroy(effect, ResolveStrongCardFxLifetime(particles));
             return true;
+        }
+
+        private void TrySpawnBookCollectSmoke(Vector2 discardPoint, bool bigBook)
+        {
+            var chance = bigBook ? BigBookCollectSmokeChance : BookCollectSmokeChance;
+            if (Random.value > chance)
+            {
+                return;
+            }
+
+            SpawnEpicToonFx(cardSmokeFxPrefab, discardPoint, bigBook ? 0.88f : 0.72f);
         }
 
         private GameObject ResolveStrongCardFxPrefab(Card card)
@@ -5904,6 +5990,29 @@ namespace BackyardLegends.Runtime
             }
 
             transientFx.Clear();
+            ClearRuntimeParticleFx();
+        }
+
+        private void ClearRuntimeParticleFx()
+        {
+            foreach (var fx in activeRuntimeParticleFx.ToArray())
+            {
+                if (fx == null)
+                {
+                    continue;
+                }
+
+                foreach (var particle in fx.GetComponentsInChildren<ParticleSystem>(true))
+                {
+                    particle.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                    particle.Clear(true);
+                }
+
+                fx.SetActive(false);
+                Destroy(fx);
+            }
+
+            activeRuntimeParticleFx.Clear();
         }
 
         private void RefreshBookLeaderLightningFx()
@@ -6107,6 +6216,13 @@ namespace BackyardLegends.Runtime
         private void ClearBookLightningFx()
         {
             DisableBookLightningFxExcept(null);
+        }
+
+        private void ClearPlayerScoreOverlayFx()
+        {
+            ClearLatestBookAura();
+            ClearBookLightningFx();
+            ClearTransientFx();
         }
 
         private void StartBidCameraFocus(SeatId seat)
@@ -6811,6 +6927,7 @@ namespace BackyardLegends.Runtime
             {
                 pendingEndSheetOpen = false;
                 pendingRoundSheetOpen = false;
+                ClearPlayerScoreOverlayFx();
                 SetSheetVisible(sceneRefs.RoundSheet, false);
                 SetSheetVisible(sceneRefs.EndSheet, true);
                 return;
@@ -6822,6 +6939,7 @@ namespace BackyardLegends.Runtime
             }
 
             pendingRoundSheetOpen = false;
+            ClearPlayerScoreOverlayFx();
             AnimateScoreDelta(TeamId.Home);
             AnimateScoreDelta(TeamId.Away);
             SetSheetVisible(sceneRefs.RoundSheet, true);
@@ -7888,7 +8006,7 @@ namespace BackyardLegends.Runtime
 
         private void OpenOptionsMenu()
         {
-            if (exitPromptOpen)
+            if (!CanOpenOptionsMenu())
             {
                 return;
             }
@@ -7906,7 +8024,8 @@ namespace BackyardLegends.Runtime
             }
 
             RenderAll();
-            PlayFeedback(FeedbackCue.Select, 0.12f);
+            PlayOptionsMenuOpenAnimation();
+            PlayFeedback(FeedbackCue.OptionsMenuOpen, 0.24f);
         }
 
         private void CloseOptionsMenu()
@@ -7922,7 +8041,8 @@ namespace BackyardLegends.Runtime
             }
 
             optionsMenuOpen = false;
-            SetSheetVisible(sceneRefs.OptionsMenu, false);
+            PlayOptionsMenuCloseAnimation();
+            PlayFeedback(FeedbackCue.OptionsMenuClose, 0.2f);
             RenderOptionsMenu();
             if (resumeAi)
             {
@@ -8138,7 +8258,7 @@ namespace BackyardLegends.Runtime
             lastRenderedHand.Clear();
             ClearTransientMotionState(true);
             SetBidSheetVisible(false);
-            SetSheetVisible(sceneRefs.OptionsMenu, false);
+            SetOptionsMenuVisibleImmediate(false);
             if (!controller.TryForfeitMatch(TeamId.Home, out var error))
             {
                 PlayFeedback(FeedbackCue.Invalid, 0.18f);
@@ -8913,6 +9033,226 @@ namespace BackyardLegends.Runtime
             return target != null &&
                    ((sceneRefs.RoundScoreboardView != null && target.IsChildOf(sceneRefs.RoundScoreboardView.transform)) ||
                     (sceneRefs.EndScoreboardView != null && target.IsChildOf(sceneRefs.EndScoreboardView.transform)));
+        }
+
+        private void PlayOptionsMenuOpenAnimation()
+        {
+            if (!PrepareOptionsMenuAnimationTarget())
+            {
+                return;
+            }
+
+            StopOptionsMenuAnimation();
+            SetSheetVisible(optionsMenuAnimationTarget, true);
+            optionsMenuAnimationTarget.SetAsLastSibling();
+            optionsMenuAnimationLoop = StartCoroutine(AnimateOptionsMenuRoutine(true));
+        }
+
+        private void PlayOptionsMenuCloseAnimation()
+        {
+            if (!PrepareOptionsMenuAnimationTarget())
+            {
+                return;
+            }
+
+            StopOptionsMenuAnimation();
+            SetSheetVisible(optionsMenuAnimationTarget, true);
+            optionsMenuAnimationTarget.SetAsLastSibling();
+            optionsMenuAnimationLoop = StartCoroutine(AnimateOptionsMenuRoutine(false));
+        }
+
+        private void SetOptionsMenuVisibleImmediate(bool visible)
+        {
+            if (!PrepareOptionsMenuAnimationTarget())
+            {
+                SetSheetVisible(sceneRefs != null ? sceneRefs.OptionsMenu : null, visible);
+                return;
+            }
+
+            StopOptionsMenuAnimation();
+            ApplyOptionsMenuVisiblePose(visible);
+            SetSheetVisible(optionsMenuAnimationTarget, visible);
+        }
+
+        private void StopOptionsMenuAnimation()
+        {
+            if (optionsMenuAnimationLoop == null)
+            {
+                return;
+            }
+
+            StopCoroutine(optionsMenuAnimationLoop);
+            optionsMenuAnimationLoop = null;
+        }
+
+        private bool PrepareOptionsMenuAnimationTarget()
+        {
+            if (sceneRefs == null || sceneRefs.OptionsMenu == null)
+            {
+                return false;
+            }
+
+            var menu = sceneRefs.OptionsMenu;
+            if (optionsMenuAnimationTarget != menu || !optionsMenuAnimationDefaultsCaptured)
+            {
+                optionsMenuAnimationTarget = menu;
+                optionsMenuBaseAnchoredPosition = menu.anchoredPosition;
+                optionsMenuBaseScale = menu.localScale;
+                optionsMenuBaseRotation = menu.localRotation;
+                optionsMenuAnimationDefaultsCaptured = true;
+            }
+
+            optionsMenuCanvasGroup = menu.GetComponent<CanvasGroup>();
+            if (optionsMenuCanvasGroup == null)
+            {
+                optionsMenuCanvasGroup = menu.gameObject.AddComponent<CanvasGroup>();
+            }
+
+            return true;
+        }
+
+        private IEnumerator AnimateOptionsMenuRoutine(bool opening)
+        {
+            if (!PrepareOptionsMenuAnimationTarget())
+            {
+                optionsMenuAnimationLoop = null;
+                yield break;
+            }
+
+            var duration = opening ? OptionsMenuOpenAnimationSeconds : OptionsMenuCloseAnimationSeconds;
+            var elapsed = 0f;
+            if (opening)
+            {
+                ApplyOptionsMenuFrame(0f, OptionsMenuEntryYOffset, 0.72f, -2.5f, false, true);
+            }
+            else
+            {
+                ApplyOptionsMenuVisiblePose(false);
+                ApplyOptionsMenuFrame(1f, 0f, 1f, 0f, false, true);
+            }
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                var t = Mathf.Clamp01(elapsed / duration);
+                if (opening)
+                {
+                    AnimateOptionsMenuOpenFrame(t);
+                }
+                else
+                {
+                    AnimateOptionsMenuCloseFrame(t);
+                }
+
+                yield return null;
+            }
+
+            if (opening)
+            {
+                ApplyOptionsMenuVisiblePose(true);
+            }
+            else
+            {
+                ApplyOptionsMenuVisiblePose(false);
+                SetSheetVisible(optionsMenuAnimationTarget, false);
+            }
+
+            optionsMenuAnimationLoop = null;
+        }
+
+        private void AnimateOptionsMenuOpenFrame(float t)
+        {
+            var eased = EaseOutBackStrong(t);
+            var alpha = SmoothStep01(Mathf.Clamp01(t / 0.62f));
+            var offsetY = Mathf.LerpUnclamped(OptionsMenuEntryYOffset, 0f, eased);
+            var scale = Mathf.LerpUnclamped(0.72f, 1f, eased);
+            var rotation = Mathf.Sin(t * Mathf.PI * 2.25f) * (1f - t) * 3f;
+            ApplyOptionsMenuFrame(alpha, offsetY, scale, rotation, false, true);
+        }
+
+        private void AnimateOptionsMenuCloseFrame(float t)
+        {
+            const float bumpPortion = 0.28f;
+            if (t < bumpPortion)
+            {
+                var bumpT = EaseOutQuad(t / bumpPortion);
+                ApplyOptionsMenuFrame(1f, Mathf.Lerp(0f, 6f, bumpT), Mathf.Lerp(1f, 1.06f, bumpT), Mathf.Lerp(0f, -1.2f, bumpT), false, true);
+                return;
+            }
+
+            var collapseT = Mathf.Clamp01((t - bumpPortion) / (1f - bumpPortion));
+            var eased = EaseInBack(collapseT);
+            var alpha = 1f - SmoothStep01(collapseT);
+            var offsetY = Mathf.LerpUnclamped(6f, OptionsMenuEntryYOffset * 0.65f, eased);
+            var scale = Mathf.LerpUnclamped(1.06f, 0.78f, eased);
+            var rotation = Mathf.LerpUnclamped(-1.2f, 3.2f, eased);
+            ApplyOptionsMenuFrame(alpha, offsetY, scale, rotation, false, true);
+        }
+
+        private void ApplyOptionsMenuVisiblePose(bool visible)
+        {
+            if (!PrepareOptionsMenuAnimationTarget())
+            {
+                return;
+            }
+
+            optionsMenuAnimationTarget.anchoredPosition = optionsMenuBaseAnchoredPosition;
+            optionsMenuAnimationTarget.localScale = optionsMenuBaseScale;
+            optionsMenuAnimationTarget.localRotation = optionsMenuBaseRotation;
+            SetOptionsMenuCanvasGroup(visible ? 1f : 0f, visible, visible);
+        }
+
+        private void ApplyOptionsMenuFrame(float alpha, float offsetY, float scaleMultiplier, float rotationZ, bool interactable, bool blocksRaycasts)
+        {
+            if (!PrepareOptionsMenuAnimationTarget())
+            {
+                return;
+            }
+
+            optionsMenuAnimationTarget.anchoredPosition = optionsMenuBaseAnchoredPosition + new Vector2(0f, offsetY);
+            optionsMenuAnimationTarget.localScale = optionsMenuBaseScale * scaleMultiplier;
+            optionsMenuAnimationTarget.localRotation = optionsMenuBaseRotation * Quaternion.Euler(0f, 0f, rotationZ);
+            SetOptionsMenuCanvasGroup(alpha, interactable, blocksRaycasts);
+        }
+
+        private void SetOptionsMenuCanvasGroup(float alpha, bool interactable, bool blocksRaycasts)
+        {
+            if (optionsMenuCanvasGroup == null && !PrepareOptionsMenuAnimationTarget())
+            {
+                return;
+            }
+
+            optionsMenuCanvasGroup.alpha = Mathf.Clamp01(alpha);
+            optionsMenuCanvasGroup.interactable = interactable;
+            optionsMenuCanvasGroup.blocksRaycasts = blocksRaycasts;
+        }
+
+        private static float EaseOutQuad(float t)
+        {
+            t = Mathf.Clamp01(t);
+            return 1f - (1f - t) * (1f - t);
+        }
+
+        private static float EaseOutBackStrong(float t)
+        {
+            const float c1 = 1.70158f;
+            const float c3 = c1 + 1f;
+            t = Mathf.Clamp01(t) - 1f;
+            return 1f + c3 * t * t * t + c1 * t * t;
+        }
+
+        private static float EaseInBack(float t)
+        {
+            const float c1 = 1.70158f;
+            const float c3 = c1 + 1f;
+            t = Mathf.Clamp01(t);
+            return c3 * t * t * t - c1 * t * t;
+        }
+
+        private static float SmoothStep01(float t)
+        {
+            t = Mathf.Clamp01(t);
+            return t * t * (3f - 2f * t);
         }
 
         private void SetBidSheetVisible(bool visible)
