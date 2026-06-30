@@ -197,6 +197,31 @@ namespace BackyardLegends.Core
             return true;
         }
 
+        public bool TryForfeitMatch(TeamId forfeitingTeam, out string error)
+        {
+            error = string.Empty;
+            if (State.Phase != MatchPhase.Bidding && State.Phase != MatchPhase.TrickPlay)
+            {
+                error = "You can only forfeit an active match.";
+                return false;
+            }
+
+            var winningTeam = forfeitingTeam == TeamId.Home ? TeamId.Away : TeamId.Home;
+            State.Phase = MatchPhase.MatchEnded;
+            State.WinningTeam = winningTeam;
+            if (State.RoundState != null)
+            {
+                State.RoundState.TrickState.Plays.Clear();
+                State.RoundState.TrickState.LeadSuit = null;
+                State.RoundState.RenegeSeats.Clear();
+                State.RoundState.LastStatusMessage = $"{TeamLabel(forfeitingTeam)} forfeited the match.";
+            }
+
+            Raise(new MatchForfeitedEvent(CreateSnapshot(), forfeitingTeam, winningTeam));
+            Raise(new MatchEndedEvent(CreateSnapshot(), winningTeam));
+            return true;
+        }
+
         private void MaybeRecordRenege(SeatId seat, Card card)
         {
             if (!State.RuleSet.RenegePenaltyEnabled)

@@ -133,7 +133,7 @@ namespace BackyardLegends.Runtime
             var modeName = rules != null ? rules.DisplayName : state.RuleSet != null ? state.RuleSet.DisplayName : "Spades";
             var targetScore = ResolveTargetScore(state, rules);
             SetText(ModeText, $"{modeName.ToUpperInvariant()} MODE");
-            SetText(TitleText, matchComplete ? "MATCH COMPLETE" : "END OF HAND");
+            SetText(TitleText, matchComplete ? "MATCH COMPLETE" : "ROUND COMPLETE");
             RenderHero(home, away);
             RenderTeamRows(state, home, away);
             SetText(HomeTotalLabelText, "GOLD TEAM");
@@ -636,10 +636,15 @@ namespace BackyardLegends.Runtime
 
         private static void SetButtonLabel(Button button, string value)
         {
-            var label = button != null ? button.GetComponentInChildren<Text>(true) : null;
-            if (label != null)
+            if (button == null)
             {
-                label.text = value;
+                return;
+            }
+
+            var labels = button.GetComponentsInChildren<Text>(true);
+            for (var i = 0; i < labels.Length; i++)
+            {
+                labels[i].text = value;
             }
         }
 

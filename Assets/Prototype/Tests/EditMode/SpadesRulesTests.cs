@@ -155,6 +155,446 @@ namespace BackyardLegends.Tests
         }
 
         [Test]
+        public void SimpleAiBidsStrongSpadesAndSideSuitsCompetitively()
+        {
+            var bid = ChooseSimpleAiBid(
+                new List<Card>
+                {
+                    new(Suit.Spades, 14),
+                    new(Suit.Spades, 13),
+                    new(Suit.Spades, 9),
+                    new(Suit.Spades, 8),
+                    new(Suit.Spades, 7),
+                    new(Suit.Hearts, 14),
+                    new(Suit.Hearts, 13),
+                    new(Suit.Hearts, 12),
+                    new(Suit.Hearts, 5),
+                    new(Suit.Clubs, 13),
+                    new(Suit.Clubs, 12),
+                    new(Suit.Diamonds, 12),
+                    new(Suit.Diamonds, 4)
+                });
+
+            Assert.That(bid, Is.GreaterThanOrEqualTo(6));
+        }
+
+        [Test]
+        public void SimpleAiValuesProtectedSideSuitHonors()
+        {
+            var bid = ChooseSimpleAiBid(
+                new List<Card>
+                {
+                    new(Suit.Hearts, 14),
+                    new(Suit.Hearts, 13),
+                    new(Suit.Hearts, 12),
+                    new(Suit.Hearts, 11),
+                    new(Suit.Hearts, 10),
+                    new(Suit.Spades, 14),
+                    new(Suit.Spades, 13),
+                    new(Suit.Spades, 5),
+                    new(Suit.Clubs, 9),
+                    new(Suit.Clubs, 8),
+                    new(Suit.Diamonds, 2),
+                    new(Suit.Diamonds, 3),
+                    new(Suit.Diamonds, 4)
+                });
+
+            Assert.That(bid, Is.GreaterThanOrEqualTo(5));
+        }
+
+        [Test]
+        public void SimpleAiValuesLongSpadeSuitAsTrumpBooks()
+        {
+            var bid = ChooseSimpleAiBid(
+                new List<Card>
+                {
+                    new(Suit.Spades, 14),
+                    new(Suit.Spades, 13),
+                    new(Suit.Spades, 12),
+                    new(Suit.Spades, 10),
+                    new(Suit.Spades, 8),
+                    new(Suit.Spades, 6),
+                    new(Suit.Hearts, 14),
+                    new(Suit.Hearts, 4),
+                    new(Suit.Clubs, 13),
+                    new(Suit.Clubs, 5),
+                    new(Suit.Diamonds, 3),
+                    new(Suit.Diamonds, 7),
+                    new(Suit.Diamonds, 9)
+                });
+
+            Assert.That(bid, Is.GreaterThanOrEqualTo(7));
+        }
+
+        [Test]
+        public void SimpleAiBidsMonsterSpadeHandInDoubleDigits()
+        {
+            var bid = ChooseSimpleAiBid(
+                new List<Card>
+                {
+                    new(Suit.Spades, 14),
+                    new(Suit.Spades, 13),
+                    new(Suit.Spades, 12),
+                    new(Suit.Spades, 11),
+                    new(Suit.Spades, 10),
+                    new(Suit.Spades, 9),
+                    new(Suit.Spades, 8),
+                    new(Suit.Hearts, 14),
+                    new(Suit.Diamonds, 14),
+                    new(Suit.Clubs, 3),
+                    new(Suit.Clubs, 5),
+                    new(Suit.Hearts, 4),
+                    new(Suit.Diamonds, 6)
+                });
+
+            Assert.That(bid, Is.GreaterThanOrEqualTo(10));
+        }
+
+        [Test]
+        public void SimpleAiCanBidThirteenWithNearLaydownHand()
+        {
+            var bid = ChooseSimpleAiBid(
+                new List<Card>
+                {
+                    new(Suit.Spades, 14),
+                    new(Suit.Spades, 13),
+                    new(Suit.Spades, 12),
+                    new(Suit.Spades, 11),
+                    new(Suit.Spades, 10),
+                    new(Suit.Spades, 9),
+                    new(Suit.Spades, 8),
+                    new(Suit.Spades, 7),
+                    new(Suit.Spades, 6),
+                    new(Suit.Spades, 5),
+                    new(Suit.Spades, 4),
+                    new(Suit.Hearts, 14),
+                    new(Suit.Diamonds, 14)
+                });
+
+            Assert.That(bid, Is.EqualTo(13));
+        }
+
+        [Test]
+        public void SimpleAiBidsHighWithRunningSuitsAndTrumpControl()
+        {
+            var bid = ChooseSimpleAiBid(
+                new List<Card>
+                {
+                    new(Suit.Spades, 14),
+                    new(Suit.Spades, 13),
+                    new(Suit.Spades, 12),
+                    new(Suit.Spades, 11),
+                    new(Suit.Spades, 4),
+                    new(Suit.Hearts, 14),
+                    new(Suit.Hearts, 13),
+                    new(Suit.Hearts, 12),
+                    new(Suit.Hearts, 11),
+                    new(Suit.Clubs, 14),
+                    new(Suit.Clubs, 13),
+                    new(Suit.Diamonds, 4),
+                    new(Suit.Diamonds, 6)
+                });
+
+            Assert.That(bid, Is.GreaterThanOrEqualTo(8));
+        }
+
+        [Test]
+        public void SimpleAiAverageBidStaysCompetitiveAcrossSeededHands()
+        {
+            var random = new System.Random(12345);
+            var totalBid = 0d;
+            var lowBidCount = 0;
+            const int handCount = 500;
+
+            for (var i = 0; i < handCount; i++)
+            {
+                var deck = SpadesDeckUtility.CreateDeck();
+                SpadesDeckUtility.Shuffle(deck, random);
+                var bid = ChooseSimpleAiBid(
+                    deck.Take(13).ToList(),
+                    null,
+                    SeatId.Top,
+                    Enumerable.Range(1, 13).ToList());
+                totalBid += bid;
+                if (bid <= 2)
+                {
+                    lowBidCount++;
+                }
+            }
+
+            Assert.That(totalBid / handCount, Is.GreaterThanOrEqualTo(3.9d));
+            Assert.That(lowBidCount, Is.LessThanOrEqualTo(handCount * 0.13d));
+        }
+
+        [Test]
+        public void SimpleAiControllerDealsProduceCompetitiveTableBids()
+        {
+            var totalAiBid = 0d;
+            var lowBidCount = 0;
+            var threeOrLessCount = 0;
+            var aiBidCount = 0;
+            const int dealCount = 80;
+
+            for (var seed = 0; seed < dealCount; seed++)
+            {
+                var controller = CreateController(seed);
+                controller.StartMatch();
+                while (controller.State.Phase == MatchPhase.Bidding)
+                {
+                    if (controller.NeedsAiTurn)
+                    {
+                        controller.AdvanceAiTurn();
+                    }
+                    else
+                    {
+                        var legal = controller.GetLegalBidsForSeat(SeatId.Bottom);
+                        var humanBid = legal.Contains(4) ? 4 : legal.First();
+                        Assert.That(controller.TrySubmitBid(SeatId.Bottom, humanBid, out var error), Is.True, error);
+                    }
+                }
+
+                foreach (var seat in new[] { SeatId.Left, SeatId.Top, SeatId.Right })
+                {
+                    var bid = controller.State.RoundState.BidState.BidsBySeat[seat];
+                    Assert.That(bid.HasValue, Is.True);
+                    totalAiBid += bid.Value;
+                    aiBidCount++;
+                    if (bid.Value <= 2)
+                    {
+                        lowBidCount++;
+                    }
+
+                    if (bid.Value <= 3)
+                    {
+                        threeOrLessCount++;
+                    }
+                }
+            }
+
+            Assert.That(totalAiBid / aiBidCount, Is.GreaterThanOrEqualTo(3.9d));
+            Assert.That(lowBidCount, Is.LessThanOrEqualTo(aiBidCount * 0.13d));
+            Assert.That(threeOrLessCount, Is.LessThanOrEqualTo(aiBidCount * 0.38d));
+        }
+
+        [Test]
+        public void SimpleAiDoesNotSandbagRealBooksAfterPartnerHighBid()
+        {
+            var state = CreateScoringState();
+            state.RoundState.BidState.BidsBySeat[SeatId.Bottom] = 6;
+            state.RoundState.BidState.BidsBySeat[SeatId.Top] = null;
+            state.RoundState.BidState.BidsBySeat[SeatId.Left] = 3;
+            state.RoundState.BidState.BidsBySeat[SeatId.Right] = null;
+
+            var bid = ChooseSimpleAiBid(
+                new List<Card>
+                {
+                    new(Suit.Spades, 14),
+                    new(Suit.Spades, 13),
+                    new(Suit.Spades, 4),
+                    new(Suit.Hearts, 14),
+                    new(Suit.Hearts, 3),
+                    new(Suit.Clubs, 2),
+                    new(Suit.Clubs, 5),
+                    new(Suit.Clubs, 8),
+                    new(Suit.Diamonds, 2),
+                    new(Suit.Diamonds, 4),
+                    new(Suit.Diamonds, 6),
+                    new(Suit.Diamonds, 9),
+                    new(Suit.Diamonds, 11)
+                },
+                state,
+                SeatId.Top);
+
+            Assert.That(bid, Is.GreaterThanOrEqualTo(3));
+        }
+
+        [Test]
+        public void SimpleAiSometimesStretchesUpsideHandsAboveSafeBid()
+        {
+            var hand = new List<Card>
+            {
+                new(Suit.Spades, 14),
+                new(Suit.Spades, 7),
+                new(Suit.Spades, 4),
+                new(Suit.Hearts, 13),
+                new(Suit.Hearts, 8),
+                new(Suit.Hearts, 4),
+                new(Suit.Clubs, 14),
+                new(Suit.Clubs, 6),
+                new(Suit.Clubs, 3),
+                new(Suit.Diamonds, 12),
+                new(Suit.Diamonds, 9),
+                new(Suit.Diamonds, 5),
+                new(Suit.Diamonds, 2)
+            };
+            var stretchedBids = 0;
+            const int sampleCount = 200;
+
+            for (var seed = 0; seed < sampleCount; seed++)
+            {
+                var bid = new SimpleAiAgent(seed * 17 + 3).ChooseBid(new AiBidContext
+                {
+                    Seat = SeatId.Top,
+                    MatchState = new MatchState
+                    {
+                        RuleSet = RuleSetConfig.CreateClassic(100),
+                        RoundState = new RoundState()
+                    },
+                    Hand = hand,
+                    LegalBids = Enumerable.Range(1, 13).ToList()
+                });
+                if (bid >= 5)
+                {
+                    stretchedBids++;
+                }
+            }
+
+            Assert.That(stretchedBids, Is.GreaterThanOrEqualTo(95));
+            Assert.That(stretchedBids, Is.LessThanOrEqualTo(160));
+        }
+
+        [Test]
+        public void SimpleAiRiskCanPushUpsideHandsTwoBooksHigher()
+        {
+            var hand = new List<Card>
+            {
+                new(Suit.Spades, 14),
+                new(Suit.Spades, 7),
+                new(Suit.Spades, 4),
+                new(Suit.Hearts, 13),
+                new(Suit.Hearts, 8),
+                new(Suit.Hearts, 4),
+                new(Suit.Clubs, 14),
+                new(Suit.Clubs, 6),
+                new(Suit.Clubs, 3),
+                new(Suit.Diamonds, 12),
+                new(Suit.Diamonds, 9),
+                new(Suit.Diamonds, 5),
+                new(Suit.Diamonds, 2)
+            };
+            const int sampleCount = 200;
+            var twoBookStretches = 0;
+
+            for (var seed = 0; seed < sampleCount; seed++)
+            {
+                var bid = new SimpleAiAgent(seed * 17 + 3).ChooseBid(new AiBidContext
+                {
+                    Seat = SeatId.Top,
+                    MatchState = new MatchState
+                    {
+                        RuleSet = RuleSetConfig.CreateClassic(100),
+                        RoundState = new RoundState()
+                    },
+                    Hand = hand,
+                    LegalBids = Enumerable.Range(1, 13).ToList()
+                });
+                if (bid >= 6)
+                {
+                    twoBookStretches++;
+                }
+            }
+
+            Assert.That(twoBookStretches, Is.GreaterThanOrEqualTo(10));
+            Assert.That(twoBookStretches, Is.LessThanOrEqualTo(50));
+        }
+
+        [Test]
+        public void SimpleAiBidsHigherNearBagPenaltyToReduceBags()
+        {
+            var state = CreateScoringState();
+            state.Scores[TeamId.Home].Bags = 9;
+            state.RoundState.BidState.BidsBySeat[SeatId.Bottom] = 3;
+            state.RoundState.BidState.BidsBySeat[SeatId.Top] = null;
+            state.RoundState.BidState.BidsBySeat[SeatId.Left] = 4;
+            state.RoundState.BidState.BidsBySeat[SeatId.Right] = null;
+
+            var bid = ChooseSimpleAiBid(
+                new List<Card>
+                {
+                    new(Suit.Spades, 14),
+                    new(Suit.Spades, 13),
+                    new(Suit.Spades, 4),
+                    new(Suit.Hearts, 14),
+                    new(Suit.Hearts, 3),
+                    new(Suit.Hearts, 5),
+                    new(Suit.Clubs, 2),
+                    new(Suit.Clubs, 6),
+                    new(Suit.Clubs, 8),
+                    new(Suit.Diamonds, 2),
+                    new(Suit.Diamonds, 4),
+                    new(Suit.Diamonds, 7),
+                    new(Suit.Diamonds, 9)
+                },
+                state,
+                SeatId.Top);
+
+            Assert.That(bid, Is.GreaterThanOrEqualTo(4));
+        }
+
+        [Test]
+        public void SimpleAiBidsExtraToCoverPartnerNil()
+        {
+            var state = CreateScoringState();
+            state.RoundState.BidState.BidsBySeat[SeatId.Bottom] = 0;
+            state.RoundState.BidState.BidsBySeat[SeatId.Top] = null;
+            state.RoundState.BidState.BidsBySeat[SeatId.Left] = 4;
+            state.RoundState.BidState.BidsBySeat[SeatId.Right] = null;
+
+            var bid = ChooseSimpleAiBid(
+                new List<Card>
+                {
+                    new(Suit.Spades, 14),
+                    new(Suit.Spades, 13),
+                    new(Suit.Spades, 2),
+                    new(Suit.Hearts, 14),
+                    new(Suit.Hearts, 3),
+                    new(Suit.Clubs, 13),
+                    new(Suit.Clubs, 4),
+                    new(Suit.Clubs, 6),
+                    new(Suit.Diamonds, 2),
+                    new(Suit.Diamonds, 4),
+                    new(Suit.Diamonds, 6),
+                    new(Suit.Diamonds, 8),
+                    new(Suit.Diamonds, 10)
+                },
+                state,
+                SeatId.Top);
+
+            Assert.That(bid, Is.GreaterThanOrEqualTo(5));
+        }
+
+        [Test]
+        public void SimpleAiAvoidsDoubleNilWhenPartnerAlreadyBidNil()
+        {
+            var state = CreateScoringState();
+            state.RoundState.BidState.BidsBySeat[SeatId.Bottom] = 0;
+            state.RoundState.BidState.BidsBySeat[SeatId.Top] = null;
+
+            var bid = ChooseSimpleAiBid(
+                new List<Card>
+                {
+                    new(Suit.Spades, 2),
+                    new(Suit.Spades, 4),
+                    new(Suit.Spades, 6),
+                    new(Suit.Spades, 8),
+                    new(Suit.Hearts, 2),
+                    new(Suit.Hearts, 4),
+                    new(Suit.Hearts, 8),
+                    new(Suit.Clubs, 3),
+                    new(Suit.Clubs, 6),
+                    new(Suit.Clubs, 9),
+                    new(Suit.Diamonds, 2),
+                    new(Suit.Diamonds, 5),
+                    new(Suit.Diamonds, 7)
+                },
+                state,
+                SeatId.Top,
+                Enumerable.Range(0, 14).ToList());
+
+            Assert.That(bid, Is.Not.EqualTo(0));
+        }
+
+        [Test]
         public void ScoreRoundTracksBagsAndThresholdPenalty()
         {
             var engine = new SpadesRuleEngine();
@@ -462,6 +902,114 @@ namespace BackyardLegends.Tests
         }
 
         [Test]
+        public void SimpleAiBeatsNilOpponentCurrentWinner()
+        {
+            var state = CreateScoringState();
+            state.RoundState.BidState.BidsBySeat[SeatId.Bottom] = 2;
+            state.RoundState.BidState.BidsBySeat[SeatId.Top] = 2;
+            state.RoundState.BidState.BidsBySeat[SeatId.Left] = 0;
+            state.RoundState.BidState.BidsBySeat[SeatId.Right] = 4;
+            state.RoundState.TricksWonBySeat[SeatId.Bottom] = 2;
+            state.RoundState.TricksWonBySeat[SeatId.Top] = 2;
+            state.RoundState.TrickState.LeadSuit = Suit.Hearts;
+            state.RoundState.TrickState.Plays.Add(new TrickPlay { Seat = SeatId.Left, Card = new Card(Suit.Hearts, 9) });
+
+            var card = ChooseSimpleAiCard(
+                SeatId.Top,
+                state,
+                new List<Card>
+                {
+                    new(Suit.Hearts, 10),
+                    new(Suit.Hearts, 2)
+                });
+
+            Assert.That(card, Is.EqualTo(new Card(Suit.Hearts, 10)));
+        }
+
+        [Test]
+        public void SimpleAiCoversPartnerNilWhenPartnerIsWinning()
+        {
+            var state = CreateScoringState();
+            state.RoundState.BidState.BidsBySeat[SeatId.Bottom] = 0;
+            state.RoundState.BidState.BidsBySeat[SeatId.Top] = 4;
+            state.RoundState.BidState.BidsBySeat[SeatId.Left] = 4;
+            state.RoundState.BidState.BidsBySeat[SeatId.Right] = 4;
+            state.RoundState.TrickState.LeadSuit = Suit.Hearts;
+            state.RoundState.TrickState.Plays.Add(new TrickPlay { Seat = SeatId.Bottom, Card = new Card(Suit.Hearts, 9) });
+            state.RoundState.TrickState.Plays.Add(new TrickPlay { Seat = SeatId.Left, Card = new Card(Suit.Hearts, 4) });
+
+            var card = ChooseSimpleAiCard(
+                SeatId.Top,
+                state,
+                new List<Card>
+                {
+                    new(Suit.Hearts, 10),
+                    new(Suit.Hearts, 2)
+                });
+
+            Assert.That(card, Is.EqualTo(new Card(Suit.Hearts, 10)));
+        }
+
+        [Test]
+        public void SimpleAiLeadsKnownSafeWinnerWhenTeamNeedsBook()
+        {
+            var state = CreateScoringState();
+            state.RoundState.BidState.BidsBySeat[SeatId.Bottom] = 2;
+            state.RoundState.BidState.BidsBySeat[SeatId.Top] = 3;
+            state.RoundState.BidState.BidsBySeat[SeatId.Left] = 4;
+            state.RoundState.BidState.BidsBySeat[SeatId.Right] = 4;
+            state.RoundState.TricksWonBySeat[SeatId.Bottom] = 2;
+            state.RoundState.TricksWonBySeat[SeatId.Top] = 2;
+            state.RoundState.TrickState.Plays.Clear();
+            state.RoundState.CompletedTricks.Add(new List<TrickPlay>
+            {
+                new() { Seat = SeatId.Left, Card = new Card(Suit.Hearts, 14) },
+                new() { Seat = SeatId.Top, Card = new Card(Suit.Hearts, 2) },
+                new() { Seat = SeatId.Right, Card = new Card(Suit.Hearts, 13) },
+                new() { Seat = SeatId.Bottom, Card = new Card(Suit.Hearts, 3) }
+            });
+
+            var card = ChooseSimpleAiCard(
+                SeatId.Top,
+                state,
+                new List<Card>
+                {
+                    new(Suit.Hearts, 12),
+                    new(Suit.Clubs, 13),
+                    new(Suit.Diamonds, 2),
+                    new(Suit.Spades, 4)
+                });
+
+            Assert.That(card, Is.EqualTo(new Card(Suit.Hearts, 12)));
+        }
+
+        [Test]
+        public void SimpleAiThrowsHighLoserWhenBagPenaltyLooms()
+        {
+            var state = CreateScoringState();
+            state.Scores[TeamId.Home].Bags = 9;
+            state.RoundState.BidState.BidsBySeat[SeatId.Bottom] = 2;
+            state.RoundState.BidState.BidsBySeat[SeatId.Top] = 2;
+            state.RoundState.BidState.BidsBySeat[SeatId.Left] = 4;
+            state.RoundState.BidState.BidsBySeat[SeatId.Right] = 4;
+            state.RoundState.TricksWonBySeat[SeatId.Bottom] = 2;
+            state.RoundState.TricksWonBySeat[SeatId.Top] = 2;
+            state.RoundState.TrickState.LeadSuit = Suit.Hearts;
+            state.RoundState.TrickState.Plays.Add(new TrickPlay { Seat = SeatId.Left, Card = new Card(Suit.Hearts, 14) });
+
+            var card = ChooseSimpleAiCard(
+                SeatId.Top,
+                state,
+                new List<Card>
+                {
+                    new(Suit.Hearts, 13),
+                    new(Suit.Hearts, 3)
+                });
+
+            Assert.That(card, Is.EqualTo(new Card(Suit.Hearts, 13)));
+        }
+
+        [Test]
         public void ThemeSpriteFactoryRebuildsDestroyedCachedRoundedRectSprite()
         {
             var fill = new Color(0.14f, 0.22f, 0.31f, 0.73f);
@@ -641,6 +1189,91 @@ namespace BackyardLegends.Tests
         }
 
         [Test]
+        public void ForfeitDuringBiddingEndsMatchWithOpponentWinnerAndPreservesScores()
+        {
+            var controller = CreateController();
+            controller.StartMatch();
+            controller.State.Scores[TeamId.Home].Score = 40;
+            controller.State.Scores[TeamId.Away].Score = 20;
+            var forfeitedEvents = new List<MatchForfeitedEvent>();
+            var endedEvents = new List<MatchEndedEvent>();
+            controller.EventRaised += matchEvent =>
+            {
+                if (matchEvent is MatchForfeitedEvent forfeited)
+                {
+                    forfeitedEvents.Add(forfeited);
+                }
+
+                if (matchEvent is MatchEndedEvent ended)
+                {
+                    endedEvents.Add(ended);
+                }
+            };
+
+            Assert.That(controller.TryForfeitMatch(TeamId.Home, out var error), Is.True, error);
+
+            Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.MatchEnded));
+            Assert.That(controller.State.WinningTeam, Is.EqualTo(TeamId.Away));
+            Assert.That(controller.State.Scores[TeamId.Home].Score, Is.EqualTo(40));
+            Assert.That(controller.State.Scores[TeamId.Away].Score, Is.EqualTo(20));
+            Assert.That(forfeitedEvents, Has.Count.EqualTo(1));
+            Assert.That(forfeitedEvents[0].ForfeitingTeam, Is.EqualTo(TeamId.Home));
+            Assert.That(forfeitedEvents[0].WinningTeam, Is.EqualTo(TeamId.Away));
+            Assert.That(endedEvents, Has.Count.EqualTo(1));
+            Assert.That(endedEvents[0].WinningTeam, Is.EqualTo(TeamId.Away));
+        }
+
+        [Test]
+        public void ForfeitDuringTrickPlayEndsMatchWithOpponentWinner()
+        {
+            var controller = CreateController();
+            controller.StartMatch();
+            ForceBids(controller, 4, 4, 4, 4);
+
+            Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.TrickPlay));
+            Assert.That(controller.TryForfeitMatch(TeamId.Home, out var error), Is.True, error);
+
+            Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.MatchEnded));
+            Assert.That(controller.State.WinningTeam, Is.EqualTo(TeamId.Away));
+        }
+
+        [Test]
+        public void ForfeitIsRejectedOutsideActiveGameplay()
+        {
+            var controller = CreateController();
+
+            Assert.That(controller.TryForfeitMatch(TeamId.Home, out var lobbyError), Is.False);
+            Assert.That(lobbyError, Does.Contain("active match"));
+
+            controller.StartMatch();
+            Assert.That(controller.TryForfeitMatch(TeamId.Home, out _), Is.True);
+            Assert.That(controller.TryForfeitMatch(TeamId.Home, out var endedError), Is.False);
+            Assert.That(endedError, Does.Contain("active match"));
+        }
+
+        [Test]
+        public void ForfeitIsRejectedBetweenHands()
+        {
+            var controller = CreateController();
+            controller.StartMatch();
+            ForceBids(controller, 3, 4, 3, 4);
+            var round = controller.State.RoundState;
+            round.TrickState.Plays.Clear();
+            round.TrickState.CurrentTurn = SeatId.Bottom;
+            round.HandsBySeat[SeatId.Bottom] = new List<Card> { new(Suit.Hearts, 14) };
+            round.HandsBySeat[SeatId.Left] = new List<Card> { new(Suit.Hearts, 2) };
+            round.HandsBySeat[SeatId.Top] = new List<Card> { new(Suit.Hearts, 13) };
+            round.HandsBySeat[SeatId.Right] = new List<Card> { new(Suit.Hearts, 3) };
+
+            PlayCurrentTrick(controller);
+
+            Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.RoundSummary));
+            Assert.That(controller.TryForfeitMatch(TeamId.Home, out var error), Is.False);
+            Assert.That(error, Does.Contain("active match"));
+            Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.RoundSummary));
+        }
+
+        [Test]
         public void MatchCanAdvanceEndToEndWithoutSoftLock()
         {
             var controller = CreateController();
@@ -671,6 +1304,42 @@ namespace BackyardLegends.Tests
 
             Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.MatchEnded));
             Assert.That(guard, Is.LessThan(500));
+        }
+
+        [Test]
+        public void SimpleAiDrivenMatchCanAdvanceEndToEndWithoutSoftLock()
+        {
+            var controller = CreateController(seed: 1, rules: RuleSetConfig.CreateClassic(50));
+            controller.StartMatch();
+
+            var guard = 0;
+            while (controller.State.Phase != MatchPhase.MatchEnded && guard < 2000)
+            {
+                if (controller.NeedsAiTurn)
+                {
+                    controller.AdvanceAiTurn();
+                }
+                else if (controller.State.Phase == MatchPhase.Bidding)
+                {
+                    var legal = controller.GetLegalBidsForSeat(SeatId.Bottom);
+                    var bid = legal.Contains(4) ? 4 : legal.First();
+                    Assert.That(controller.TrySubmitBid(SeatId.Bottom, bid, out var error), Is.True, error);
+                }
+                else if (controller.State.Phase == MatchPhase.TrickPlay)
+                {
+                    var legalCards = controller.GetLegalCardsForSeat(SeatId.Bottom);
+                    Assert.That(controller.TryPlayCard(SeatId.Bottom, legalCards.First(), out var error), Is.True, error);
+                }
+                else if (controller.State.Phase == MatchPhase.RoundSummary)
+                {
+                    controller.StartNextRound();
+                }
+
+                guard++;
+            }
+
+            Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.MatchEnded));
+            Assert.That(guard, Is.LessThan(2000));
         }
 
         [Test]
@@ -748,12 +1417,60 @@ namespace BackyardLegends.Tests
             Object.DestroyImmediate(host);
         }
 
+        [Test]
+        public void SfxTogglePersistsAndUpdatesAudioSourceMuteState()
+        {
+            PlayerPrefs.DeleteKey(BackyardLegendsBootstrap.SfxMutedPlayerPrefsKey);
+            var host = new GameObject("SFX Toggle Test");
+            var bootstrap = host.AddComponent<BackyardLegendsBootstrap>();
+            var refs = host.AddComponent<BackyardLegendsSceneRefs>();
+            var source = host.AddComponent<AudioSource>();
+            refs.SfxToggleButton = CreateTestButton("SFX Toggle", host.transform);
+            SetPrivateField(bootstrap, "sceneRefs", refs);
+
+            try
+            {
+                InvokePrivate(bootstrap, "ConfigureFeedbackAudio");
+
+                Assert.That(source.mute, Is.False);
+                Assert.That(refs.SfxToggleButton.GetComponentInChildren<Text>().text, Is.EqualTo("SFX: ON"));
+
+                InvokePrivate(bootstrap, "ToggleSfxMuted");
+
+                Assert.That(source.mute, Is.True);
+                Assert.That(PlayerPrefs.GetInt(BackyardLegendsBootstrap.SfxMutedPlayerPrefsKey), Is.EqualTo(1));
+                Assert.That(refs.SfxToggleButton.GetComponentInChildren<Text>().text, Is.EqualTo("SFX: OFF"));
+
+                InvokePrivate(bootstrap, "ToggleSfxMuted");
+
+                Assert.That(source.mute, Is.False);
+                Assert.That(PlayerPrefs.GetInt(BackyardLegendsBootstrap.SfxMutedPlayerPrefsKey), Is.EqualTo(0));
+                Assert.That(refs.SfxToggleButton.GetComponentInChildren<Text>().text, Is.EqualTo("SFX: ON"));
+            }
+            finally
+            {
+                PlayerPrefs.DeleteKey(BackyardLegendsBootstrap.SfxMutedPlayerPrefsKey);
+                Object.DestroyImmediate(host);
+            }
+        }
+
         private static int ChooseSimpleAiBid(IReadOnlyList<Card> hand)
+        {
+            return ChooseSimpleAiBid(hand, null, SeatId.Top, Enumerable.Range(0, 14).ToList());
+        }
+
+        private static int ChooseSimpleAiBid(
+            IReadOnlyList<Card> hand,
+            MatchState state,
+            SeatId seat,
+            IReadOnlyList<int> legalBids = null)
         {
             return new SimpleAiAgent().ChooseBid(new AiBidContext
             {
+                Seat = seat,
+                MatchState = state,
                 Hand = hand,
-                LegalBids = Enumerable.Range(0, 14).ToList()
+                LegalBids = legalBids ?? Enumerable.Range(1, 13).ToList()
             });
         }
 
@@ -779,8 +1496,9 @@ namespace BackyardLegends.Tests
         private static void SetTeamContractProgress(MatchState state, SeatId seat, int teamBid, int teamBooks)
         {
             var partner = seat.Partner();
-            state.RoundState.BidState.BidsBySeat[seat] = teamBid;
-            state.RoundState.BidState.BidsBySeat[partner] = 0;
+            var partnerBid = teamBid > 1 ? 1 : 0;
+            state.RoundState.BidState.BidsBySeat[seat] = teamBid - partnerBid;
+            state.RoundState.BidState.BidsBySeat[partner] = partnerBid;
             state.RoundState.TricksWonBySeat[seat] = teamBooks;
             state.RoundState.TricksWonBySeat[partner] = 0;
             foreach (var other in SpadesSeatUtility.TurnOrder.Where(otherSeat => otherSeat.ToTeam() != seat.ToTeam()))
@@ -814,6 +1532,20 @@ namespace BackyardLegends.Tests
             return button;
         }
 
+        private static void InvokePrivate(object target, string methodName)
+        {
+            var method = target.GetType().GetMethod(methodName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null);
+            method.Invoke(target, null);
+        }
+
+        private static void SetPrivateField(object target, string fieldName, object value)
+        {
+            var field = target.GetType().GetField(fieldName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null);
+            field.SetValue(target, value);
+        }
+
         private static void SetClaimHands(RoundState round, int count)
         {
             round.HandsBySeat[SeatId.Bottom] = Enumerable.Range(2, count).Select(rank => new Card(Suit.Hearts, rank)).ToList();
@@ -822,18 +1554,18 @@ namespace BackyardLegends.Tests
             round.HandsBySeat[SeatId.Right] = Enumerable.Range(2, count).Select(rank => new Card(Suit.Spades, rank)).ToList();
         }
 
-        private static SpadesMatchController CreateController()
+        private static SpadesMatchController CreateController(int seed = 42, RuleSetDefinition rules = null)
         {
             return new SpadesMatchController(
-                RuleSetConfig.CreateClassic(100),
+                rules ?? RuleSetConfig.CreateClassic(100),
                 new SpadesRuleEngine(),
                 new Dictionary<SeatId, IAiAgent>
                 {
-                    { SeatId.Left, new SimpleAiAgent() },
-                    { SeatId.Top, new SimpleAiAgent() },
-                    { SeatId.Right, new SimpleAiAgent() }
+                    { SeatId.Left, new SimpleAiAgent(seed * 31 + 1) },
+                    { SeatId.Top, new SimpleAiAgent(seed * 31 + 2) },
+                    { SeatId.Right, new SimpleAiAgent(seed * 31 + 3) }
                 },
-                seed: 42);
+                seed: seed);
         }
 
         private static MatchState CreateScoringState(RuleSetDefinition rules = null)

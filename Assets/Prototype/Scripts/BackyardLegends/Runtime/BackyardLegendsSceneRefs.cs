@@ -60,7 +60,9 @@ namespace BackyardLegends.Runtime
         [Header("Buttons")]
         public Button BackButton;
         public Button ClaimTheRestButton;
+        public Button ForfeitMatchButton;
         public Button LeaveTableButton;
+        public Button SfxToggleButton;
         public Button CloseOptionsMenuButton;
         public Button NextRoundButton;
         public Button RematchButton;

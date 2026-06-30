@@ -30,6 +30,7 @@ namespace BackyardLegends.Runtime
         private const float OpeningDeckStackYOffset = -0.42f;
         private const string AvatarResourceRoot = "BackyardLegends/Avatars";
         private const string AvatarAssetFolder = "Assets/Prototype/Art/Update3/avatar";
+        public const string SfxMutedPlayerPrefsKey = "BackyardLegends.SfxMuted";
         private static readonly string[] CardPlaceAudioResourceNames =
         {
             "Card_Place_01",
@@ -290,6 +291,7 @@ namespace BackyardLegends.Runtime
         private bool optionsMenuOpen;
         private bool exitPromptOpen;
         private bool bidSheetWasVisible;
+        private bool sfxMuted;
         private bool spadesBrokenMomentShown;
         private float nextAvatarRouletteCueTime;
         private float nextTrashTalkPopupTime;
@@ -325,7 +327,8 @@ namespace BackyardLegends.Runtime
         {
             None,
             ReturnToLobby,
-            ClaimRest
+            ClaimRest,
+            ForfeitMatch
         }
 
         private sealed class AvatarIntroSeatState
@@ -718,29 +721,50 @@ namespace BackyardLegends.Runtime
 
             if (sceneRefs.OptionsMenuImage == null)
             {
-                sceneRefs.OptionsMenuImage = CreateRuntimePanel("Options Menu Runtime", AnimationRoot, new Vector2(0.04f, 0.61f), new Vector2(0.50f, 0.84f));
+                sceneRefs.OptionsMenuImage = CreateRuntimePanel("Options Menu Runtime", AnimationRoot, new Vector2(0.04f, 0.52f), new Vector2(0.52f, 0.86f));
             }
 
             sceneRefs.OptionsMenu = sceneRefs.OptionsMenuImage.rectTransform;
             if (sceneRefs.OptionsMenuTitleText == null)
             {
-                sceneRefs.OptionsMenuTitleText = CreateRuntimeText("Title", sceneRefs.OptionsMenu, "OPTIONS", 22, FontStyle.Bold, theme.gold, TextAnchor.MiddleCenter, new Vector2(0.08f, 0.78f), new Vector2(0.92f, 0.96f));
+                sceneRefs.OptionsMenuTitleText = CreateRuntimeText("Title", sceneRefs.OptionsMenu, "SETTINGS", 22, FontStyle.Bold, theme.gold, TextAnchor.MiddleCenter, new Vector2(0.08f, 0.82f), new Vector2(0.92f, 0.97f));
+            }
+            else
+            {
+                sceneRefs.OptionsMenuTitleText.text = "SETTINGS";
             }
 
             if (sceneRefs.ClaimTheRestButton == null)
             {
-                sceneRefs.ClaimTheRestButton = CreateRuntimeButton("Claim The Rest", sceneRefs.OptionsMenu, "CLAIM REST", theme.gold, new Vector2(0.08f, 0.53f), new Vector2(0.92f, 0.74f));
+                sceneRefs.ClaimTheRestButton = CreateRuntimeButton("Claim The Rest", sceneRefs.OptionsMenu, "CLAIM REST", theme.gold, new Vector2(0.08f, 0.62f), new Vector2(0.92f, 0.77f));
+            }
+
+            sceneRefs.ClaimTheRestButton.gameObject.SetActive(false);
+
+            if (sceneRefs.ForfeitMatchButton == null)
+            {
+                sceneRefs.ForfeitMatchButton = CreateRuntimeButton("Forfeit Match", sceneRefs.OptionsMenu, "FORFEIT MATCH", theme.red, new Vector2(0.08f, 0.60f), new Vector2(0.92f, 0.75f));
             }
 
             if (sceneRefs.LeaveTableButton == null)
             {
-                sceneRefs.LeaveTableButton = CreateRuntimeButton("Leave Table", sceneRefs.OptionsMenu, "LEAVE TABLE", theme.panelStroke, new Vector2(0.08f, 0.30f), new Vector2(0.92f, 0.51f));
+                sceneRefs.LeaveTableButton = CreateRuntimeButton("Leave Table", sceneRefs.OptionsMenu, "LEAVE TABLE", theme.panelStroke, new Vector2(0.08f, 0.42f), new Vector2(0.92f, 0.57f));
+            }
+
+            if (sceneRefs.SfxToggleButton == null)
+            {
+                sceneRefs.SfxToggleButton = CreateRuntimeButton("SFX Toggle", sceneRefs.OptionsMenu, "SFX: ON", theme.gold, new Vector2(0.08f, 0.24f), new Vector2(0.92f, 0.39f));
             }
 
             if (sceneRefs.CloseOptionsMenuButton == null)
             {
-                sceneRefs.CloseOptionsMenuButton = CreateRuntimeButton("Resume", sceneRefs.OptionsMenu, "RESUME", theme.green, new Vector2(0.08f, 0.07f), new Vector2(0.92f, 0.28f));
+                sceneRefs.CloseOptionsMenuButton = CreateRuntimeButton("Resume", sceneRefs.OptionsMenu, "RESUME", theme.green, new Vector2(0.08f, 0.06f), new Vector2(0.92f, 0.21f));
             }
+
+            SetButtonLabel(sceneRefs.ForfeitMatchButton, "FORFEIT MATCH");
+            SetButtonLabel(sceneRefs.LeaveTableButton, "LEAVE TABLE");
+            RenderSfxToggleLabel();
+            SetButtonLabel(sceneRefs.CloseOptionsMenuButton, "RESUME");
 
             SetSheetVisible(sceneRefs.OptionsMenu, false);
         }
@@ -1463,13 +1487,25 @@ namespace BackyardLegends.Runtime
             if (sceneRefs.ClaimTheRestButton != null)
             {
                 sceneRefs.ClaimTheRestButton.onClick.RemoveAllListeners();
-                sceneRefs.ClaimTheRestButton.onClick.AddListener(OpenClaimRestWarning);
+                sceneRefs.ClaimTheRestButton.gameObject.SetActive(false);
+            }
+
+            if (sceneRefs.ForfeitMatchButton != null)
+            {
+                sceneRefs.ForfeitMatchButton.onClick.RemoveAllListeners();
+                sceneRefs.ForfeitMatchButton.onClick.AddListener(OpenForfeitWarning);
             }
 
             if (sceneRefs.LeaveTableButton != null)
             {
                 sceneRefs.LeaveTableButton.onClick.RemoveAllListeners();
                 sceneRefs.LeaveTableButton.onClick.AddListener(OpenBackWarning);
+            }
+
+            if (sceneRefs.SfxToggleButton != null)
+            {
+                sceneRefs.SfxToggleButton.onClick.RemoveAllListeners();
+                sceneRefs.SfxToggleButton.onClick.AddListener(ToggleSfxMuted);
             }
 
             if (sceneRefs.CloseOptionsMenuButton != null)
@@ -1585,6 +1621,39 @@ namespace BackyardLegends.Runtime
             graffitiSprayClips = ResolveAudioClips(GraffitiSprayAudioResourceNames, null);
             spadesBrokenClips = ResolveAudioClips(SpadesBrokenAudioResourceNames, null);
             crowdReactionClips = ResolveAudioClips(CrowdReactionAudioResourceNames, null);
+            SetSfxMuted(PlayerPrefs.GetInt(SfxMutedPlayerPrefsKey, 0) == 1, false);
+        }
+
+        private void ToggleSfxMuted()
+        {
+            SetSfxMuted(!sfxMuted, true);
+            RenderOptionsMenu();
+            if (!sfxMuted)
+            {
+                PlayFeedback(FeedbackCue.Select, 0.12f);
+            }
+        }
+
+        private void SetSfxMuted(bool muted, bool persist)
+        {
+            sfxMuted = muted;
+            if (feedbackAudioSource != null)
+            {
+                feedbackAudioSource.mute = sfxMuted;
+            }
+
+            if (persist)
+            {
+                PlayerPrefs.SetInt(SfxMutedPlayerPrefsKey, sfxMuted ? 1 : 0);
+                PlayerPrefs.Save();
+            }
+
+            RenderSfxToggleLabel();
+        }
+
+        private void RenderSfxToggleLabel()
+        {
+            SetButtonLabel(sceneRefs != null ? sceneRefs.SfxToggleButton : null, sfxMuted ? "SFX: OFF" : "SFX: ON");
         }
 
         private static AudioClip ResolveFeedbackClip(AudioClip overrideClip, string resourceName, System.Func<AudioClip> fallbackFactory)
@@ -1681,7 +1750,7 @@ namespace BackyardLegends.Runtime
 
         private void PlayFeedback(FeedbackCue cue, float volumeScale = 1f)
         {
-            if (feedbackAudioSource == null)
+            if (feedbackAudioSource == null || sfxMuted)
             {
                 return;
             }
@@ -1712,7 +1781,7 @@ namespace BackyardLegends.Runtime
 
         private void PlayRandomCardPlaceSound()
         {
-            if (feedbackAudioSource == null)
+            if (feedbackAudioSource == null || sfxMuted)
             {
                 return;
             }
@@ -1743,7 +1812,7 @@ namespace BackyardLegends.Runtime
 
         private void PlaySetBookSound()
         {
-            if (feedbackAudioSource == null)
+            if (feedbackAudioSource == null || sfxMuted)
             {
                 return;
             }
@@ -1772,7 +1841,7 @@ namespace BackyardLegends.Runtime
 
         private void PlayBookWonSound()
         {
-            if (feedbackAudioSource == null)
+            if (feedbackAudioSource == null || sfxMuted)
             {
                 return;
             }
@@ -1797,7 +1866,7 @@ namespace BackyardLegends.Runtime
 
         private void PlayTableSlamSound()
         {
-            if (feedbackAudioSource == null)
+            if (feedbackAudioSource == null || sfxMuted)
             {
                 return;
             }
@@ -1821,7 +1890,7 @@ namespace BackyardLegends.Runtime
 
         private void PlayGraffitiSpraySound()
         {
-            if (feedbackAudioSource == null)
+            if (feedbackAudioSource == null || sfxMuted)
             {
                 return;
             }
@@ -1838,7 +1907,7 @@ namespace BackyardLegends.Runtime
 
         private void PlaySpadesBrokenSound()
         {
-            if (feedbackAudioSource == null)
+            if (feedbackAudioSource == null || sfxMuted)
             {
                 return;
             }
@@ -1855,7 +1924,7 @@ namespace BackyardLegends.Runtime
 
         private void TryPlayCrowdReaction(float chance, float volumeScale, float delaySeconds = 0f, bool ignoreCooldown = false)
         {
-            if (feedbackAudioSource == null || Random.value > chance)
+            if (feedbackAudioSource == null || sfxMuted || Random.value > chance)
             {
                 return;
             }
@@ -1883,7 +1952,7 @@ namespace BackyardLegends.Runtime
 
         private void PlayCrowdReactionNow(float volumeScale)
         {
-            if (feedbackAudioSource == null)
+            if (feedbackAudioSource == null || sfxMuted)
             {
                 return;
             }
@@ -2032,7 +2101,9 @@ namespace BackyardLegends.Runtime
             TintButtonIfNotScoreboard(sceneRefs.RematchButton, theme.green);
             TintButton(sceneRefs.BackButton, theme.panelStroke);
             TintButton(sceneRefs.ClaimTheRestButton, theme.gold);
+            TintButton(sceneRefs.ForfeitMatchButton, theme.red);
             TintButton(sceneRefs.LeaveTableButton, theme.panelStroke);
+            TintButton(sceneRefs.SfxToggleButton, theme.gold);
             TintButton(sceneRefs.CloseOptionsMenuButton, theme.green);
             TintButtonIfNotScoreboard(sceneRefs.ReturnToLobbyButton, theme.panelStroke);
             TintButton(sceneRefs.DealButton, theme.green);
@@ -2191,6 +2262,12 @@ namespace BackyardLegends.Runtime
                     pendingRoundSheetOpen = true;
                     pendingEndSheetOpen = false;
                     ScheduleDeferredSheetState();
+                    break;
+                case MatchForfeitedEvent forfeited:
+                    AddFeedMessage(forfeited.ForfeitingTeam == TeamId.Home
+                        ? "Home team forfeited. Rivals win the match."
+                        : "Rivals forfeited. Home team wins the match.");
+                    ShowBanner("FORFEIT", theme.red);
                     break;
                 case MatchEndedEvent ended:
                     if (sceneRefs.EndSummaryText != null)
@@ -2555,6 +2632,7 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
+            BindScoreboardActions(view);
             view.Render(controller.State, selectedRule ?? controller.State.RuleSet, matchComplete, winningTeam);
         }
 
@@ -2952,17 +3030,23 @@ namespace BackyardLegends.Runtime
                 sceneRefs.OptionsMenu.SetAsLastSibling();
             }
 
-            if (sceneRefs.ClaimTheRestButton == null)
+            if (sceneRefs.ClaimTheRestButton != null)
             {
-                return;
+                sceneRefs.ClaimTheRestButton.gameObject.SetActive(false);
             }
 
-            var canClaim = CanClaimRemainingBooks();
-            sceneRefs.ClaimTheRestButton.interactable = canClaim;
-            if (sceneRefs.ClaimTheRestButton.image != null)
+            if (sceneRefs.ForfeitMatchButton != null)
             {
-                sceneRefs.ClaimTheRestButton.image.color = canClaim ? theme.gold : new Color(0.35f, 0.36f, 0.38f, 0.92f);
+                var canForfeit = CanForfeitMatch();
+                sceneRefs.ForfeitMatchButton.gameObject.SetActive(canForfeit);
+                sceneRefs.ForfeitMatchButton.interactable = canForfeit;
+                if (sceneRefs.ForfeitMatchButton.image != null)
+                {
+                    sceneRefs.ForfeitMatchButton.image.color = canForfeit ? theme.red : new Color(0.35f, 0.36f, 0.38f, 0.92f);
+                }
             }
+
+            RenderSfxToggleLabel();
         }
 
         private void SelectBid(int bid)
@@ -3087,6 +3171,13 @@ namespace BackyardLegends.Runtime
                    !bidTurnDelayPending &&
                    !HasVisualMotionPending &&
                    controller.GetRemainingBookCount() > 0;
+        }
+
+        private bool CanForfeitMatch()
+        {
+            return controller != null &&
+                   (controller.State.Phase == MatchPhase.Bidding ||
+                    controller.State.Phase == MatchPhase.TrickPlay);
         }
 
         private void OnDealPressed()
@@ -7885,6 +7976,56 @@ namespace BackyardLegends.Runtime
             SpawnImpactBurst(GetAnchoredPoint(sceneRefs.ExitPromptOverlay, new Vector2(0.5f, 0.5f)), theme.red, 32f, 4);
         }
 
+        private void OpenForfeitWarning()
+        {
+            if (!CanForfeitMatch())
+            {
+                PlayFeedback(FeedbackCue.Invalid, 0.16f);
+                FlashStatus("Forfeit is only available during an active hand.", theme.red);
+                RenderOptionsMenu();
+                return;
+            }
+
+            if (sceneRefs.ExitPromptOverlay == null)
+            {
+                ConfirmForfeitMatch();
+                return;
+            }
+
+            if (exitPromptOpen)
+            {
+                return;
+            }
+
+            CloseOptionsMenu(false);
+            activePrompt = ConfirmationPromptType.ForfeitMatch;
+            exitPromptOpen = true;
+            if (aiLoop != null)
+            {
+                StopCoroutine(aiLoop);
+                aiLoop = null;
+            }
+
+            if (sceneRefs.ExitPromptTitleText != null)
+            {
+                sceneRefs.ExitPromptTitleText.text = "FORFEIT MATCH?";
+            }
+
+            if (sceneRefs.ExitPromptBodyText != null)
+            {
+                sceneRefs.ExitPromptBodyText.text = "Your team will concede this match and the opponent will be marked as the winner.";
+            }
+
+            SetButtonLabel(sceneRefs.ExitPromptCancelButton, "KEEP PLAYING");
+            SetButtonLabel(sceneRefs.ExitPromptConfirmButton, "FORFEIT");
+            TintButton(sceneRefs.ExitPromptCancelButton, theme.green);
+            TintButton(sceneRefs.ExitPromptConfirmButton, theme.red);
+            sceneRefs.ExitPromptOverlay.SetAsLastSibling();
+            StartExitPromptVisibility(true);
+            PlayFeedback(FeedbackCue.Select, 0.16f);
+            SpawnImpactBurst(GetAnchoredPoint(sceneRefs.ExitPromptOverlay, new Vector2(0.5f, 0.5f)), theme.red, 32f, 4);
+        }
+
         private void OpenClaimRestWarning()
         {
             if (!CanClaimRemainingBooks())
@@ -7955,6 +8096,9 @@ namespace BackyardLegends.Runtime
                 case ConfirmationPromptType.ClaimRest:
                     ConfirmClaimRest();
                     break;
+                case ConfirmationPromptType.ForfeitMatch:
+                    ConfirmForfeitMatch();
+                    break;
                 case ConfirmationPromptType.ReturnToLobby:
                     exitPromptOpen = false;
                     activePrompt = ConfirmationPromptType.None;
@@ -7966,11 +8110,44 @@ namespace BackyardLegends.Runtime
             }
         }
 
+        private void ConfirmForfeitMatch()
+        {
+            exitPromptOpen = false;
+            activePrompt = ConfirmationPromptType.None;
+            StartExitPromptVisibility(false, ForfeitMatch);
+        }
+
         private void ConfirmClaimRest()
         {
             exitPromptOpen = false;
             activePrompt = ConfirmationPromptType.None;
             StartExitPromptVisibility(false, ClaimRemainingBooks);
+        }
+
+        private void ForfeitMatch()
+        {
+            if (controller == null)
+            {
+                ScheduleAiLoop();
+                return;
+            }
+
+            Time.timeScale = 1f;
+            selectedCard = null;
+            pendingBidSelection = null;
+            lastRenderedHand.Clear();
+            ClearTransientMotionState(true);
+            SetBidSheetVisible(false);
+            SetSheetVisible(sceneRefs.OptionsMenu, false);
+            if (!controller.TryForfeitMatch(TeamId.Home, out var error))
+            {
+                PlayFeedback(FeedbackCue.Invalid, 0.18f);
+                FlashStatus(error, theme.red);
+                ScheduleAiLoop();
+                return;
+            }
+
+            RenderAll();
         }
 
         private void ClaimRemainingBooks()
@@ -8691,10 +8868,10 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
-            var text = button.GetComponentInChildren<Text>();
-            if (text != null)
+            var texts = button.GetComponentsInChildren<Text>(true);
+            for (var i = 0; i < texts.Length; i++)
             {
-                text.text = label;
+                texts[i].text = label;
             }
         }
 

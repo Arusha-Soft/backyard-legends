@@ -97,6 +97,18 @@ namespace BackyardLegends.Core
         public TeamId WinningTeam { get; }
     }
 
+    public sealed class MatchForfeitedEvent : SpadesMatchEvent
+    {
+        public MatchForfeitedEvent(MatchState snapshot, TeamId forfeitingTeam, TeamId winningTeam) : base(snapshot)
+        {
+            ForfeitingTeam = forfeitingTeam;
+            WinningTeam = winningTeam;
+        }
+
+        public TeamId ForfeitingTeam { get; }
+        public TeamId WinningTeam { get; }
+    }
+
     public sealed class SetBookReachedEvent : SpadesMatchEvent
     {
         public SetBookReachedEvent(MatchState snapshot, TeamId team) : base(snapshot)
