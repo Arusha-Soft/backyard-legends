@@ -215,8 +215,6 @@ namespace BackyardLegends.Runtime
         private Coroutine deferredSheetStateLoop;
         private Coroutine bannerLoop;
         private Coroutine flashLoop;
-        private Coroutine homeDeltaLoop;
-        private Coroutine awayDeltaLoop;
         private Coroutine dealButtonFadeLoop;
         private Coroutine handReviewLoop;
         private Coroutine bidTurnDelayLoop;
@@ -516,6 +514,7 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
+            DisableCompletionSheetEntryAnimations();
             ResolveVisibleAnimationRoot();
             EnsureRuntimeOpeningWidgets();
             EnsureRuntimeBackNavigationWidgets();
@@ -1067,8 +1066,6 @@ namespace BackyardLegends.Runtime
             deferredSheetStateLoop = null;
             bannerLoop = null;
             flashLoop = null;
-            homeDeltaLoop = null;
-            awayDeltaLoop = null;
             dealButtonFadeLoop = null;
             handReviewLoop = null;
             bidTurnDelayLoop = null;
@@ -1579,6 +1576,42 @@ namespace BackyardLegends.Runtime
             }
 
             scoreboardView.BindActions(null, StartNextHandFromScoreboard, StartConfiguredMatch, OpenBackWarning);
+        }
+
+        private void DisableCompletionSheetEntryAnimations()
+        {
+            DisableCompletionSheetEntryAnimations(sceneRefs.RoundSheet);
+            DisableCompletionSheetEntryAnimations(sceneRefs.EndSheet);
+        }
+
+        private static void DisableCompletionSheetEntryAnimations(RectTransform sheet)
+        {
+            if (sheet == null)
+            {
+                return;
+            }
+
+            var behaviours = sheet.GetComponentsInChildren<MonoBehaviour>(true);
+            for (var i = 0; i < behaviours.Length; i++)
+            {
+                var behaviour = behaviours[i];
+                if (behaviour == null)
+                {
+                    continue;
+                }
+
+                var type = behaviour.GetType();
+                if (type.FullName != "JuiceUp.UiJuiceAnimator")
+                {
+                    continue;
+                }
+
+                type.GetMethod("Stop", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+                    ?.Invoke(behaviour, null);
+                type.GetField("autoPlayOnEnable", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+                    ?.SetValue(behaviour, false);
+                behaviour.enabled = false;
+            }
         }
 
         private void StartNextHandFromScoreboard()
@@ -6929,6 +6962,7 @@ namespace BackyardLegends.Runtime
                 pendingRoundSheetOpen = false;
                 ClearPlayerScoreOverlayFx();
                 SetSheetVisible(sceneRefs.RoundSheet, false);
+                DisableCompletionSheetEntryAnimations(sceneRefs.EndSheet);
                 SetSheetVisible(sceneRefs.EndSheet, true);
                 return;
             }
@@ -6940,8 +6974,7 @@ namespace BackyardLegends.Runtime
 
             pendingRoundSheetOpen = false;
             ClearPlayerScoreOverlayFx();
-            AnimateScoreDelta(TeamId.Home);
-            AnimateScoreDelta(TeamId.Away);
+            DisableCompletionSheetEntryAnimations(sceneRefs.RoundSheet);
             SetSheetVisible(sceneRefs.RoundSheet, true);
         }
 
@@ -8422,47 +8455,6 @@ namespace BackyardLegends.Runtime
             label.alignment = TextAnchor.MiddleCenter;
             label.horizontalOverflow = HorizontalWrapMode.Wrap;
             label.verticalOverflow = VerticalWrapMode.Truncate;
-        }
-
-        private void AnimateScoreDelta(TeamId team)
-        {
-            var score = controller.State.Scores[team];
-            var delta = score.RoundDelta + score.NilDelta;
-            if (delta == 0)
-            {
-                return;
-            }
-
-            var target = team == TeamId.Home ? sceneRefs.HomeDeltaText : sceneRefs.AwayDeltaText;
-            target.text = delta > 0 ? $"+{delta}" : delta.ToString();
-            target.color = delta > 0 ? theme.green : theme.red;
-
-            if (team == TeamId.Home && homeDeltaLoop != null)
-            {
-                StopCoroutine(homeDeltaLoop);
-            }
-
-            if (team == TeamId.Away && awayDeltaLoop != null)
-            {
-                StopCoroutine(awayDeltaLoop);
-            }
-
-            var routine = StartCoroutine(ScoreDeltaRoutine(target));
-            if (team == TeamId.Home)
-            {
-                homeDeltaLoop = routine;
-            }
-            else
-            {
-                awayDeltaLoop = routine;
-            }
-        }
-
-        private IEnumerator ScoreDeltaRoutine(Text target)
-        {
-            target.CrossFadeAlpha(1f, 0.08f, true);
-            yield return new WaitForSecondsRealtime(1.15f);
-            target.CrossFadeAlpha(0f, 0.3f, true);
         }
 
         private string BuildRoundSummaryText()
