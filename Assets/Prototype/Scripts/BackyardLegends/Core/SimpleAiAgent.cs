@@ -12,6 +12,7 @@ namespace BackyardLegends.Core
     public sealed class AiBidContext
     {
         public SeatId Seat;
+        public SeatId HumanSeat = SeatId.Bottom;
         public MatchState MatchState;
         public IReadOnlyList<Card> Hand;
         public IReadOnlyList<int> LegalBids;
@@ -51,12 +52,7 @@ namespace BackyardLegends.Core
             }
 
             var adjustedTricks = ApplyRiskyBidStretch(context, AdjustBidForContext(context, estimatedTricks));
-            var closest = context.LegalBids
-                .Where(bid => bid > 0)
-                .OrderBy(bid => System.Math.Abs(bid - adjustedTricks))
-                .ThenByDescending(bid => bid)
-                .First();
-            return closest;
+            return ChooseClosestPlausibleBid(context, adjustedTricks);
         }
 
         public Card ChooseCard(AiPlayContext context)
@@ -707,6 +703,79 @@ namespace BackyardLegends.Core
             var submittedBids = context.MatchState.RoundState.BidState.BidsBySeat
                 .Count(entry => entry.Key != context.Seat && entry.Value.HasValue);
             return submittedBids >= 3;
+        }
+
+        private static int ChooseClosestPlausibleBid(AiBidContext context, int desiredBid)
+        {
+            var legalBids = context.LegalBids
+                .Where(bid => bid > 0)
+                .ToList();
+            var plausibleBids = legalBids
+                .Where(bid => KeepsTableBidPlausible(context, bid))
+                .ToList();
+            var candidates = plausibleBids.Count > 0 ? plausibleBids : legalBids;
+
+            return candidates
+                .OrderBy(bid => System.Math.Abs(bid - desiredBid))
+                .ThenByDescending(bid => bid)
+                .First();
+        }
+
+        private static bool KeepsTableBidPlausible(AiBidContext context, int bid)
+        {
+            var state = context.MatchState;
+            var round = state?.RoundState;
+            if (round?.BidState?.BidsBySeat == null)
+            {
+                return true;
+            }
+
+            var maxTableBid = state.RuleSet?.MaxBid ?? 13;
+            var knownTableBid = round.BidState.BidsBySeat
+                .Where(entry => entry.Key != context.Seat && entry.Value.HasValue)
+                .Sum(entry => entry.Value ?? 0);
+            var projectedTableBid = knownTableBid + bid;
+            if (projectedTableBid > maxTableBid)
+            {
+                return false;
+            }
+
+            var futureBidReserve = 0;
+            foreach (var seat in SpadesSeatUtility.TurnOrder)
+            {
+                if (seat == context.Seat ||
+                    !round.BidState.BidsBySeat.TryGetValue(seat, out var seatBid) ||
+                    seatBid.HasValue)
+                {
+                    continue;
+                }
+
+                futureBidReserve += GetFutureBidReserve(context, seat, bid);
+            }
+
+            return projectedTableBid + futureBidReserve <= maxTableBid;
+        }
+
+        private static int GetFutureBidReserve(AiBidContext context, SeatId futureSeat, int currentBid)
+        {
+            var rules = context.MatchState?.RuleSet;
+            if (futureSeat == context.HumanSeat)
+            {
+                // The human seat bids last, so AI leaves a normal player call available.
+                return System.Math.Max(1, rules?.MinimumTeamBid ?? 4);
+            }
+
+            var partner = futureSeat.Partner();
+            int? partnerBid = partner == context.Seat
+                ? currentBid
+                : GetBid(context.MatchState, partner);
+            if (!partnerBid.HasValue)
+            {
+                return 1;
+            }
+
+            var minimumTeamBid = rules?.MinimumTeamBid ?? 4;
+            return System.Math.Max(1, minimumTeamBid - partnerBid.Value);
         }
 
         private static int? GetBid(MatchState state, SeatId seat)

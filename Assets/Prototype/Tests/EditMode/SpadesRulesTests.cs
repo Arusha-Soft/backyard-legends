@@ -327,11 +327,10 @@ namespace BackyardLegends.Tests
         }
 
         [Test]
-        public void SimpleAiControllerDealsProduceCompetitiveTableBids()
+        public void SimpleAiControllerDealsProducePlausibleCompetitiveTableBids()
         {
             var totalAiBid = 0d;
-            var lowBidCount = 0;
-            var threeOrLessCount = 0;
+            var totalTableBid = 0d;
             var aiBidCount = 0;
             const int dealCount = 80;
 
@@ -359,21 +358,47 @@ namespace BackyardLegends.Tests
                     Assert.That(bid.HasValue, Is.True);
                     totalAiBid += bid.Value;
                     aiBidCount++;
-                    if (bid.Value <= 2)
-                    {
-                        lowBidCount++;
-                    }
-
-                    if (bid.Value <= 3)
-                    {
-                        threeOrLessCount++;
-                    }
                 }
+
+                var tableBid = controller.State.RoundState.BidState.BidsBySeat.Values.Sum(bid => bid ?? 0);
+                Assert.That(tableBid, Is.LessThanOrEqualTo(controller.State.RuleSet.MaxBid));
+                totalTableBid += tableBid;
             }
 
-            Assert.That(totalAiBid / aiBidCount, Is.GreaterThanOrEqualTo(3.9d));
-            Assert.That(lowBidCount, Is.LessThanOrEqualTo(aiBidCount * 0.13d));
-            Assert.That(threeOrLessCount, Is.LessThanOrEqualTo(aiBidCount * 0.38d));
+            Assert.That(totalAiBid / aiBidCount, Is.GreaterThanOrEqualTo(2.6d));
+            Assert.That(totalTableBid / dealCount, Is.GreaterThanOrEqualTo(12d));
+        }
+
+        [Test]
+        public void SimpleAiCapsLateBidToLeaveRoomForHumanBid()
+        {
+            var state = CreateScoringState();
+            state.RoundState.BidState.BidsBySeat[SeatId.Bottom] = null;
+            state.RoundState.BidState.BidsBySeat[SeatId.Left] = 4;
+            state.RoundState.BidState.BidsBySeat[SeatId.Top] = 4;
+            state.RoundState.BidState.BidsBySeat[SeatId.Right] = null;
+
+            var bid = ChooseSimpleAiBid(
+                new List<Card>
+                {
+                    new(Suit.Spades, 14),
+                    new(Suit.Spades, 13),
+                    new(Suit.Spades, 12),
+                    new(Suit.Spades, 11),
+                    new(Suit.Spades, 10),
+                    new(Suit.Spades, 9),
+                    new(Suit.Spades, 8),
+                    new(Suit.Hearts, 14),
+                    new(Suit.Hearts, 13),
+                    new(Suit.Clubs, 14),
+                    new(Suit.Clubs, 13),
+                    new(Suit.Diamonds, 14),
+                    new(Suit.Diamonds, 13)
+                },
+                state,
+                SeatId.Right);
+
+            Assert.That(bid, Is.EqualTo(1));
         }
 
         [Test]

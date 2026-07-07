@@ -258,6 +258,7 @@ namespace BackyardLegends.Core
                 var context = new AiBidContext
                 {
                     Seat = seat,
+                    HumanSeat = HumanSeat,
                     MatchState = CreateSnapshot(),
                     Hand = GetHand(seat),
                     LegalBids = GetLegalBidsForSeat(seat)
