@@ -102,6 +102,7 @@ namespace BackyardLegends.Runtime
         private const float TrashTalkStrongCardChance = 0.07f;
         private const float TrashTalkBigBookChance = 0.16f;
         private const float TrashTalkSpadesBrokenChance = 0.32f;
+        private const float TeamPlayFxCooldownSeconds = 0.82f;
         private static readonly Vector2 BidCalloutAnchorMin = new(0.08f, 1.00f);
         private static readonly Vector2 BidCalloutAnchorMax = new(0.92f, 1.42f);
         private static readonly string[] AvatarDisplayNames =
@@ -311,6 +312,7 @@ namespace BackyardLegends.Runtime
         private float nextAvatarRouletteCueTime;
         private float nextTrashTalkPopupTime;
         private float nextCrowdReactionTime;
+        private float nextTeamPlayFxTime;
 #if UNITY_EDITOR
         private float editorDefaultFixedDeltaTime;
 #endif
@@ -425,6 +427,22 @@ namespace BackyardLegends.Runtime
             public Vector2 Size { get; }
             public Quaternion Rotation { get; }
             public Vector3 Scale { get; }
+        }
+
+        private readonly struct TeamPlayMoment
+        {
+            public TeamPlayMoment(string label, string detail, Color accent, bool major)
+            {
+                Label = label;
+                Detail = detail;
+                Accent = accent;
+                Major = major;
+            }
+
+            public string Label { get; }
+            public string Detail { get; }
+            public Color Accent { get; }
+            public bool Major { get; }
         }
 
         private readonly struct CardVisualState
@@ -2269,6 +2287,11 @@ namespace BackyardLegends.Runtime
                 case BidSubmittedEvent bidEvent:
                     AddFeedMessage($"{controller.State.SeatNames[bidEvent.Seat]} called {(bidEvent.Bid == 0 ? "Nil" : bidEvent.Bid.ToString())}.");
                     ShowBidCallout(bidEvent.Seat, bidEvent.Bid);
+                    if (TryResolveBidTeamPlayMoment(bidEvent, out var bidMoment))
+                    {
+                        SpawnTeamPlayMomentFx(bidEvent.Seat, bidMoment, true);
+                    }
+
                     PlayFeedback(FeedbackCue.Bid, 0.22f);
                     if (controller.State.Phase == MatchPhase.Bidding)
                     {
@@ -2279,17 +2302,19 @@ namespace BackyardLegends.Runtime
                 case CardPlayedEvent playedEvent:
                     AddFeedMessage($"{controller.State.SeatNames[playedEvent.Seat]} dropped {playedEvent.Card.ShortLabel}.");
                     var triggerSpadesBrokenMoment = ShouldTriggerSpadesBrokenMoment(playedEvent);
+                    var teamPlayMoment = ResolveCardTeamPlayMoment(playedEvent);
                     if (triggerSpadesBrokenMoment)
                     {
                         spadesBrokenMomentShown = true;
                         AddFeedMessage("Street rules changed. Spades are broken.");
                     }
 
-                    QueueCardPlayAnimation(playedEvent, triggerSpadesBrokenMoment);
+                    QueueCardPlayAnimation(playedEvent, triggerSpadesBrokenMoment, teamPlayMoment);
                     break;
                 case TrickResolvedEvent trickEvent:
                     AddFeedMessage($"{controller.State.SeatNames[trickEvent.Winner]} took the hand.");
-                    QueueTrickCollectionAnimation(trickEvent);
+                    var trickTeamMoment = ResolveTrickTeamPlayMoment(trickEvent);
+                    QueueTrickCollectionAnimation(trickEvent, trickTeamMoment);
                     break;
                 case SetBookReachedEvent setBook:
                     QueueSetBookMoment(setBook.Team);
@@ -4696,13 +4721,184 @@ namespace BackyardLegends.Runtime
             return selectedRule.SpadesMustBeBroken && !selectedRule.AllowSpadesAnytime;
         }
 
-        private void QueueCardPlayAnimation(CardPlayedEvent playedEvent, bool triggerSpadesBrokenMoment)
+        private bool TryResolveBidTeamPlayMoment(BidSubmittedEvent bidEvent, out TeamPlayMoment moment)
         {
-            hiddenTrickSlots.Add(playedEvent.Seat);
-            EnqueueAnimation(AnimateCardPlayRoutine(BuildCardPlayMotion(playedEvent.Seat, playedEvent.Card), triggerSpadesBrokenMoment));
+            moment = default;
+            if (bidEvent == null || bidEvent.Bid <= 0)
+            {
+                return false;
+            }
+
+            if (!TryGetSubmittedBid(bidEvent.Snapshot, bidEvent.Seat.Partner(), out var partnerBid))
+            {
+                return false;
+            }
+
+            var accent = ResolveTeamPlayColor(bidEvent.Seat.ToTeam(), true);
+            if (partnerBid == 0)
+            {
+                moment = new TeamPlayMoment("COVER BID", "Nil partner protected", accent, true);
+                return true;
+            }
+
+            var minimumTeamBid = bidEvent.Snapshot?.RuleSet?.MinimumTeamBid ?? 4;
+            if (partnerBid <= 1 && partnerBid + bidEvent.Bid >= minimumTeamBid)
+            {
+                moment = new TeamPlayMoment("BID SUPPORT", "Team contract covered", ResolveTeamPlayColor(bidEvent.Seat.ToTeam(), false), false);
+                return true;
+            }
+
+            return false;
         }
 
-        private void QueueTrickCollectionAnimation(TrickResolvedEvent trickEvent)
+        private TeamPlayMoment? ResolveCardTeamPlayMoment(CardPlayedEvent playedEvent)
+        {
+            var state = playedEvent?.Snapshot;
+            var round = state?.RoundState;
+            var trick = round?.TrickState;
+            if (trick?.Plays == null || trick.Plays.Count < 2)
+            {
+                return null;
+            }
+
+            var lastPlay = trick.Plays[trick.Plays.Count - 1];
+            if (lastPlay.Seat != playedEvent.Seat || !lastPlay.Card.Equals(playedEvent.Card))
+            {
+                return null;
+            }
+
+            var partner = playedEvent.Seat.Partner();
+            if (!TryGetSubmittedBid(state, partner, out var partnerBid) || partnerBid != 0)
+            {
+                return null;
+            }
+
+            var priorPlays = trick.Plays.Take(trick.Plays.Count - 1).ToList();
+            if (!TryResolveTrickWinner(priorPlays, trick.LeadSuit, out var priorWinner) ||
+                priorWinner != partner ||
+                !TryResolveTrickWinner(trick.Plays, trick.LeadSuit, out var currentWinner) ||
+                currentWinner == partner)
+            {
+                return null;
+            }
+
+            return new TeamPlayMoment("NIL PROTECTED", "Partner stayed clean", ResolveTeamPlayColor(playedEvent.Seat.ToTeam(), true), true);
+        }
+
+        private TeamPlayMoment? ResolveTrickTeamPlayMoment(TrickResolvedEvent trickEvent)
+        {
+            var state = trickEvent?.Snapshot;
+            var round = state?.RoundState;
+            if (round?.TricksWonBySeat == null || trickEvent.CompletedTrick == null || trickEvent.CompletedTrick.Count == 0)
+            {
+                return null;
+            }
+
+            var team = trickEvent.Winner.ToTeam();
+            var nilPartnerPlay = trickEvent.CompletedTrick.FirstOrDefault(play =>
+                play.Seat.ToTeam() == team &&
+                play.Seat != trickEvent.Winner &&
+                TryGetSubmittedBid(state, play.Seat, out var nilBid) &&
+                nilBid == 0);
+            if (nilPartnerPlay != null &&
+                round.TricksWonBySeat.TryGetValue(nilPartnerPlay.Seat, out var nilBooks) &&
+                nilBooks == 0)
+            {
+                return new TeamPlayMoment("NIL SAFE", "Partner covered the table", ResolveTeamPlayColor(team, true), true);
+            }
+
+            var teamBid = GetSubmittedTeamBid(state, team);
+            if (teamBid <= 0)
+            {
+                return null;
+            }
+
+            var teamBooksAfter = GetTeamBooks(round, team);
+            var teamBooksBefore = Mathf.Max(0, teamBooksAfter - 1);
+            if (teamBooksBefore >= teamBid)
+            {
+                return null;
+            }
+
+            if (teamBooksAfter >= teamBid)
+            {
+                return new TeamPlayMoment("BID MADE", "Contract secured", ResolveTeamPlayColor(team, true), true);
+            }
+
+            if (teamBid >= 3 && teamBooksAfter == teamBid - 1)
+            {
+                return new TeamPlayMoment("ONE TO GO", "Partner push", ResolveTeamPlayColor(team, false), false);
+            }
+
+            return null;
+        }
+
+        private static bool TryGetSubmittedBid(MatchState state, SeatId seat, out int bid)
+        {
+            bid = 0;
+            if (state?.RoundState?.BidState?.BidsBySeat == null ||
+                !state.RoundState.BidState.BidsBySeat.TryGetValue(seat, out var bidValue) ||
+                !bidValue.HasValue)
+            {
+                return false;
+            }
+
+            bid = bidValue.Value;
+            return true;
+        }
+
+        private static int GetSubmittedTeamBid(MatchState state, TeamId team)
+        {
+            if (state?.RoundState?.BidState?.BidsBySeat == null)
+            {
+                return 0;
+            }
+
+            return state.RoundState.BidState.BidsBySeat
+                .Where(entry => entry.Key.ToTeam() == team && entry.Value.HasValue)
+                .Sum(entry => entry.Value.Value);
+        }
+
+        private static int GetTeamBooks(RoundState round, TeamId team)
+        {
+            if (round?.TricksWonBySeat == null)
+            {
+                return 0;
+            }
+
+            return round.TricksWonBySeat
+                .Where(entry => entry.Key.ToTeam() == team)
+                .Sum(entry => entry.Value);
+        }
+
+        private bool TryResolveTrickWinner(IReadOnlyList<TrickPlay> plays, Suit? leadSuit, out SeatId winner)
+        {
+            winner = SeatId.Bottom;
+            if (plays == null || plays.Count == 0)
+            {
+                return false;
+            }
+
+            var trick = new TrickState
+            {
+                LeadSuit = leadSuit
+            };
+            foreach (var play in plays)
+            {
+                trick.Plays.Add(new TrickPlay { Seat = play.Seat, Card = play.Card });
+            }
+
+            winner = (ruleEngine ?? new SpadesRuleEngine()).ResolveTrickWinner(trick);
+            return true;
+        }
+
+        private void QueueCardPlayAnimation(CardPlayedEvent playedEvent, bool triggerSpadesBrokenMoment, TeamPlayMoment? teamPlayMoment)
+        {
+            hiddenTrickSlots.Add(playedEvent.Seat);
+            EnqueueAnimation(AnimateCardPlayRoutine(BuildCardPlayMotion(playedEvent.Seat, playedEvent.Card), triggerSpadesBrokenMoment, teamPlayMoment));
+        }
+
+        private void QueueTrickCollectionAnimation(TrickResolvedEvent trickEvent, TeamPlayMoment? teamPlayMoment)
         {
             resolvedTrickCards.Clear();
             foreach (var play in trickEvent.CompletedTrick)
@@ -4714,7 +4910,7 @@ namespace BackyardLegends.Runtime
             var motions = trickEvent.CompletedTrick
                 .Select((play, index) => BuildTrickCollectMotion(play, trickEvent.Winner, index, bigBook))
                 .ToList();
-            EnqueueAnimation(AnimateTrickCollectRoutine(trickEvent.Winner, motions, bigBook));
+            EnqueueAnimation(AnimateTrickCollectRoutine(trickEvent.Winner, motions, bigBook, teamPlayMoment));
         }
 
         private void EnqueueAnimation(IEnumerator animation)
@@ -4750,7 +4946,7 @@ namespace BackyardLegends.Runtime
             ScheduleAiLoop();
         }
 
-        private IEnumerator AnimateCardPlayRoutine(CardMotionSnapshot motion, bool triggerSpadesBrokenMoment)
+        private IEnumerator AnimateCardPlayRoutine(CardMotionSnapshot motion, bool triggerSpadesBrokenMoment, TeamPlayMoment? teamPlayMoment)
         {
             var ghost = CreateFloatingCard(motion);
             yield return AnimateStreetCardPlay(
@@ -4774,10 +4970,15 @@ namespace BackyardLegends.Runtime
                 TrySpawnTrashTalkPopup(motion, null, TrashTalkStrongCardChance);
             }
 
+            if (teamPlayMoment.HasValue)
+            {
+                SpawnTeamPlayMomentFx(motion, teamPlayMoment.Value);
+            }
+
             yield return PulseRect(trickSlots[motion.Seat].Root, 1.06f, Mathf.Max(0.12f, theme.pulseDuration * 0.75f));
         }
 
-        private IEnumerator AnimateTrickCollectRoutine(SeatId winner, IReadOnlyList<CardMotionSnapshot> motions, bool bigBook)
+        private IEnumerator AnimateTrickCollectRoutine(SeatId winner, IReadOnlyList<CardMotionSnapshot> motions, bool bigBook, TeamPlayMoment? teamPlayMoment)
         {
             if (motions == null || motions.Count == 0)
             {
@@ -4857,6 +5058,11 @@ namespace BackyardLegends.Runtime
 
             TrySpawnBookCollectSmoke(discardPoint, bigBook);
             StartBookTextImpact(winner, null, winner.ToTeam() == TeamId.Home ? theme.green : theme.red, false);
+            if (teamPlayMoment.HasValue)
+            {
+                SpawnTeamPlayMomentFx(winner, teamPlayMoment.Value, false);
+            }
+
             if (bigBook)
             {
                 TrySpawnTrashTalkPopup(winnerPoint + new Vector2(0f, 40f), null, TrashTalkBigBookChance, theme.gold);
@@ -5602,6 +5808,191 @@ namespace BackyardLegends.Runtime
             nextTrashTalkPopupTime = Time.unscaledTime + Random.Range(2.8f, 4.8f);
             PlayFeedback(FeedbackCue.Select, 0.055f);
             StartCoroutine(TrashTalkPopupRoutine(anchoredPosition, tag, color));
+        }
+
+        private void SpawnTeamPlayMomentFx(CardMotionSnapshot motion, TeamPlayMoment moment)
+        {
+            if (!trickSlots.TryGetValue(motion.Seat, out var slot) || slot?.Root == null)
+            {
+                return;
+            }
+
+            var point = GetAnchoredPoint(slot.Root, new Vector2(0.5f, 0.76f));
+            SpawnTeamPlayMomentFx(point, motion.Seat, moment);
+        }
+
+        private void SpawnTeamPlayMomentFx(SeatId seat, TeamPlayMoment moment, bool nearBidCallout)
+        {
+            if (!seatViews.TryGetValue(seat, out var view) || view?.Root == null)
+            {
+                return;
+            }
+
+            RectTransform anchorRect = view.Root;
+            var normalizedPoint = GetSeatInnerAnchor(seat);
+            if (nearBidCallout && view.BidCalloutGroup != null && view.BidCalloutGroup.transform is RectTransform calloutRect)
+            {
+                anchorRect = calloutRect;
+                normalizedPoint = new Vector2(0.5f, 0.5f);
+            }
+
+            var point = GetAnchoredPoint(anchorRect, normalizedPoint) + GetTeamPlayFxOffset(seat, nearBidCallout);
+            SpawnTeamPlayMomentFx(point, seat, moment);
+        }
+
+        private void SpawnTeamPlayMomentFx(Vector2 anchoredPosition, SeatId seat, TeamPlayMoment moment)
+        {
+            if (string.IsNullOrEmpty(moment.Label) || Time.unscaledTime < nextTeamPlayFxTime)
+            {
+                return;
+            }
+
+            nextTeamPlayFxTime = Time.unscaledTime + (moment.Major ? TeamPlayFxCooldownSeconds * 0.56f : TeamPlayFxCooldownSeconds);
+            PlayFeedback(moment.Major ? FeedbackCue.Banner : FeedbackCue.Select, moment.Major ? 0.15f : 0.08f);
+            TryPlayCrowdReaction(moment.Major ? 0.24f : 0.09f, moment.Major ? 0.72f : 0.48f, 0.08f);
+            SpawnImpactBurst(anchoredPosition, moment.Accent, moment.Major ? 38f : 26f, moment.Major ? 5 : 3);
+            StartCoroutine(TeamPlayMomentRoutine(anchoredPosition, seat, moment));
+        }
+
+        private IEnumerator TeamPlayMomentRoutine(Vector2 anchoredPosition, SeatId seat, TeamPlayMoment moment)
+        {
+            var root = AnimationRoot;
+            if (root == null)
+            {
+                yield break;
+            }
+
+            var go = new GameObject("Team Play Moment Runtime", typeof(RectTransform), typeof(Text), typeof(CanvasGroup), typeof(Outline), typeof(Shadow));
+            go.transform.SetParent(root, false);
+            go.transform.SetAsLastSibling();
+
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = moment.Major ? new Vector2(520f, 112f) : new Vector2(460f, 92f);
+
+            var lane = GetTeamPlayLaneSide(seat);
+            var startPosition = anchoredPosition + new Vector2(-lane * 56f, moment.Major ? 16f : 8f);
+            var holdPosition = anchoredPosition + new Vector2(lane * 10f, moment.Major ? 54f : 42f);
+            var exitPosition = holdPosition + new Vector2(lane * 72f, 30f);
+            var startAngle = -lane * (moment.Major ? 7f : 4f);
+            rect.anchoredPosition = startPosition;
+            rect.localScale = Vector3.one * 0.58f;
+            rect.localRotation = Quaternion.Euler(0f, 0f, startAngle);
+
+            var text = go.GetComponent<Text>();
+            text.font = theme.ResolveFont();
+            text.supportRichText = true;
+            text.text = string.IsNullOrEmpty(moment.Detail)
+                ? moment.Label
+                : $"{moment.Label}\n<size={(moment.Major ? 28 : 24)}>{moment.Detail}</size>";
+            text.fontSize = moment.Label.Length > 12
+                ? moment.Major ? 42 : 36
+                : moment.Major ? 48 : 40;
+            text.fontStyle = FontStyle.Bold;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.color = moment.Accent;
+            text.raycastTarget = false;
+
+            var outline = go.GetComponent<Outline>();
+            outline.effectColor = Color.Lerp(new Color(0.01f, 0.012f, 0.014f, 0.98f), moment.Accent, 0.16f);
+            outline.effectDistance = moment.Major ? new Vector2(3.8f, -3.8f) : new Vector2(2.8f, -2.8f);
+            var shadow = go.GetComponent<Shadow>();
+            shadow.effectColor = new Color(0f, 0f, 0f, 0.44f);
+            shadow.effectDistance = moment.Major ? new Vector2(8f, -8f) : new Vector2(6f, -6f);
+
+            var group = go.GetComponent<CanvasGroup>();
+            group.blocksRaycasts = false;
+            group.interactable = false;
+            group.alpha = 0f;
+
+            transientFx.Add(text);
+            var introDuration = moment.Major ? 0.28f : 0.22f;
+            var holdDuration = moment.Major ? 0.76f : 0.58f;
+            var outroDuration = 0.28f;
+            var duration = introDuration + holdDuration + outroDuration;
+            var elapsed = 0f;
+            while (elapsed < duration && rect != null)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                if (elapsed < introDuration)
+                {
+                    var t = Mathf.Clamp01(elapsed / introDuration);
+                    var snap = EaseOutBack(t);
+                    var streak = Mathf.Sin(t * Mathf.PI * 3.5f) * (1f - t) * 5f;
+                    rect.localScale = Vector3.one * Mathf.LerpUnclamped(0.58f, moment.Major ? 1.1f : 1.04f, snap);
+                    rect.anchoredPosition = QuadraticBezier(
+                        startPosition,
+                        anchoredPosition + new Vector2(lane * 36f, moment.Major ? 70f : 56f),
+                        holdPosition,
+                        1f - Mathf.Pow(1f - t, 3f));
+                    rect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Lerp(startAngle, lane * 1.6f, snap) + streak);
+                    group.alpha = Mathf.Clamp01(t * 3.4f);
+                }
+                else if (elapsed < introDuration + holdDuration)
+                {
+                    var t = Mathf.Clamp01((elapsed - introDuration) / holdDuration);
+                    var pulse = Mathf.Sin(t * Mathf.PI * 2f) * (moment.Major ? 0.03f : 0.02f);
+                    var floatY = Mathf.Sin(t * Mathf.PI) * (moment.Major ? 7f : 5f);
+                    rect.localScale = Vector3.one * (1f + pulse);
+                    rect.anchoredPosition = holdPosition + new Vector2(Mathf.Sin(t * Mathf.PI * 2f) * lane * 3f, floatY);
+                    rect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(t * Mathf.PI * 2f) * lane * 1.4f);
+                    group.alpha = 1f;
+                }
+                else
+                {
+                    var t = Mathf.Clamp01((elapsed - introDuration - holdDuration) / outroDuration);
+                    var ease = EaseOutCubic(t);
+                    rect.localScale = Vector3.one * Mathf.Lerp(1f, 0.72f, ease);
+                    rect.anchoredPosition = Vector2.Lerp(holdPosition, exitPosition, ease);
+                    rect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Lerp(0f, lane * 7f, ease));
+                    group.alpha = 1f - ease;
+                }
+
+                yield return null;
+            }
+
+            transientFx.Remove(text);
+            if (go != null)
+            {
+                Destroy(go);
+            }
+        }
+
+        private Color ResolveTeamPlayColor(TeamId team, bool major)
+        {
+            var baseColor = team == TeamId.Home ? theme.green : theme.red;
+            return major
+                ? Color.Lerp(baseColor, theme.gold, 0.32f)
+                : Color.Lerp(baseColor, theme.primaryText, 0.22f);
+        }
+
+        private static float GetTeamPlayLaneSide(SeatId seat)
+        {
+            return seat switch
+            {
+                SeatId.Left => 1f,
+                SeatId.Right => -1f,
+                SeatId.Top => 0.34f,
+                SeatId.Bottom => -0.28f,
+                _ => 0.4f
+            };
+        }
+
+        private static Vector2 GetTeamPlayFxOffset(SeatId seat, bool nearBidCallout)
+        {
+            var lift = nearBidCallout ? 28f : 18f;
+            return seat switch
+            {
+                SeatId.Left => new Vector2(44f, lift),
+                SeatId.Right => new Vector2(-44f, lift),
+                SeatId.Top => new Vector2(0f, lift + 10f),
+                SeatId.Bottom => new Vector2(0f, lift + 18f),
+                _ => new Vector2(0f, lift)
+            };
         }
 
         private IEnumerator TrashTalkPopupRoutine(Vector2 anchoredPosition, string tag, Color color)
@@ -6546,6 +6937,7 @@ namespace BackyardLegends.Runtime
             spadesBrokenMomentShown = false;
             nextTrashTalkPopupTime = 0f;
             nextCrowdReactionTime = 0f;
+            nextTeamPlayFxTime = 0f;
             ResetBookStreaks();
             ClearBookTextAnimations();
             StopOpeningStackIntro();
