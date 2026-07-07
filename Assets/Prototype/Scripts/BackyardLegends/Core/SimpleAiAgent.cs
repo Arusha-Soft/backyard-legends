@@ -91,12 +91,17 @@ namespace BackyardLegends.Core
                 return ChooseWinningCard(winningCards, plan, random);
             }
 
-            if (partnerWinning && !plan.NeedsBookNow)
+            if (partnerWinning)
             {
                 return ChooseDiscardCard(legalCards, leadSuit, currentWinningCard, true, plan, random);
             }
 
-            var shouldTryToWin = plan.NeedsBookNow || (!partnerWinning && ShouldContestTrick(plan, trick.Plays.Count, random));
+            if (plan.PartnerBidNil && winningCards.Count > 0)
+            {
+                return ChooseWinningCard(winningCards, plan, random);
+            }
+
+            var shouldTryToWin = ShouldContestTrick(plan, trick.Plays.Count, random);
             if (shouldTryToWin && winningCards.Count > 0)
             {
                 return ChooseWinningCard(winningCards, plan, random);
@@ -505,7 +510,12 @@ namespace BackyardLegends.Core
             {
                 if (partnerBid.Value == 0)
                 {
-                    adjusted += HasNilCoverStrength(hand) ? 1 : 0;
+                    var minimumTeamBid = state.RuleSet?.MinimumTeamBid ?? 4;
+                    adjusted = System.Math.Max(adjusted, minimumTeamBid);
+                    if (HasNilCoverStrength(hand))
+                    {
+                        adjusted = System.Math.Max(adjusted + 1, minimumTeamBid + 1);
+                    }
                 }
                 else if (partnerBid.Value <= 1 && adjusted >= 4)
                 {
@@ -761,7 +771,7 @@ namespace BackyardLegends.Core
             var rules = context.MatchState?.RuleSet;
             if (futureSeat == context.HumanSeat)
             {
-                // The human seat bids last, so AI leaves a normal player call available.
+                // If the human has not bid yet, AI leaves room for a normal player call.
                 return System.Math.Max(1, rules?.MinimumTeamBid ?? 4);
             }
 
@@ -1039,7 +1049,12 @@ namespace BackyardLegends.Core
 
             if (plan.TeamBooks < plan.TeamBid)
             {
-                return random.NextDouble() < (playsInTrick >= 2 ? 0.72 : 0.55);
+                if (plan.UnderPressure || playsInTrick >= 2)
+                {
+                    return true;
+                }
+
+                return random.NextDouble() < 0.75;
             }
 
             if (plan.TeamBid == 0)

@@ -341,11 +341,11 @@ namespace BackyardLegends.Core
 
             State.Phase = MatchPhase.Bidding;
             State.RoundState.Dealer = SpadesSeatUtility.TurnOrder[(State.RoundState.RoundNumber - 1) % 4];
-            var openingBidder = HumanSeat.NextClockwise();
             var openingLeader = State.RoundState.Dealer.NextClockwise();
+            var openingBidder = openingLeader;
             State.RoundState.BidState.CurrentBidder = openingBidder;
             State.RoundState.TrickState.Leader = openingLeader;
-            State.RoundState.TrickState.CurrentTurn = openingBidder;
+            State.RoundState.TrickState.CurrentTurn = openingLeader;
             State.RoundState.TrickState.SpadesBroken = false;
             State.RoundState.LastStatusMessage = $"{State.SeatNames[State.RoundState.BidState.CurrentBidder]} starts the bidding.";
 

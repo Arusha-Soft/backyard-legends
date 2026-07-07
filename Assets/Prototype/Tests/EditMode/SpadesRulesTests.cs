@@ -620,6 +620,39 @@ namespace BackyardLegends.Tests
         }
 
         [Test]
+        public void SimpleAiMakesCoverBidWhenPartnerAlreadyBidNil()
+        {
+            var state = CreateScoringState();
+            state.RoundState.BidState.BidsBySeat[SeatId.Bottom] = 0;
+            state.RoundState.BidState.BidsBySeat[SeatId.Top] = null;
+            state.RoundState.BidState.BidsBySeat[SeatId.Left] = 4;
+            state.RoundState.BidState.BidsBySeat[SeatId.Right] = null;
+
+            var bid = ChooseSimpleAiBid(
+                new List<Card>
+                {
+                    new(Suit.Spades, 2),
+                    new(Suit.Spades, 4),
+                    new(Suit.Hearts, 2),
+                    new(Suit.Hearts, 4),
+                    new(Suit.Hearts, 8),
+                    new(Suit.Clubs, 3),
+                    new(Suit.Clubs, 6),
+                    new(Suit.Clubs, 9),
+                    new(Suit.Diamonds, 2),
+                    new(Suit.Diamonds, 5),
+                    new(Suit.Diamonds, 7),
+                    new(Suit.Diamonds, 9),
+                    new(Suit.Diamonds, 11)
+                },
+                state,
+                SeatId.Top,
+                Enumerable.Range(0, 14).ToList());
+
+            Assert.That(bid, Is.GreaterThanOrEqualTo(state.RuleSet.MinimumTeamBid));
+        }
+
+        [Test]
         public void ScoreRoundTracksBagsAndThresholdPenalty()
         {
             var engine = new SpadesRuleEngine();
@@ -976,6 +1009,75 @@ namespace BackyardLegends.Tests
         }
 
         [Test]
+        public void SimpleAiCutsToCoverPartnerNilWhenVoid()
+        {
+            var state = CreateScoringState();
+            state.RoundState.BidState.BidsBySeat[SeatId.Bottom] = 0;
+            state.RoundState.BidState.BidsBySeat[SeatId.Top] = 4;
+            state.RoundState.BidState.BidsBySeat[SeatId.Left] = 4;
+            state.RoundState.BidState.BidsBySeat[SeatId.Right] = 4;
+            state.RoundState.TrickState.LeadSuit = Suit.Hearts;
+            state.RoundState.TrickState.Plays.Add(new TrickPlay { Seat = SeatId.Bottom, Card = new Card(Suit.Hearts, 9) });
+            state.RoundState.TrickState.Plays.Add(new TrickPlay { Seat = SeatId.Left, Card = new Card(Suit.Hearts, 4) });
+
+            var card = ChooseSimpleAiCard(
+                SeatId.Top,
+                state,
+                new List<Card>
+                {
+                    new(Suit.Spades, 2),
+                    new(Suit.Clubs, 3)
+                });
+
+            Assert.That(card, Is.EqualTo(new Card(Suit.Spades, 2)));
+        }
+
+        [Test]
+        public void SimpleAiTakesCheapControlBeforePartnerNilActs()
+        {
+            var state = CreateScoringState();
+            state.RoundState.BidState.BidsBySeat[SeatId.Bottom] = 0;
+            state.RoundState.BidState.BidsBySeat[SeatId.Top] = 4;
+            state.RoundState.BidState.BidsBySeat[SeatId.Left] = 4;
+            state.RoundState.BidState.BidsBySeat[SeatId.Right] = 4;
+            state.RoundState.TricksWonBySeat[SeatId.Top] = 4;
+            state.RoundState.TrickState.LeadSuit = Suit.Hearts;
+            state.RoundState.TrickState.Plays.Add(new TrickPlay { Seat = SeatId.Left, Card = new Card(Suit.Hearts, 2) });
+
+            var card = ChooseSimpleAiCard(
+                SeatId.Top,
+                state,
+                new List<Card>
+                {
+                    new(Suit.Hearts, 10),
+                    new(Suit.Hearts, 3)
+                });
+
+            Assert.That(card, Is.EqualTo(new Card(Suit.Hearts, 3)));
+        }
+
+        [Test]
+        public void SimpleAiDoesNotOvertakePartnerWinnerWhenTeamNeedsBook()
+        {
+            var state = CreateScoringState();
+            SetTeamContractProgress(state, SeatId.Top, teamBid: 5, teamBooks: 4);
+            state.RoundState.TrickState.LeadSuit = Suit.Hearts;
+            state.RoundState.TrickState.Plays.Add(new TrickPlay { Seat = SeatId.Bottom, Card = new Card(Suit.Hearts, 13) });
+            state.RoundState.TrickState.Plays.Add(new TrickPlay { Seat = SeatId.Left, Card = new Card(Suit.Hearts, 2) });
+
+            var card = ChooseSimpleAiCard(
+                SeatId.Top,
+                state,
+                new List<Card>
+                {
+                    new(Suit.Hearts, 14),
+                    new(Suit.Hearts, 3)
+                });
+
+            Assert.That(card, Is.EqualTo(new Card(Suit.Hearts, 3)));
+        }
+
+        [Test]
         public void SimpleAiLeadsKnownSafeWinnerWhenTeamNeedsBook()
         {
             var state = CreateScoringState();
@@ -1299,38 +1401,23 @@ namespace BackyardLegends.Tests
         }
 
         [Test]
-        public void NewRoundKeepsHumanLastInBiddingOrder()
+        public void NewRoundsRotateDealerBiddingOrderAndOpeningLeader()
         {
             var controller = CreateController();
             controller.StartMatch();
-            var firstDealer = controller.State.RoundState.Dealer;
-            Assert.That(controller.State.RoundState.BidState.CurrentBidder, Is.EqualTo(SeatId.Left));
-            ForceBids(controller, 4, 4, 4, 4);
-            var round = controller.State.RoundState;
-            round.TrickState.Plays.Clear();
-            round.TrickState.CurrentTurn = SeatId.Bottom;
-            round.HandsBySeat[SeatId.Bottom] = new List<Card> { new(Suit.Hearts, 14) };
-            round.HandsBySeat[SeatId.Left] = new List<Card> { new(Suit.Hearts, 2) };
-            round.HandsBySeat[SeatId.Top] = new List<Card> { new(Suit.Hearts, 13) };
-            round.HandsBySeat[SeatId.Right] = new List<Card> { new(Suit.Hearts, 3) };
-            PlayCurrentTrick(controller);
-
-            Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.RoundSummary));
+            AssertRoundStarts(controller, 1, SeatId.Bottom, SeatId.Left);
+            CompleteSingleTrickRound(controller);
 
             controller.StartNextRound();
+            AssertRoundStarts(controller, 2, SeatId.Left, SeatId.Top);
+            CompleteSingleTrickRound(controller);
 
-            Assert.That(controller.State.RoundState.RoundNumber, Is.EqualTo(2));
-            Assert.That(controller.State.RoundState.Dealer, Is.EqualTo(firstDealer.NextClockwise()));
-            Assert.That(controller.State.RoundState.BidState.CurrentBidder, Is.EqualTo(SeatId.Left));
-            Assert.That(controller.TrySubmitBid(SeatId.Left, 4, out var leftError), Is.True, leftError);
-            Assert.That(controller.State.RoundState.BidState.CurrentBidder, Is.EqualTo(SeatId.Top));
-            Assert.That(controller.TrySubmitBid(SeatId.Top, 4, out var topError), Is.True, topError);
-            Assert.That(controller.State.RoundState.BidState.CurrentBidder, Is.EqualTo(SeatId.Right));
-            Assert.That(controller.State.RoundState.BidState.BidsBySeat[SeatId.Bottom], Is.Null);
-            Assert.That(controller.TrySubmitBid(SeatId.Right, 4, out var rightError), Is.True, rightError);
-            Assert.That(controller.State.RoundState.BidState.CurrentBidder, Is.EqualTo(SeatId.Bottom));
-            Assert.That(controller.TrySubmitBid(SeatId.Bottom, 4, out var bottomError), Is.True, bottomError);
-            Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.TrickPlay));
+            controller.StartNextRound();
+            AssertRoundStarts(controller, 3, SeatId.Top, SeatId.Right);
+            CompleteSingleTrickRound(controller);
+
+            controller.StartNextRound();
+            AssertRoundStarts(controller, 4, SeatId.Right, SeatId.Bottom);
         }
 
         [Test]
@@ -1704,10 +1791,45 @@ namespace BackyardLegends.Tests
 
         private static void ForceBids(SpadesMatchController controller, int bottom, int left, int top, int right)
         {
-            Assert.That(controller.TrySubmitBid(SeatId.Left, left, out _), Is.True);
-            Assert.That(controller.TrySubmitBid(SeatId.Top, top, out _), Is.True);
-            Assert.That(controller.TrySubmitBid(SeatId.Right, right, out _), Is.True);
-            Assert.That(controller.TrySubmitBid(SeatId.Bottom, bottom, out _), Is.True);
+            var bidsBySeat = new Dictionary<SeatId, int>
+            {
+                { SeatId.Bottom, bottom },
+                { SeatId.Left, left },
+                { SeatId.Top, top },
+                { SeatId.Right, right }
+            };
+
+            while (controller.State.Phase == MatchPhase.Bidding)
+            {
+                var seat = controller.State.RoundState.BidState.CurrentBidder;
+                Assert.That(controller.TrySubmitBid(seat, bidsBySeat[seat], out var error), Is.True, error);
+            }
+        }
+
+        private static void AssertRoundStarts(SpadesMatchController controller, int roundNumber, SeatId dealer, SeatId openingSeat)
+        {
+            Assert.That(controller.State.RoundState.RoundNumber, Is.EqualTo(roundNumber));
+            Assert.That(controller.State.RoundState.Dealer, Is.EqualTo(dealer));
+            Assert.That(controller.State.RoundState.BidState.CurrentBidder, Is.EqualTo(openingSeat));
+            Assert.That(controller.State.RoundState.TrickState.Leader, Is.EqualTo(openingSeat));
+            Assert.That(controller.State.RoundState.TrickState.CurrentTurn, Is.EqualTo(openingSeat));
+        }
+
+        private static void CompleteSingleTrickRound(SpadesMatchController controller)
+        {
+            ForceBids(controller, 4, 4, 4, 4);
+            Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.TrickPlay));
+
+            var round = controller.State.RoundState;
+            Assert.That(round.TrickState.CurrentTurn, Is.EqualTo(round.Dealer.NextClockwise()));
+            round.TrickState.Plays.Clear();
+            round.HandsBySeat[SeatId.Bottom] = new List<Card> { new(Suit.Hearts, 14) };
+            round.HandsBySeat[SeatId.Left] = new List<Card> { new(Suit.Hearts, 2) };
+            round.HandsBySeat[SeatId.Top] = new List<Card> { new(Suit.Hearts, 13) };
+            round.HandsBySeat[SeatId.Right] = new List<Card> { new(Suit.Hearts, 3) };
+            PlayCurrentTrick(controller);
+
+            Assert.That(controller.State.Phase, Is.EqualTo(MatchPhase.RoundSummary));
         }
 
         private static void SetTeamContractProgress(MatchState state, SeatId seat, int teamBid, int teamBooks)
