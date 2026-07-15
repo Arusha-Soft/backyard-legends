@@ -1616,6 +1616,69 @@ namespace BackyardLegends.Tests
         }
 
         [Test]
+        public void GameplayCameraFallbackRestoresAuthoredViewEveryLateFrame()
+        {
+            var camera = Camera.main;
+            var createdCamera = camera == null;
+            var cameraObject = createdCamera ? new GameObject("Camera Fallback Test Camera") : camera.gameObject;
+            camera = createdCamera ? cameraObject.AddComponent<Camera>() : camera;
+            if (createdCamera)
+            {
+                cameraObject.tag = "MainCamera";
+            }
+
+            var originalPosition = camera.transform.localPosition;
+            var originalRotation = camera.transform.localRotation;
+            var originalOrthographic = camera.orthographic;
+            var originalOrthographicSize = camera.orthographicSize;
+            var originalFieldOfView = camera.fieldOfView;
+            var host = new GameObject("Camera Fallback Test");
+            host.SetActive(false);
+            var bootstrap = host.AddComponent<BackyardLegendsBootstrap>();
+            var expectedPosition = new Vector3(1.5f, -0.75f, -10f);
+            var expectedRotation = Quaternion.Euler(0f, 0f, 2.5f);
+
+            try
+            {
+                camera.orthographic = false;
+                camera.transform.localPosition = expectedPosition;
+                camera.transform.localRotation = expectedRotation;
+                camera.fieldOfView = 60f;
+                SetPrivateField(bootstrap, "gameplayCamera", camera);
+                SetPrivateField(bootstrap, "gameplayCameraDefaultPosition", expectedPosition);
+                SetPrivateField(bootstrap, "gameplayCameraDefaultRotation", expectedRotation);
+                SetPrivateField(bootstrap, "gameplayCameraDefaultOrthographicSize", camera.orthographicSize);
+                SetPrivateField(bootstrap, "gameplayCameraDefaultFieldOfView", 60f);
+                SetPrivateField(bootstrap, "gameplayCameraDefaultsCaptured", true);
+
+                camera.transform.localPosition = new Vector3(8f, 6f, -5f);
+                camera.transform.localRotation = Quaternion.Euler(0f, 0f, -18f);
+                camera.fieldOfView = 48f;
+                InvokePrivate(bootstrap, "LateUpdate");
+
+                Assert.That(Vector3.Distance(camera.transform.localPosition, expectedPosition), Is.LessThan(0.001f));
+                Assert.That(Quaternion.Angle(camera.transform.localRotation, expectedRotation), Is.LessThan(0.001f));
+                Assert.That(camera.fieldOfView, Is.EqualTo(60f).Within(0.001f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+                if (createdCamera)
+                {
+                    Object.DestroyImmediate(cameraObject);
+                }
+                else
+                {
+                    camera.orthographic = originalOrthographic;
+                    camera.orthographicSize = originalOrthographicSize;
+                    camera.fieldOfView = originalFieldOfView;
+                    camera.transform.localPosition = originalPosition;
+                    camera.transform.localRotation = originalRotation;
+                }
+            }
+        }
+
+        [Test]
         public void SfxTogglePersistsAndUpdatesAudioSourceMuteState()
         {
             PlayerPrefs.DeleteKey(BackyardLegendsBootstrap.SfxMutedPlayerPrefsKey);

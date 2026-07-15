@@ -222,20 +222,17 @@ namespace BackyardLegends.Runtime
         private Coroutine exitPromptFadeLoop;
         private Coroutine optionsMenuAnimationLoop;
         private Coroutine bookCameraShakeLoop;
-        private Coroutine bidCameraFocusLoop;
         private Coroutine lastTrickDisplayLoop;
         private Transform bookCameraShakeTarget;
         private Vector3 bookCameraShakeStartPosition;
         private Quaternion bookCameraShakeStartRotation;
         private Camera bookCameraShakeCamera;
-        private float bookCameraShakeStartOrthographicSize;
-        private float bookCameraShakeStartFieldOfView;
-        private Camera bidFocusCamera;
-        private Vector3 bidFocusDefaultPosition;
-        private Quaternion bidFocusDefaultRotation;
-        private float bidFocusDefaultOrthographicSize;
-        private float bidFocusDefaultFieldOfView;
-        private bool bidFocusDefaultsCaptured;
+        private Camera gameplayCamera;
+        private Vector3 gameplayCameraDefaultPosition;
+        private Quaternion gameplayCameraDefaultRotation;
+        private float gameplayCameraDefaultOrthographicSize;
+        private float gameplayCameraDefaultFieldOfView;
+        private bool gameplayCameraDefaultsCaptured;
         private SpadesMatchController controller;
         private IRuleEngine ruleEngine;
         private BackyardLegendsSession session;
@@ -513,6 +510,7 @@ namespace BackyardLegends.Runtime
         {
             Screen.orientation = ScreenOrientation.Portrait;
             Application.targetFrameRate = 60;
+            CaptureGameplayCameraDefaults();
 #if UNITY_EDITOR
             editorDefaultFixedDeltaTime = Time.fixedDeltaTime / Mathf.Max(0.0001f, Time.timeScale);
 #endif
@@ -1026,6 +1024,28 @@ namespace BackyardLegends.Runtime
             RestoreSeatRootScales();
         }
 
+        private void LateUpdate()
+        {
+            CaptureGameplayCameraDefaults();
+            RestoreGameplayCameraProjection();
+            if (bookCameraShakeLoop == null)
+            {
+                RestoreGameplayCameraTransform();
+            }
+        }
+
+        private void OnDisable()
+        {
+            RestoreBookCameraShakeTarget();
+            RestoreGameplayCameraState();
+        }
+
+        private void OnDestroy()
+        {
+            RestoreBookCameraShakeTarget();
+            RestoreGameplayCameraState();
+        }
+
 #if UNITY_EDITOR
         private void ForceEndMatchForEditorTest()
         {
@@ -1090,7 +1110,6 @@ namespace BackyardLegends.Runtime
             exitPromptFadeLoop = null;
             optionsMenuAnimationLoop = null;
             bookCameraShakeLoop = null;
-            bidCameraFocusLoop = null;
         }
 
         private void ApplyEditorTestEndState(TeamId winningTeam)
@@ -6649,157 +6668,63 @@ namespace BackyardLegends.Runtime
             ClearTransientFx();
         }
 
-        private void StartBidCameraFocus(SeatId seat)
+        private void RestoreBidCameraFocus()
+        {
+            // Bid callouts used to pan and zoom the whole gameplay camera. If the final
+            // bidder was an AI, no later player bid sheet requested the reset and the
+            // reduced FOV could survive for the rest of the hand. Keep callouts as UI-only
+            // feedback and immediately heal any camera state left by an older flow.
+            RestoreGameplayCameraState();
+        }
+
+        private void CaptureGameplayCameraDefaults()
         {
             var targetCamera = Camera.main ?? FindFirstObjectByType<Camera>();
-            if (targetCamera == null)
+            if (targetCamera == null || gameplayCameraDefaultsCaptured && gameplayCamera == targetCamera)
             {
                 return;
             }
 
-            CaptureBidCameraDefaults(targetCamera);
-            if (bidCameraFocusLoop != null)
-            {
-                StopCoroutine(bidCameraFocusLoop);
-            }
-
-            var side = GetBidCameraFocusDirection(seat);
-            var travel = targetCamera.orthographic
-                ? Mathf.Max(0.62f, bidFocusDefaultOrthographicSize * 0.28f)
-                : 0.72f;
-            var targetPosition = bidFocusDefaultPosition + new Vector3(side.x * travel, side.y * travel * 0.86f, 0f);
-            var targetOrthographicSize = targetCamera.orthographic
-                ? bidFocusDefaultOrthographicSize * 0.85f
-                : bidFocusDefaultOrthographicSize;
-            var targetFieldOfView = targetCamera.orthographic
-                ? bidFocusDefaultFieldOfView
-                : bidFocusDefaultFieldOfView * 0.88f;
-
-            bidCameraFocusLoop = StartCoroutine(BidCameraFocusRoutine(
-                targetCamera,
-                targetPosition,
-                bidFocusDefaultRotation,
-                targetOrthographicSize,
-                targetFieldOfView,
-                1.08f));
+            gameplayCamera = targetCamera;
+            gameplayCameraDefaultPosition = targetCamera.transform.localPosition;
+            gameplayCameraDefaultRotation = targetCamera.transform.localRotation;
+            gameplayCameraDefaultOrthographicSize = targetCamera.orthographicSize;
+            gameplayCameraDefaultFieldOfView = targetCamera.fieldOfView;
+            gameplayCameraDefaultsCaptured = true;
         }
 
-        private void RestoreBidCameraFocus(bool immediate = false)
+        private void RestoreGameplayCameraState()
         {
-            if (!bidFocusDefaultsCaptured || bidFocusCamera == null)
-            {
-                return;
-            }
-
-            if (bidCameraFocusLoop != null)
-            {
-                StopCoroutine(bidCameraFocusLoop);
-                bidCameraFocusLoop = null;
-            }
-
-            if (immediate)
-            {
-                ApplyBidCameraState(bidFocusCamera, bidFocusDefaultPosition, bidFocusDefaultRotation, bidFocusDefaultOrthographicSize, bidFocusDefaultFieldOfView);
-                bidFocusDefaultsCaptured = false;
-                bidFocusCamera = null;
-                return;
-            }
-
-            bidCameraFocusLoop = StartCoroutine(BidCameraFocusRoutine(
-                bidFocusCamera,
-                bidFocusDefaultPosition,
-                bidFocusDefaultRotation,
-                bidFocusDefaultOrthographicSize,
-                bidFocusDefaultFieldOfView,
-                0.85f,
-                clearDefaultsOnComplete: true));
+            CaptureGameplayCameraDefaults();
+            RestoreGameplayCameraTransform();
+            RestoreGameplayCameraProjection();
         }
 
-        private void CaptureBidCameraDefaults(Camera targetCamera)
+        private void RestoreGameplayCameraTransform()
         {
-            if (bidFocusDefaultsCaptured && bidFocusCamera == targetCamera)
+            if (!gameplayCameraDefaultsCaptured || gameplayCamera == null)
             {
                 return;
             }
 
-            bidFocusCamera = targetCamera;
-            bidFocusDefaultPosition = targetCamera.transform.localPosition;
-            bidFocusDefaultRotation = targetCamera.transform.localRotation;
-            bidFocusDefaultOrthographicSize = targetCamera.orthographicSize;
-            bidFocusDefaultFieldOfView = targetCamera.fieldOfView;
-            bidFocusDefaultsCaptured = true;
+            gameplayCamera.transform.localPosition = gameplayCameraDefaultPosition;
+            gameplayCamera.transform.localRotation = gameplayCameraDefaultRotation;
         }
 
-        private IEnumerator BidCameraFocusRoutine(
-            Camera targetCamera,
-            Vector3 targetPosition,
-            Quaternion targetRotation,
-            float targetOrthographicSize,
-            float targetFieldOfView,
-            float duration,
-            bool clearDefaultsOnComplete = false)
+        private void RestoreGameplayCameraProjection()
         {
-            if (targetCamera == null)
-            {
-                yield break;
-            }
-
-            var transform = targetCamera.transform;
-            var startPosition = transform.localPosition;
-            var startRotation = transform.localRotation;
-            var startOrthographicSize = targetCamera.orthographicSize;
-            var startFieldOfView = targetCamera.fieldOfView;
-            var elapsed = 0f;
-            duration = Mathf.Max(0.05f, duration);
-            while (elapsed < duration && targetCamera != null)
-            {
-                elapsed += Time.unscaledDeltaTime;
-                var t = Mathf.Clamp01(elapsed / duration);
-                var eased = EaseInOutCubic(t);
-                var floatDrift = Mathf.Sin(t * Mathf.PI) * 0.035f;
-                transform.localPosition = Vector3.Lerp(startPosition, targetPosition, eased) + transform.up * floatDrift;
-                transform.localRotation = Quaternion.Slerp(startRotation, targetRotation, eased);
-                if (targetCamera.orthographic)
-                {
-                    targetCamera.orthographicSize = Mathf.Lerp(startOrthographicSize, targetOrthographicSize, eased);
-                }
-                else
-                {
-                    targetCamera.fieldOfView = Mathf.Lerp(startFieldOfView, targetFieldOfView, eased);
-                }
-
-                yield return null;
-            }
-
-            if (targetCamera != null)
-            {
-                ApplyBidCameraState(targetCamera, targetPosition, targetRotation, targetOrthographicSize, targetFieldOfView);
-            }
-
-            bidCameraFocusLoop = null;
-            if (clearDefaultsOnComplete)
-            {
-                bidFocusDefaultsCaptured = false;
-                bidFocusCamera = null;
-            }
-        }
-
-        private static void ApplyBidCameraState(Camera targetCamera, Vector3 position, Quaternion rotation, float orthographicSize, float fieldOfView)
-        {
-            if (targetCamera == null)
+            if (!gameplayCameraDefaultsCaptured || gameplayCamera == null)
             {
                 return;
             }
 
-            targetCamera.transform.localPosition = position;
-            targetCamera.transform.localRotation = rotation;
-            if (targetCamera.orthographic)
+            if (gameplayCamera.orthographic)
             {
-                targetCamera.orthographicSize = orthographicSize;
+                gameplayCamera.orthographicSize = gameplayCameraDefaultOrthographicSize;
             }
             else
             {
-                targetCamera.fieldOfView = fieldOfView;
+                gameplayCamera.fieldOfView = gameplayCameraDefaultFieldOfView;
             }
         }
 
@@ -6817,6 +6742,7 @@ namespace BackyardLegends.Runtime
 
         private void StartBookCameraShake(SeatId focusSeat, float intensity = 1f)
         {
+            CaptureGameplayCameraDefaults();
             if (bookCameraShakeLoop != null)
             {
                 RestoreBookCameraShakeTarget();
@@ -6837,11 +6763,6 @@ namespace BackyardLegends.Runtime
             bookCameraShakeStartPosition = target.localPosition;
             bookCameraShakeStartRotation = target.localRotation;
             bookCameraShakeCamera = targetCamera;
-            if (bookCameraShakeCamera != null)
-            {
-                bookCameraShakeStartOrthographicSize = bookCameraShakeCamera.orthographicSize;
-                bookCameraShakeStartFieldOfView = bookCameraShakeCamera.fieldOfView;
-            }
 
             bookCameraShakeLoop = StartCoroutine(BookCameraShakeRoutine(target, GetBidCameraFocusDirection(focusSeat), Mathf.Max(0.2f, intensity)));
         }
@@ -6852,15 +6773,9 @@ namespace BackyardLegends.Runtime
             var shake01 = Mathf.InverseLerp(0.2f, 1.8f, shakePower);
             var duration = Mathf.Max(0.28f, theme.shakeDuration * Mathf.Lerp(1.25f, 2.05f, shake01));
             var punchTravel = bookCameraShakeCamera != null && bookCameraShakeCamera.orthographic
-                ? Mathf.Max(0.13f, bookCameraShakeStartOrthographicSize * 0.065f) * shakePower
+                ? Mathf.Max(0.13f, gameplayCameraDefaultOrthographicSize * 0.065f) * shakePower
                 : 0.26f * shakePower;
             var punchOffset = new Vector3(focusDirection.x * punchTravel, focusDirection.y * punchTravel * 0.72f, 0f);
-            var punchOrthographicSize = bookCameraShakeCamera != null && bookCameraShakeCamera.orthographic
-                ? bookCameraShakeStartOrthographicSize * Mathf.Lerp(0.975f, 0.925f, shake01)
-                : bookCameraShakeStartOrthographicSize;
-            var punchFieldOfView = bookCameraShakeCamera != null && !bookCameraShakeCamera.orthographic
-                ? bookCameraShakeStartFieldOfView * Mathf.Lerp(0.975f, 0.935f, shake01)
-                : bookCameraShakeStartFieldOfView;
             var elapsed = 0f;
             while (elapsed < duration && target != null)
             {
@@ -6882,17 +6797,6 @@ namespace BackyardLegends.Runtime
                 y += focusDirection.y * rumble * 0.055f * shakePower;
                 target.localPosition = bookCameraShakeStartPosition + punchOffset * punch + new Vector3(x, y, 0f);
                 target.localRotation = bookCameraShakeStartRotation * Quaternion.Euler(0f, 0f, roll);
-                if (bookCameraShakeCamera != null)
-                {
-                    if (bookCameraShakeCamera.orthographic)
-                    {
-                        bookCameraShakeCamera.orthographicSize = Mathf.Lerp(bookCameraShakeStartOrthographicSize, punchOrthographicSize, punch);
-                    }
-                    else
-                    {
-                        bookCameraShakeCamera.fieldOfView = Mathf.Lerp(bookCameraShakeStartFieldOfView, punchFieldOfView, punch);
-                    }
-                }
 
                 yield return null;
             }
@@ -6910,17 +6814,7 @@ namespace BackyardLegends.Runtime
 
             bookCameraShakeTarget.localPosition = bookCameraShakeStartPosition;
             bookCameraShakeTarget.localRotation = bookCameraShakeStartRotation;
-            if (bookCameraShakeCamera != null)
-            {
-                if (bookCameraShakeCamera.orthographic)
-                {
-                    bookCameraShakeCamera.orthographicSize = bookCameraShakeStartOrthographicSize;
-                }
-                else
-                {
-                    bookCameraShakeCamera.fieldOfView = bookCameraShakeStartFieldOfView;
-                }
-            }
+            RestoreGameplayCameraProjection();
 
             bookCameraShakeTarget = null;
             bookCameraShakeCamera = null;
@@ -6954,7 +6848,7 @@ namespace BackyardLegends.Runtime
             }
 
             RestoreBookCameraShakeTarget();
-            RestoreBidCameraFocus(immediate: true);
+            RestoreBidCameraFocus();
             HideAllBidBubbles(true);
             if (deferredSheetStateLoop != null)
             {
@@ -7398,7 +7292,7 @@ namespace BackyardLegends.Runtime
             var holdForPlayerDecision = ShouldHoldBidCalloutForPlayerDecision(seat);
             if (seat != SeatId.Bottom)
             {
-                StartBidCameraFocus(seat);
+                RestoreBidCameraFocus();
             }
 
             ShowSeatCallout(
