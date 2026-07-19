@@ -468,6 +468,7 @@ namespace BackyardLegends.Core
                     TricksWon = score.Value.TricksWon,
                     RoundDelta = score.Value.RoundDelta,
                     NilDelta = score.Value.NilDelta,
+                    RenegeDelta = score.Value.RenegeDelta,
                     BagsEarned = score.Value.BagsEarned,
                     BagPenaltyDelta = score.Value.BagPenaltyDelta
                 };

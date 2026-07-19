@@ -1168,6 +1168,7 @@ namespace BackyardLegends.Tests
             var result = new SpadesRuleEngine().ScoreRound(scoringState);
 
             Assert.That(result.TeamScores[TeamId.Home].RenegeDelta, Is.EqualTo(-200));
+            Assert.That(scoringState.Scores[TeamId.Home].RenegeDelta, Is.EqualTo(-200));
         }
 
         [Test]
@@ -1544,27 +1545,109 @@ namespace BackyardLegends.Tests
         }
 
         [Test]
-        public void EndOfHandScoreboardOnlyShowsBagPenaltyWhenApplied()
+        public void EndOfHandScoreboardShowsFullScoringBreakdownAndCorrectTotal()
         {
             var state = CreateScoringState();
-            var host = new GameObject("Bag Penalty Results Test");
-            var resultObject = new GameObject("Home Result", typeof(RectTransform), typeof(Text));
-            resultObject.transform.SetParent(host.transform, false);
+            var host = new GameObject("Full Score Breakdown Test");
             var view = host.AddComponent<EndOfHandScoreboardView>();
-            view.HomeResultText = resultObject.GetComponent<Text>();
-            state.Scores[TeamId.Home].BagsEarned = 2;
-            state.Scores[TeamId.Home].BagPenaltyDelta = 0;
+            view.HomeBreakdownView = CreateTestBreakdownView("Home Breakdown", host.transform);
+            state.RoundState.BidState.BidsBySeat[SeatId.Bottom] = 7;
+            state.RoundState.BidState.BidsBySeat[SeatId.Top] = 0;
+            state.RoundState.TricksWonBySeat[SeatId.Bottom] = 9;
+            state.RoundState.TricksWonBySeat[SeatId.Top] = 0;
+            state.RoundState.TricksWonBySeat[SeatId.Left] = 4;
+
+            new SpadesRuleEngine().ScoreRound(state);
 
             try
             {
                 view.Render(state, state.RuleSet, false, null);
-                Assert.That(view.HomeResultText.text, Is.EqualTo("Bags +2"));
-                Assert.That(view.HomeResultText.text, Does.Not.Contain("Penalty"));
+                var breakdown = view.HomeBreakdownView;
+                Assert.That(state.Scores[TeamId.Home].RoundDelta, Is.EqualTo(72));
+                Assert.That(state.Scores[TeamId.Home].NilDelta, Is.EqualTo(100));
+                Assert.That(breakdown.OutcomeText.text, Is.EqualTo("MADE"));
+                Assert.That(breakdown.BidBooksText.text, Is.EqualTo("BID 7  •  BOOKS 9"));
+                AssertBreakdownLine(breakdown.BidLine, "Bid Made", "+70");
+                AssertBreakdownLine(breakdown.BagsLine, "Bags", "+2");
+                AssertBreakdownLine(breakdown.NilLine, "Nil Bonus", "+100");
+                AssertBreakdownLine(breakdown.BagPenaltyLine, "Bag Penalty", "0");
+                Assert.That(breakdown.RenegePenaltyLine.Root.activeSelf, Is.False);
+                AssertBreakdownLine(breakdown.RoundTotalLine, "Round Total", "+172");
+                AssertBreakdownLine(breakdown.MatchScoreLine, "Match Score", "+172");
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
 
-                state.Scores[TeamId.Home].BagPenaltyDelta = -100;
+        [Test]
+        public void EndOfHandScoreboardShowsSetNilAndBagPenaltiesIncludingZeroRows()
+        {
+            var state = CreateScoringState();
+            var host = new GameObject("Negative Score Breakdown Test");
+            var view = host.AddComponent<EndOfHandScoreboardView>();
+            view.HomeBreakdownView = CreateTestBreakdownView("Home Breakdown", host.transform);
+            var score = state.Scores[TeamId.Home];
+            score.ContractBid = 7;
+            score.TricksWon = 6;
+            score.RoundDelta = -70;
+            score.NilDelta = -100;
+            score.BagsEarned = 0;
+            score.BagPenaltyDelta = 0;
+            score.Score = -170;
+
+            try
+            {
+                view.Render(state, state.RuleSet, false, null);
+                var breakdown = view.HomeBreakdownView;
+                Assert.That(breakdown.OutcomeText.text, Is.EqualTo("SET"));
+                AssertBreakdownLine(breakdown.BidLine, "Bid Set", "-70");
+                AssertBreakdownLine(breakdown.BagsLine, "Bags", "0");
+                AssertBreakdownLine(breakdown.NilLine, "Nil Penalty", "-100");
+                AssertBreakdownLine(breakdown.BagPenaltyLine, "Bag Penalty", "0");
+                AssertBreakdownLine(breakdown.RoundTotalLine, "Round Total", "-170");
+
+                score.TricksWon = 9;
+                score.RoundDelta = -28;
+                score.NilDelta = 0;
+                score.BagsEarned = 2;
+                score.BagPenaltyDelta = -100;
+                score.Score = -28;
                 view.Render(state, state.RuleSet, false, null);
 
-                Assert.That(view.HomeResultText.text, Is.EqualTo("Bags +2\n-100 Bag Penalty"));
+                AssertBreakdownLine(breakdown.NilLine, "Nil", "0");
+                AssertBreakdownLine(breakdown.BagPenaltyLine, "Bag Penalty", "-100");
+                AssertBreakdownLine(breakdown.RoundTotalLine, "Round Total", "-28");
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void EndOfHandScoreboardShowsRenegePenaltyForStreetMode()
+        {
+            var state = CreateScoringState(RuleSetConfig.CreateStreet(100));
+            var host = new GameObject("Renege Score Breakdown Test");
+            var view = host.AddComponent<EndOfHandScoreboardView>();
+            view.HomeBreakdownView = CreateTestBreakdownView("Home Breakdown", host.transform);
+            var score = state.Scores[TeamId.Home];
+            score.ContractBid = 4;
+            score.TricksWon = 4;
+            score.RoundDelta = -160;
+            score.NilDelta = 0;
+            score.RenegeDelta = -200;
+            score.Score = -160;
+
+            try
+            {
+                view.Render(state, state.RuleSet, false, null);
+                var breakdown = view.HomeBreakdownView;
+                Assert.That(breakdown.RenegePenaltyLine.Root.activeSelf, Is.True);
+                AssertBreakdownLine(breakdown.RenegePenaltyLine, "Renege Penalty", "-200");
+                AssertBreakdownLine(breakdown.RoundTotalLine, "Round Total", "-160");
             }
             finally
             {
@@ -1595,6 +1678,50 @@ namespace BackyardLegends.Tests
             Assert.That(view.PlayAgainButton.gameObject.activeSelf, Is.True);
             Assert.That(view.LeaveTableButton.gameObject.activeSelf, Is.True);
             Object.DestroyImmediate(host);
+        }
+
+        [Test]
+        public void EndOfHandScoreboardShowsOriginalSummaryUntilScoreDetailsIsPressed()
+        {
+            var state = CreateScoringState();
+            var host = new GameObject("Scoreboard Details Toggle Test");
+            var view = host.AddComponent<EndOfHandScoreboardView>();
+            var firstSummary = new GameObject("Summary One");
+            var secondSummary = new GameObject("Summary Two");
+            var details = new GameObject("Score Details");
+            firstSummary.transform.SetParent(host.transform, false);
+            secondSummary.transform.SetParent(host.transform, false);
+            details.transform.SetParent(host.transform, false);
+            view.SummaryRoots = new[] { firstSummary, secondSummary };
+            view.DetailsRoot = details;
+            view.ScoreDetailsButton = CreateTestButton("Score Details Button", host.transform);
+
+            try
+            {
+                view.Render(state, state.RuleSet, false, null);
+
+                Assert.That(firstSummary.activeSelf, Is.True);
+                Assert.That(secondSummary.activeSelf, Is.True);
+                Assert.That(details.activeSelf, Is.False);
+                Assert.That(view.ScoreDetailsButton.GetComponentInChildren<Text>().text, Is.EqualTo("Score Details"));
+
+                view.ScoreDetailsButton.onClick.Invoke();
+
+                Assert.That(firstSummary.activeSelf, Is.False);
+                Assert.That(secondSummary.activeSelf, Is.False);
+                Assert.That(details.activeSelf, Is.True);
+                Assert.That(view.ScoreDetailsButton.GetComponentInChildren<Text>().text, Is.EqualTo("Back to Summary"));
+
+                view.ScoreDetailsButton.onClick.Invoke();
+
+                Assert.That(firstSummary.activeSelf, Is.True);
+                Assert.That(secondSummary.activeSelf, Is.True);
+                Assert.That(details.activeSelf, Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
         }
 
         [Test]
@@ -2086,6 +2213,51 @@ namespace BackyardLegends.Tests
             var button = buttonObject.GetComponent<Button>();
             Assert.That(button, Is.Not.Null);
             return button;
+        }
+
+        private static TeamScoreBreakdownView CreateTestBreakdownView(string name, Transform parent)
+        {
+            var host = new GameObject(name, typeof(RectTransform), typeof(TeamScoreBreakdownView));
+            host.transform.SetParent(parent, false);
+            var view = host.GetComponent<TeamScoreBreakdownView>();
+            view.TeamNamesText = CreateTestText("Team Names", host.transform);
+            view.TeamLabelText = CreateTestText("Team Label", host.transform);
+            view.OutcomeText = CreateTestText("Outcome", host.transform);
+            view.BidBooksText = CreateTestText("Bid Books", host.transform);
+            view.BidLine = CreateTestBreakdownLine("Bid", host.transform);
+            view.BagsLine = CreateTestBreakdownLine("Bags", host.transform);
+            view.NilLine = CreateTestBreakdownLine("Nil", host.transform);
+            view.BagPenaltyLine = CreateTestBreakdownLine("Bag Penalty", host.transform);
+            view.RenegePenaltyLine = CreateTestBreakdownLine("Renege Penalty", host.transform);
+            view.RoundTotalLine = CreateTestBreakdownLine("Round Total", host.transform);
+            view.MatchScoreLine = CreateTestBreakdownLine("Match Score", host.transform);
+            return view;
+        }
+
+        private static ScoreBreakdownLineView CreateTestBreakdownLine(string name, Transform parent)
+        {
+            var root = new GameObject(name, typeof(RectTransform));
+            root.transform.SetParent(parent, false);
+            return new ScoreBreakdownLineView
+            {
+                Root = root,
+                LabelText = CreateTestText("Label", root.transform),
+                ValueText = CreateTestText("Value", root.transform)
+            };
+        }
+
+        private static Text CreateTestText(string name, Transform parent)
+        {
+            var text = new GameObject(name, typeof(RectTransform), typeof(Text)).GetComponent<Text>();
+            text.transform.SetParent(parent, false);
+            return text;
+        }
+
+        private static void AssertBreakdownLine(ScoreBreakdownLineView line, string label, string value)
+        {
+            Assert.That(line.Root.activeSelf, Is.True);
+            Assert.That(line.LabelText.text, Is.EqualTo(label));
+            Assert.That(line.ValueText.text, Is.EqualTo(value));
         }
 
         private static void InvokePrivate(object target, string methodName, params object[] arguments)

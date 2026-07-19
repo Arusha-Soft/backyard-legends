@@ -1132,8 +1132,8 @@ namespace BackyardLegends.Runtime
             controller.State.RoundState.RenegeSeats.Clear();
 
             var losingTeam = winningTeam == TeamId.Home ? TeamId.Away : TeamId.Home;
-            ApplyEditorTestScore(winningTeam, 6, 7, 70, Mathf.Max(controller.State.TargetScore, GetEditorScore(winningTeam).Score + 70));
-            ApplyEditorTestScore(losingTeam, 5, 4, -50, Mathf.Min(controller.State.TargetScore - 10, GetEditorScore(losingTeam).Score - 50));
+            ApplyEditorTestScore(winningTeam, 7, 9, 72, 100, Mathf.Max(controller.State.TargetScore, GetEditorScore(winningTeam).Score + 172));
+            ApplyEditorTestScore(losingTeam, 5, 4, -50, 0, Mathf.Min(controller.State.TargetScore - 10, GetEditorScore(losingTeam).Score - 50));
         }
 
         private ScoreSnapshot GetEditorScore(TeamId team)
@@ -1147,13 +1147,14 @@ namespace BackyardLegends.Runtime
             return score;
         }
 
-        private void ApplyEditorTestScore(TeamId team, int contractBid, int tricksWon, int roundDelta, int finalScore)
+        private void ApplyEditorTestScore(TeamId team, int contractBid, int tricksWon, int roundDelta, int nilDelta, int finalScore)
         {
             var score = GetEditorScore(team);
             score.ContractBid = contractBid;
             score.TricksWon = tricksWon;
             score.RoundDelta = roundDelta;
-            score.NilDelta = 0;
+            score.NilDelta = nilDelta;
+            score.RenegeDelta = 0;
             score.BagsEarned = Mathf.Max(0, tricksWon - contractBid);
             score.BagPenaltyDelta = 0;
             score.Score = finalScore;

@@ -185,6 +185,7 @@ namespace BackyardLegends.Core
                 score.TricksWon = tricksWon;
                 score.RoundDelta = roundDelta;
                 score.NilDelta = nilDelta;
+                score.RenegeDelta = renegeDelta;
                 score.BagsEarned = bagsEarned;
                 score.BagPenaltyDelta = bagPenaltyDelta;
                 score.Score += roundDelta + nilDelta;

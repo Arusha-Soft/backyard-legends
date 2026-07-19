@@ -17,6 +17,15 @@ namespace BackyardLegends.Runtime
         public Button NotesButton;
         public Button SettingsButton;
 
+        [Header("Score Breakdowns")]
+        public TeamScoreBreakdownView HomeBreakdownView;
+        public TeamScoreBreakdownView AwayBreakdownView;
+
+        [Header("Score Display Modes")]
+        public Button ScoreDetailsButton;
+        public GameObject DetailsRoot;
+        public GameObject[] SummaryRoots;
+
         [Header("Hero")]
         public Text HomeOutcomeText;
         public Text AwayOutcomeText;
@@ -66,6 +75,7 @@ namespace BackyardLegends.Runtime
         private readonly List<RectTransformSnapshot> nextHandButtonLayout = new();
         private Button cachedNextHandButton;
         private bool hasCachedNextHandButtonLayout;
+        private bool scoreDetailsVisible;
 
         private struct RectTransformSnapshot
         {
@@ -82,6 +92,14 @@ namespace BackyardLegends.Runtime
         private void Awake()
         {
             CacheNextHandButtonLayoutIfNeeded();
+            BindScoreDetailsButton();
+            SetScoreDetailsVisible(false);
+        }
+
+        private void OnEnable()
+        {
+            BindScoreDetailsButton();
+            SetScoreDetailsVisible(false);
         }
 
         private void LateUpdate()
@@ -97,13 +115,15 @@ namespace BackyardLegends.Runtime
             }
 
             CacheNextHandButtonLayoutIfNeeded();
+            BindScoreDetailsButton();
+            SetScoreDetailsVisible(false);
             rules ??= state.RuleSet;
             var modeName = rules != null ? rules.DisplayName : state.RuleSet != null ? state.RuleSet.DisplayName : "Spades";
             var targetScore = ResolveTargetScore(state, rules);
             SetText(ModeText, $"{modeName.ToUpperInvariant()} MODE");
             SetText(TitleText, matchComplete ? "MATCH COMPLETE" : "ROUND COMPLETE");
             RenderHero(home, away);
-            RenderTeamRows(state, home, away);
+            RenderTeamRows(state, rules, home, away);
             SetText(HomeTotalLabelText, "GOLD TEAM");
             SetText(AwayTotalLabelText, "RED TEAM");
             SetText(HomeTotalScoreText, home.Score.ToString());
@@ -213,29 +233,86 @@ namespace BackyardLegends.Runtime
             var awayMade = MadeContract(away);
             SetOutcome(HomeOutcomeText, HomeMadeOutcomeImage, HomeSetOutcomeImage, homeMade ? "WE MADE IT" : "WE GOT SET", homeMade);
             SetOutcome(AwayOutcomeText, AwayMadeOutcomeImage, AwaySetOutcomeImage, awayMade ? "THEY MADE IT" : "THEY GOT SET", awayMade);
-            SetText(HomeRoundDeltaText, FormatSigned(home.RoundDelta));
-            SetText(AwayRoundDeltaText, FormatSigned(away.RoundDelta));
+            SetText(HomeRoundDeltaText, FormatSigned(FullRoundTotal(home)));
+            SetText(AwayRoundDeltaText, FormatSigned(FullRoundTotal(away)));
             SetImageVisible(HomeHeroIcon, homeMade);
             SetImageVisible(AwayHeroIcon, !awayMade);
         }
 
-        private void RenderTeamRows(MatchState state, ScoreSnapshot home, ScoreSnapshot away)
+        private void RenderTeamRows(MatchState state, RuleSetDefinition rules, ScoreSnapshot home, ScoreSnapshot away)
         {
-            SetText(HomeTeamText, FormatTeamNames(state, SeatId.Bottom, SeatId.Top));
+            var showRenegePenalty = rules != null && rules.RenegePenaltyEnabled;
+            var homeNames = FormatTeamNames(state, SeatId.Bottom, SeatId.Top);
+            var awayNames = FormatTeamNames(state, SeatId.Left, SeatId.Right);
+
+            SetText(HomeTeamText, homeNames);
             SetText(HomeTeamSubText, "GOLD TEAM");
             SetText(HomeBidText, home.ContractBid.ToString());
             SetText(HomeBooksText, home.TricksWon.ToString());
             SetResult(HomeResultText, HomeMadeResultImage, HomeSetResultImage, home);
-            SetText(HomeScoreText, FormatSigned(home.RoundDelta));
+            SetText(HomeScoreText, FormatSigned(FullRoundTotal(home)));
             SetImageVisible(HomeResultIcon, false);
 
-            SetText(AwayTeamText, FormatTeamNames(state, SeatId.Left, SeatId.Right));
+            SetText(AwayTeamText, awayNames);
             SetText(AwayTeamSubText, "RED TEAM");
             SetText(AwayBidText, away.ContractBid.ToString());
             SetText(AwayBooksText, away.TricksWon.ToString());
             SetResult(AwayResultText, AwayMadeResultImage, AwaySetResultImage, away);
-            SetText(AwayScoreText, FormatSigned(away.RoundDelta));
+            SetText(AwayScoreText, FormatSigned(FullRoundTotal(away)));
             SetImageVisible(AwayResultIcon, false);
+
+            if (HomeBreakdownView != null)
+            {
+                HomeBreakdownView.Render(homeNames, "GOLD TEAM", home, showRenegePenalty);
+            }
+
+            if (AwayBreakdownView != null)
+            {
+                AwayBreakdownView.Render(awayNames, "RED TEAM", away, showRenegePenalty);
+            }
+        }
+
+        private void BindScoreDetailsButton()
+        {
+            if (ScoreDetailsButton == null)
+            {
+                return;
+            }
+
+            ScoreDetailsButton.onClick.RemoveListener(ToggleScoreDetails);
+            ScoreDetailsButton.onClick.AddListener(ToggleScoreDetails);
+        }
+
+        private void ToggleScoreDetails()
+        {
+            SetScoreDetailsVisible(!scoreDetailsVisible);
+        }
+
+        private void SetScoreDetailsVisible(bool visible)
+        {
+            scoreDetailsVisible = visible && DetailsRoot != null;
+
+            if (SummaryRoots != null)
+            {
+                for (var i = 0; i < SummaryRoots.Length; i++)
+                {
+                    if (SummaryRoots[i] != null)
+                    {
+                        SummaryRoots[i].SetActive(!scoreDetailsVisible);
+                    }
+                }
+            }
+
+            if (DetailsRoot != null)
+            {
+                DetailsRoot.SetActive(scoreDetailsVisible);
+            }
+
+            if (ScoreDetailsButton != null)
+            {
+                ScoreDetailsButton.gameObject.SetActive(DetailsRoot != null);
+                SetButtonLabel(ScoreDetailsButton, scoreDetailsVisible ? "Back to Summary" : "Score Details");
+            }
         }
 
         private static void SetOutcome(Text text, Image madeImage, Image setImage, string fallbackText, bool made)
@@ -269,6 +346,11 @@ namespace BackyardLegends.Runtime
         private static bool MadeContract(ScoreSnapshot score)
         {
             return score.TricksWon >= score.ContractBid;
+        }
+
+        private static int FullRoundTotal(ScoreSnapshot score)
+        {
+            return score.RoundDelta + score.NilDelta;
         }
 
         private static int ResolveTargetScore(MatchState state, RuleSetDefinition rules)

@@ -147,6 +147,7 @@ namespace BackyardLegends.Core
         public int TricksWon;
         public int RoundDelta;
         public int NilDelta;
+        public int RenegeDelta;
         public int BagsEarned;
         public int BagPenaltyDelta;
     }
