@@ -252,7 +252,10 @@ namespace BackyardLegends.Runtime
             var made = MadeContract(score);
             SetImageVisible(madeImage, made && madeImage != null);
             SetImageVisible(setImage, !made && setImage != null);
-            SetText(text, $"Bags +{score.BagsEarned}\nPenalty {FormatSigned(score.BagPenaltyDelta)}");
+            var bagPenalty = score.BagPenaltyDelta != 0
+                ? $"\n{FormatSigned(score.BagPenaltyDelta)} Bag Penalty"
+                : string.Empty;
+            SetText(text, $"Bags +{score.BagsEarned}{bagPenalty}");
             SetTextVisible(text, true);
         }
 

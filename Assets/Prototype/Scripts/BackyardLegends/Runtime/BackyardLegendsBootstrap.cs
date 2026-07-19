@@ -103,6 +103,7 @@ namespace BackyardLegends.Runtime
         private const float TrashTalkBigBookChance = 0.16f;
         private const float TrashTalkSpadesBrokenChance = 0.32f;
         private const float TeamPlayFxCooldownSeconds = 0.82f;
+        private const float BidCameraFocusDuration = 1.65f;
         private static readonly Vector2 BidCalloutAnchorMin = new(0.08f, 1.00f);
         private static readonly Vector2 BidCalloutAnchorMax = new(0.92f, 1.42f);
         private static readonly string[] AvatarDisplayNames =
@@ -221,18 +222,18 @@ namespace BackyardLegends.Runtime
         private Coroutine bidTurnDelayLoop;
         private Coroutine exitPromptFadeLoop;
         private Coroutine optionsMenuAnimationLoop;
-        private Coroutine bookCameraShakeLoop;
         private Coroutine lastTrickDisplayLoop;
-        private Transform bookCameraShakeTarget;
-        private Vector3 bookCameraShakeStartPosition;
-        private Quaternion bookCameraShakeStartRotation;
-        private Camera bookCameraShakeCamera;
         private Camera gameplayCamera;
         private Vector3 gameplayCameraDefaultPosition;
         private Quaternion gameplayCameraDefaultRotation;
         private float gameplayCameraDefaultOrthographicSize;
         private float gameplayCameraDefaultFieldOfView;
         private bool gameplayCameraDefaultsCaptured;
+        private GameplayCameraEffect gameplayCameraEffect;
+        private float gameplayCameraEffectStartTime;
+        private float gameplayCameraEffectDuration;
+        private Vector2 gameplayCameraEffectDirection;
+        private float gameplayCameraEffectIntensity;
         private SpadesMatchController controller;
         private IRuleEngine ruleEngine;
         private BackyardLegendsSession session;
@@ -337,6 +338,13 @@ namespace BackyardLegends.Runtime
             BidPanelOpen,
             OptionsMenuOpen,
             OptionsMenuClose
+        }
+
+        private enum GameplayCameraEffect
+        {
+            None,
+            BidFocus,
+            BookImpact
         }
 
         private enum ConfirmationPromptType
@@ -1026,24 +1034,21 @@ namespace BackyardLegends.Runtime
 
         private void LateUpdate()
         {
-            CaptureGameplayCameraDefaults();
-            RestoreGameplayCameraProjection();
-            if (bookCameraShakeLoop == null)
-            {
-                RestoreGameplayCameraTransform();
-            }
+            // Always rebuild the camera from its authored baseline before applying the
+            // current finite effect. Nothing is added to the previous frame, so camera
+            // motion cannot accumulate or remain stranded by an interrupted coroutine.
+            RestoreGameplayCameraState();
+            ApplyGameplayCameraEffect();
         }
 
         private void OnDisable()
         {
-            RestoreBookCameraShakeTarget();
-            RestoreGameplayCameraState();
+            CancelGameplayCameraEffect();
         }
 
         private void OnDestroy()
         {
-            RestoreBookCameraShakeTarget();
-            RestoreGameplayCameraState();
+            CancelGameplayCameraEffect();
         }
 
 #if UNITY_EDITOR
@@ -1109,7 +1114,6 @@ namespace BackyardLegends.Runtime
             bidTurnDelayLoop = null;
             exitPromptFadeLoop = null;
             optionsMenuAnimationLoop = null;
-            bookCameraShakeLoop = null;
         }
 
         private void ApplyEditorTestEndState(TeamId winningTeam)
@@ -2399,8 +2403,7 @@ namespace BackyardLegends.Runtime
             sceneRefs.HudModeText.text = $"{selectedRule.DisplayName.ToUpperInvariant()} | {selectedRule.TargetScore}";
             sceneRefs.TimerHookText.text = BuildTurnIndicatorText();
             sceneRefs.StatusText.text = controller.State.RoundState.LastStatusMessage;
-            sceneRefs.HomeScoreText.text = BuildScoreboardText(TeamId.Home);
-            sceneRefs.AwayScoreText.text = BuildScoreboardText(TeamId.Away);
+            RenderGameplayScoreboard();
             sceneRefs.StatusText.text = openingDealPending
                 ? openingDealRunning
                     ? "Dealing from center table."
@@ -3097,10 +3100,6 @@ namespace BackyardLegends.Runtime
             var shouldShow = controller.State.Phase == MatchPhase.Bidding &&
                              controller.State.RoundState.BidState.CurrentBidder == SeatId.Bottom;
             SetBidSheetVisible(shouldShow);
-            if (shouldShow)
-            {
-                RestoreBidCameraFocus();
-            }
 
             if (!shouldShow)
             {
@@ -6668,13 +6667,9 @@ namespace BackyardLegends.Runtime
             ClearTransientFx();
         }
 
-        private void RestoreBidCameraFocus()
+        private void StartBidCameraFocus(SeatId seat)
         {
-            // Bid callouts used to pan and zoom the whole gameplay camera. If the final
-            // bidder was an AI, no later player bid sheet requested the reset and the
-            // reduced FOV could survive for the rest of the hand. Keep callouts as UI-only
-            // feedback and immediately heal any camera state left by an older flow.
-            RestoreGameplayCameraState();
+            StartGameplayCameraEffect(GameplayCameraEffect.BidFocus, GetCameraFocusDirection(seat), 1f, BidCameraFocusDuration);
         }
 
         private void CaptureGameplayCameraDefaults()
@@ -6728,7 +6723,135 @@ namespace BackyardLegends.Runtime
             }
         }
 
-        private static Vector2 GetBidCameraFocusDirection(SeatId seat)
+        private void StartBookCameraShake(SeatId focusSeat, float intensity = 1f)
+        {
+            var shakePower = Mathf.Clamp(intensity, 0.2f, 1.8f);
+            var shake01 = Mathf.InverseLerp(0.2f, 1.8f, shakePower);
+            var baseDuration = theme != null ? theme.shakeDuration : 0.24f;
+            var duration = Mathf.Max(0.28f, baseDuration * Mathf.Lerp(1.25f, 2.05f, shake01));
+            StartGameplayCameraEffect(GameplayCameraEffect.BookImpact, GetCameraFocusDirection(focusSeat), shakePower, duration);
+        }
+
+        private void StartGameplayCameraEffect(GameplayCameraEffect effect, Vector2 direction, float intensity, float duration)
+        {
+            CaptureGameplayCameraDefaults();
+            if (!gameplayCameraDefaultsCaptured || gameplayCamera == null)
+            {
+                return;
+            }
+
+            RestoreGameplayCameraState();
+            gameplayCameraEffect = effect;
+            gameplayCameraEffectStartTime = Time.unscaledTime;
+            gameplayCameraEffectDuration = Mathf.Max(0.05f, duration);
+            gameplayCameraEffectDirection = direction;
+            gameplayCameraEffectIntensity = Mathf.Max(0f, intensity);
+        }
+
+        private void ApplyGameplayCameraEffect()
+        {
+            if (gameplayCameraEffect == GameplayCameraEffect.None || !gameplayCameraDefaultsCaptured || gameplayCamera == null)
+            {
+                return;
+            }
+
+            var elapsed = Mathf.Max(0f, Time.unscaledTime - gameplayCameraEffectStartTime);
+            if (elapsed >= gameplayCameraEffectDuration)
+            {
+                gameplayCameraEffect = GameplayCameraEffect.None;
+                return;
+            }
+
+            var t = Mathf.Clamp01(elapsed / gameplayCameraEffectDuration);
+            switch (gameplayCameraEffect)
+            {
+                case GameplayCameraEffect.BidFocus:
+                    ApplyBidCameraFocus(t);
+                    break;
+                case GameplayCameraEffect.BookImpact:
+                    ApplyBookCameraImpact(elapsed, t);
+                    break;
+            }
+        }
+
+        private void ApplyBidCameraFocus(float t)
+        {
+            var focus = t < 0.24f
+                ? EaseInOutCubic(t / 0.24f)
+                : t < 0.72f
+                    ? 1f
+                    : 1f - EaseInOutCubic((t - 0.72f) / 0.28f);
+            var travel = gameplayCamera.orthographic
+                ? Mathf.Max(0.62f, gameplayCameraDefaultOrthographicSize * 0.28f)
+                : 0.72f;
+            var focusOffset = new Vector3(
+                gameplayCameraEffectDirection.x * travel,
+                gameplayCameraEffectDirection.y * travel * 0.86f,
+                0f) * focus;
+            var floatDrift = gameplayCameraDefaultRotation * Vector3.up * (Mathf.Sin(t * Mathf.PI) * 0.035f * focus);
+            gameplayCamera.transform.localPosition = gameplayCameraDefaultPosition + focusOffset + floatDrift;
+            gameplayCamera.transform.localRotation = gameplayCameraDefaultRotation;
+            if (gameplayCamera.orthographic)
+            {
+                gameplayCamera.orthographicSize = Mathf.Lerp(gameplayCameraDefaultOrthographicSize, gameplayCameraDefaultOrthographicSize * 0.85f, focus);
+            }
+            else
+            {
+                gameplayCamera.fieldOfView = Mathf.Lerp(gameplayCameraDefaultFieldOfView, gameplayCameraDefaultFieldOfView * 0.88f, focus);
+            }
+        }
+
+        private void ApplyBookCameraImpact(float elapsed, float t)
+        {
+            var shakePower = Mathf.Clamp(gameplayCameraEffectIntensity, 0.2f, 1.8f);
+            var shake01 = Mathf.InverseLerp(0.2f, 1.8f, shakePower);
+            var primaryPunch = Mathf.Sin(Mathf.Clamp01(t / 0.58f) * Mathf.PI);
+            var afterPunch = Mathf.Sin(Mathf.Clamp01((t - 0.32f) / 0.68f) * Mathf.PI) * 0.14f;
+            var punch = Mathf.Clamp01(primaryPunch + afterPunch);
+            var falloff = 1f - EaseOutCubic(t);
+            var hit = Mathf.Exp(-12f * t);
+            var rumble = Mathf.Sin(t * Mathf.PI) * 0.22f;
+            var x = (Mathf.Sin(elapsed * 128f) * 0.12f + Mathf.Sin(elapsed * 43f) * 0.05f) * falloff * shakePower;
+            var y = (Mathf.Cos(elapsed * 106f) * 0.09f + Mathf.Sin(elapsed * 57f) * 0.04f) * falloff * shakePower;
+            var roll = (Mathf.Sin(elapsed * 152f) * 0.95f + Mathf.Sin(elapsed * 31f) * 0.32f) * falloff * shakePower;
+            x += Mathf.Sin(elapsed * 235f) * 0.08f * hit * shakePower;
+            y += Mathf.Cos(elapsed * 225f) * 0.065f * hit * shakePower;
+            roll += Mathf.Sin(elapsed * 275f) * 0.72f * hit * shakePower;
+            x += gameplayCameraEffectDirection.x * rumble * 0.08f * shakePower;
+            y += gameplayCameraEffectDirection.y * rumble * 0.055f * shakePower;
+
+            var punchTravel = gameplayCamera.orthographic
+                ? Mathf.Max(0.13f, gameplayCameraDefaultOrthographicSize * 0.065f) * shakePower
+                : 0.26f * shakePower;
+            var punchOffset = new Vector3(
+                gameplayCameraEffectDirection.x * punchTravel,
+                gameplayCameraEffectDirection.y * punchTravel * 0.72f,
+                0f);
+            gameplayCamera.transform.localPosition = gameplayCameraDefaultPosition + punchOffset * punch + new Vector3(x, y, 0f);
+            gameplayCamera.transform.localRotation = gameplayCameraDefaultRotation * Quaternion.Euler(0f, 0f, roll);
+            if (gameplayCamera.orthographic)
+            {
+                var targetSize = gameplayCameraDefaultOrthographicSize * Mathf.Lerp(0.975f, 0.925f, shake01);
+                gameplayCamera.orthographicSize = Mathf.Lerp(gameplayCameraDefaultOrthographicSize, targetSize, punch);
+            }
+            else
+            {
+                var targetFieldOfView = gameplayCameraDefaultFieldOfView * Mathf.Lerp(0.975f, 0.935f, shake01);
+                gameplayCamera.fieldOfView = Mathf.Lerp(gameplayCameraDefaultFieldOfView, targetFieldOfView, punch);
+            }
+        }
+
+        private void CancelGameplayCameraEffect()
+        {
+            gameplayCameraEffect = GameplayCameraEffect.None;
+            gameplayCameraEffectStartTime = 0f;
+            gameplayCameraEffectDuration = 0f;
+            gameplayCameraEffectDirection = Vector2.zero;
+            gameplayCameraEffectIntensity = 0f;
+            RestoreGameplayCameraState();
+        }
+
+        private static Vector2 GetCameraFocusDirection(SeatId seat)
         {
             return seat switch
             {
@@ -6738,86 +6861,6 @@ namespace BackyardLegends.Runtime
                 SeatId.Bottom => new Vector2(0f, -0.76f),
                 _ => Vector2.zero
             };
-        }
-
-        private void StartBookCameraShake(SeatId focusSeat, float intensity = 1f)
-        {
-            CaptureGameplayCameraDefaults();
-            if (bookCameraShakeLoop != null)
-            {
-                RestoreBookCameraShakeTarget();
-                StopCoroutine(bookCameraShakeLoop);
-                bookCameraShakeLoop = null;
-            }
-
-            var targetCamera = Camera.main ?? FindFirstObjectByType<Camera>();
-            var target = targetCamera != null
-                ? targetCamera.transform
-                : AnimationRoot;
-            if (target == null)
-            {
-                return;
-            }
-
-            bookCameraShakeTarget = target;
-            bookCameraShakeStartPosition = target.localPosition;
-            bookCameraShakeStartRotation = target.localRotation;
-            bookCameraShakeCamera = targetCamera;
-
-            bookCameraShakeLoop = StartCoroutine(BookCameraShakeRoutine(target, GetBidCameraFocusDirection(focusSeat), Mathf.Max(0.2f, intensity)));
-        }
-
-        private IEnumerator BookCameraShakeRoutine(Transform target, Vector2 focusDirection, float intensity)
-        {
-            var shakePower = Mathf.Clamp(intensity, 0.2f, 1.8f);
-            var shake01 = Mathf.InverseLerp(0.2f, 1.8f, shakePower);
-            var duration = Mathf.Max(0.28f, theme.shakeDuration * Mathf.Lerp(1.25f, 2.05f, shake01));
-            var punchTravel = bookCameraShakeCamera != null && bookCameraShakeCamera.orthographic
-                ? Mathf.Max(0.13f, gameplayCameraDefaultOrthographicSize * 0.065f) * shakePower
-                : 0.26f * shakePower;
-            var punchOffset = new Vector3(focusDirection.x * punchTravel, focusDirection.y * punchTravel * 0.72f, 0f);
-            var elapsed = 0f;
-            while (elapsed < duration && target != null)
-            {
-                elapsed += Time.unscaledDeltaTime;
-                var t = Mathf.Clamp01(elapsed / duration);
-                var primaryPunch = Mathf.Sin(Mathf.Clamp01(t / 0.58f) * Mathf.PI);
-                var afterPunch = Mathf.Sin(Mathf.Clamp01((t - 0.32f) / 0.68f) * Mathf.PI) * 0.14f;
-                var punch = Mathf.Clamp01(primaryPunch + afterPunch);
-                var falloff = 1f - EaseOutCubic(t);
-                var hit = Mathf.Exp(-12f * t);
-                var rumble = Mathf.Sin(t * Mathf.PI) * 0.22f;
-                var x = (Mathf.Sin(elapsed * 128f) * 0.12f + Mathf.Sin(elapsed * 43f) * 0.05f) * falloff * shakePower;
-                var y = (Mathf.Cos(elapsed * 106f) * 0.09f + Mathf.Sin(elapsed * 57f) * 0.04f) * falloff * shakePower;
-                var roll = (Mathf.Sin(elapsed * 152f) * 0.95f + Mathf.Sin(elapsed * 31f) * 0.32f) * falloff * shakePower;
-                x += Mathf.Sin(elapsed * 235f) * 0.08f * hit * shakePower;
-                y += Mathf.Cos(elapsed * 225f) * 0.065f * hit * shakePower;
-                roll += Mathf.Sin(elapsed * 275f) * 0.72f * hit * shakePower;
-                x += focusDirection.x * rumble * 0.08f * shakePower;
-                y += focusDirection.y * rumble * 0.055f * shakePower;
-                target.localPosition = bookCameraShakeStartPosition + punchOffset * punch + new Vector3(x, y, 0f);
-                target.localRotation = bookCameraShakeStartRotation * Quaternion.Euler(0f, 0f, roll);
-
-                yield return null;
-            }
-
-            RestoreBookCameraShakeTarget();
-            bookCameraShakeLoop = null;
-        }
-
-        private void RestoreBookCameraShakeTarget()
-        {
-            if (bookCameraShakeTarget == null)
-            {
-                return;
-            }
-
-            bookCameraShakeTarget.localPosition = bookCameraShakeStartPosition;
-            bookCameraShakeTarget.localRotation = bookCameraShakeStartRotation;
-            RestoreGameplayCameraProjection();
-
-            bookCameraShakeTarget = null;
-            bookCameraShakeCamera = null;
         }
 
         private void ClearTransientMotionState(bool stopQueue)
@@ -6841,14 +6884,7 @@ namespace BackyardLegends.Runtime
             ClearTransientFx();
             ClearBookLightningFx();
             ClearLatestBookAura();
-            if (bookCameraShakeLoop != null)
-            {
-                StopCoroutine(bookCameraShakeLoop);
-                bookCameraShakeLoop = null;
-            }
-
-            RestoreBookCameraShakeTarget();
-            RestoreBidCameraFocus();
+            CancelGameplayCameraEffect();
             HideAllBidBubbles(true);
             if (deferredSheetStateLoop != null)
             {
@@ -7292,7 +7328,7 @@ namespace BackyardLegends.Runtime
             var holdForPlayerDecision = ShouldHoldBidCalloutForPlayerDecision(seat);
             if (seat != SeatId.Bottom)
             {
-                RestoreBidCameraFocus();
+                StartBidCameraFocus(seat);
             }
 
             ShowSeatCallout(
@@ -8693,6 +8729,24 @@ namespace BackyardLegends.Runtime
             return $"{score.Score}/{selectedRule.TargetScore}";
         }
 
+        private void RenderGameplayScoreboard()
+        {
+            if (sceneRefs.HomeScoreText != null)
+            {
+                sceneRefs.HomeScoreText.text = BuildScoreboardText(TeamId.Home);
+            }
+
+            if (sceneRefs.AwayScoreText != null)
+            {
+                sceneRefs.AwayScoreText.text = BuildScoreboardText(TeamId.Away);
+            }
+
+            if (sceneRefs.BagsText != null && controller.State.Scores.TryGetValue(TeamId.Home, out var homeScore))
+            {
+                sceneRefs.BagsText.text = $"BAGS {homeScore.Bags}";
+            }
+        }
+
         private void SetDeckCountersVisible(bool visible)
         {
             if (sceneRefs.DeckAnchorImage != null)
@@ -8762,10 +8816,13 @@ namespace BackyardLegends.Runtime
 
         private static string BuildTeamRoundSummary(string label, ScoreSnapshot score, int bagTarget)
         {
+            var bagPenalty = score.BagPenaltyDelta != 0
+                ? $" | {FormatSigned(score.BagPenaltyDelta)} Bag Penalty"
+                : string.Empty;
             return
                 $"{label}\n" +
                 $"Bid: {score.ContractBid} | Books: {score.TricksWon} | Bags gained: {score.BagsEarned} | Bags now: {score.Bags}/{bagTarget}\n" +
-                $"Bag penalty: {FormatSigned(score.BagPenaltyDelta)} | Round score: {FormatSigned(score.RoundDelta)} | Nil: {FormatSigned(score.NilDelta)} | Total: {score.Score}";
+                $"Round score: {FormatSigned(score.RoundDelta)}{bagPenalty} | Nil: {FormatSigned(score.NilDelta)} | Total: {score.Score}";
         }
 
         private static string FormatSigned(int value)

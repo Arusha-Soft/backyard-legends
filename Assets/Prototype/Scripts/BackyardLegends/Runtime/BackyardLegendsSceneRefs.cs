@@ -27,6 +27,7 @@ namespace BackyardLegends.Runtime
         public Text TimerHookText;
         public Text HomeScoreText;
         public Text AwayScoreText;
+        public Text BagsText;
         public Text HomeDeltaText;
         public Text AwayDeltaText;
         public Text LastTrickText;

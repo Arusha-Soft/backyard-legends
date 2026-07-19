@@ -1508,6 +1508,71 @@ namespace BackyardLegends.Tests
         }
 
         [Test]
+        public void GameplayScoreboardShowsCurrentBagCountWithoutPenaltyPoints()
+        {
+            var host = new GameObject("Gameplay Bag Scoreboard Test");
+            host.SetActive(false);
+            var bootstrap = host.AddComponent<BackyardLegendsBootstrap>();
+            var refs = host.AddComponent<BackyardLegendsSceneRefs>();
+            refs.HomeScoreText = new GameObject("Home Score", typeof(RectTransform), typeof(Text)).GetComponent<Text>();
+            refs.HomeScoreText.transform.SetParent(host.transform, false);
+            refs.AwayScoreText = new GameObject("Away Score", typeof(RectTransform), typeof(Text)).GetComponent<Text>();
+            refs.AwayScoreText.transform.SetParent(host.transform, false);
+            refs.BagsText = new GameObject("Bags", typeof(RectTransform), typeof(Text)).GetComponent<Text>();
+            refs.BagsText.transform.SetParent(host.transform, false);
+            var rules = RuleSetConfig.CreateClassic(200);
+            var controller = CreateController(rules: rules);
+            controller.StartMatch();
+            controller.State.Scores[TeamId.Home].Bags = 7;
+            SetPrivateField(bootstrap, "sceneRefs", refs);
+            SetPrivateField(bootstrap, "controller", controller);
+            SetPrivateField(bootstrap, "selectedRule", rules);
+
+            try
+            {
+                InvokePrivate(bootstrap, "RenderGameplayScoreboard");
+
+                Assert.That(refs.BagsText.text, Is.EqualTo("BAGS 7"));
+                Assert.That(refs.BagsText.text, Does.Not.Contain("-500"));
+                Assert.That(refs.HomeScoreText.text, Is.EqualTo("0/200"));
+                Assert.That(refs.AwayScoreText.text, Is.EqualTo("0/200"));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void EndOfHandScoreboardOnlyShowsBagPenaltyWhenApplied()
+        {
+            var state = CreateScoringState();
+            var host = new GameObject("Bag Penalty Results Test");
+            var resultObject = new GameObject("Home Result", typeof(RectTransform), typeof(Text));
+            resultObject.transform.SetParent(host.transform, false);
+            var view = host.AddComponent<EndOfHandScoreboardView>();
+            view.HomeResultText = resultObject.GetComponent<Text>();
+            state.Scores[TeamId.Home].BagsEarned = 2;
+            state.Scores[TeamId.Home].BagPenaltyDelta = 0;
+
+            try
+            {
+                view.Render(state, state.RuleSet, false, null);
+                Assert.That(view.HomeResultText.text, Is.EqualTo("Bags +2"));
+                Assert.That(view.HomeResultText.text, Does.Not.Contain("Penalty"));
+
+                state.Scores[TeamId.Home].BagPenaltyDelta = -100;
+                view.Render(state, state.RuleSet, false, null);
+
+                Assert.That(view.HomeResultText.text, Is.EqualTo("Bags +2\n-100 Bag Penalty"));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
         public void EndOfHandScoreboardTogglesContinuePlayAgainAndLeaveByMatchState()
         {
             var state = CreateScoringState(RuleSetConfig.CreateStreet(100));
@@ -1616,7 +1681,7 @@ namespace BackyardLegends.Tests
         }
 
         [Test]
-        public void GameplayCameraFallbackRestoresAuthoredViewEveryLateFrame()
+        public void GameplayCameraFallbackPreventsCumulativeViewDriftAcrossLateFrames()
         {
             var camera = Camera.main;
             var createdCamera = camera == null;
@@ -1651,14 +1716,103 @@ namespace BackyardLegends.Tests
                 SetPrivateField(bootstrap, "gameplayCameraDefaultFieldOfView", 60f);
                 SetPrivateField(bootstrap, "gameplayCameraDefaultsCaptured", true);
 
-                camera.transform.localPosition = new Vector3(8f, 6f, -5f);
-                camera.transform.localRotation = Quaternion.Euler(0f, 0f, -18f);
-                camera.fieldOfView = 48f;
+                for (var frame = 0; frame < 32; frame++)
+                {
+                    camera.transform.localPosition = new Vector3(8f + frame * 0.2f, 6f - frame * 0.1f, -5f);
+                    camera.transform.localRotation = Quaternion.Euler(0f, 0f, -18f + frame);
+                    camera.fieldOfView = 48f - frame * 0.1f;
+                    InvokePrivate(bootstrap, "LateUpdate");
+
+                    Assert.That(Vector3.Distance(camera.transform.localPosition, expectedPosition), Is.LessThan(0.001f));
+                    Assert.That(Quaternion.Angle(camera.transform.localRotation, expectedRotation), Is.LessThan(0.001f));
+                    Assert.That(camera.fieldOfView, Is.EqualTo(60f).Within(0.001f));
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+                if (createdCamera)
+                {
+                    Object.DestroyImmediate(cameraObject);
+                }
+                else
+                {
+                    camera.orthographic = originalOrthographic;
+                    camera.orthographicSize = originalOrthographicSize;
+                    camera.fieldOfView = originalFieldOfView;
+                    camera.transform.localPosition = originalPosition;
+                    camera.transform.localRotation = originalRotation;
+                }
+            }
+        }
+
+        [Test]
+        public void GameplayCameraZoomEffectsReturnToBaselineEvenWhenCoroutinesAreInterrupted()
+        {
+            var camera = Camera.main;
+            var createdCamera = camera == null;
+            var cameraObject = createdCamera ? new GameObject("Camera Effect Test Camera") : camera.gameObject;
+            camera = createdCamera ? cameraObject.AddComponent<Camera>() : camera;
+            if (createdCamera)
+            {
+                cameraObject.tag = "MainCamera";
+            }
+
+            var originalPosition = camera.transform.localPosition;
+            var originalRotation = camera.transform.localRotation;
+            var originalOrthographic = camera.orthographic;
+            var originalOrthographicSize = camera.orthographicSize;
+            var originalFieldOfView = camera.fieldOfView;
+            var host = new GameObject("Camera Effect State Test");
+            host.SetActive(false);
+            var bootstrap = host.AddComponent<BackyardLegendsBootstrap>();
+            var expectedPosition = new Vector3(0f, 0f, -10f);
+            var expectedRotation = Quaternion.identity;
+
+            try
+            {
+                camera.orthographic = false;
+                camera.transform.localPosition = expectedPosition;
+                camera.transform.localRotation = expectedRotation;
+                camera.fieldOfView = 60f;
+                SetPrivateField(bootstrap, "gameplayCamera", camera);
+                SetPrivateField(bootstrap, "gameplayCameraDefaultPosition", expectedPosition);
+                SetPrivateField(bootstrap, "gameplayCameraDefaultRotation", expectedRotation);
+                SetPrivateField(bootstrap, "gameplayCameraDefaultOrthographicSize", camera.orthographicSize);
+                SetPrivateField(bootstrap, "gameplayCameraDefaultFieldOfView", 60f);
+                SetPrivateField(bootstrap, "gameplayCameraDefaultsCaptured", true);
+
+                InvokePrivate(bootstrap, "StartBidCameraFocus", SeatId.Right);
+                var bidDuration = GetPrivateField<float>(bootstrap, "gameplayCameraEffectDuration");
+                SetPrivateField(bootstrap, "gameplayCameraEffectStartTime", Time.unscaledTime - bidDuration * 0.45f);
+                bootstrap.StopAllCoroutines();
                 InvokePrivate(bootstrap, "LateUpdate");
 
+                Assert.That(camera.fieldOfView, Is.LessThan(60f));
+                Assert.That(Vector3.Distance(camera.transform.localPosition, expectedPosition), Is.GreaterThan(0.1f));
+
+                SetPrivateField(bootstrap, "gameplayCameraEffectStartTime", Time.unscaledTime - bidDuration - 0.1f);
+                InvokePrivate(bootstrap, "LateUpdate");
+
+                Assert.That(camera.fieldOfView, Is.EqualTo(60f).Within(0.001f));
                 Assert.That(Vector3.Distance(camera.transform.localPosition, expectedPosition), Is.LessThan(0.001f));
                 Assert.That(Quaternion.Angle(camera.transform.localRotation, expectedRotation), Is.LessThan(0.001f));
+
+                InvokePrivate(bootstrap, "StartBookCameraShake", SeatId.Left, 1.2f);
+                var bookDuration = GetPrivateField<float>(bootstrap, "gameplayCameraEffectDuration");
+                SetPrivateField(bootstrap, "gameplayCameraEffectStartTime", Time.unscaledTime - bookDuration * 0.25f);
+                bootstrap.StopAllCoroutines();
+                InvokePrivate(bootstrap, "LateUpdate");
+
+                Assert.That(camera.fieldOfView, Is.LessThan(60f));
+                Assert.That(Vector3.Distance(camera.transform.localPosition, expectedPosition), Is.GreaterThan(0.05f));
+
+                SetPrivateField(bootstrap, "gameplayCameraEffectStartTime", Time.unscaledTime - bookDuration - 0.1f);
+                InvokePrivate(bootstrap, "LateUpdate");
+
                 Assert.That(camera.fieldOfView, Is.EqualTo(60f).Within(0.001f));
+                Assert.That(Vector3.Distance(camera.transform.localPosition, expectedPosition), Is.LessThan(0.001f));
+                Assert.That(Quaternion.Angle(camera.transform.localRotation, expectedRotation), Is.LessThan(0.001f));
             }
             finally
             {
@@ -1934,11 +2088,11 @@ namespace BackyardLegends.Tests
             return button;
         }
 
-        private static void InvokePrivate(object target, string methodName)
+        private static void InvokePrivate(object target, string methodName, params object[] arguments)
         {
             var method = target.GetType().GetMethod(methodName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
             Assert.That(method, Is.Not.Null);
-            method.Invoke(target, null);
+            method.Invoke(target, arguments);
         }
 
         private static void SetPrivateField(object target, string fieldName, object value)
