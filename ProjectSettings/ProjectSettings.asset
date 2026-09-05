@@ -265,7 +265,7 @@ PlayerSettings:
   useCustomGradlePropertiesTemplate: 0
   useCustomGradleSettingsTemplate: 1
   useCustomProguardFile: 0
-  AndroidTargetArchitectures: 2
+  AndroidTargetArchitectures: 3
   AndroidSplashScreenScale: 0
   androidSplashScreen: {fileID: 0}
   AndroidKeystoreName: 
@@ -835,7 +835,8 @@ PlayerSettings:
   scriptingDefineSymbols:
     Android: USE_ROSLYN
   additionalCompilerArguments: {}
-  platformArchitecture: {}
+  platformArchitecture:
+    Android: 2
   scriptingBackend:
     Android: 1
   il2cppCompilerConfiguration: {}
