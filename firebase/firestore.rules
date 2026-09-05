@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.keys().hasAll(['uid', 'displayName', 'rating', 'platform', 'isAnonymous'])
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 0
+        && request.resource.data.rating <= 5000;
+      // Clients may update profile fields they own. Rating writes stay open for Milestone 2;
+      // Cloud Functions will own rating updates in a later milestone.
+      allow update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && (!('rating' in request.resource.data)
+            || request.resource.data.rating is int);
+      allow delete: if false;
+    }
+  }
+}

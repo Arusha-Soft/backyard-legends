@@ -17,11 +17,24 @@ namespace BackyardLegends.Runtime
         public Text FlavorText;
         public Text RuleSummaryText;
         public Text SelectionSummaryText;
+        public Text AccountStatusText;
+        public InputField EmailInput;
+        public InputField PasswordInput;
 
         [Header("Buttons")]
         public Button StartMatchButton;
         public Button[] ModeButtons;
         public Button[] TargetButtons;
+        public Button SignInGoogleButton;
+        public Button SignInAppleButton;
+        public Button EmailRegisterButton;
+        public Button EmailSignInButton;
+        public Button SignOutButton;
+        public Text SessionAccountLabel;
+
+        [Header("Auth Prefab")]
+        public BackyardLegendsLoginAuthView LoginAuthPanelPrefab;
+        public BackyardLegendsLoginAuthView LoginAuthPanelInstance;
 
         public RectTransform LobbySheetRect => SheetImage != null ? SheetImage.rectTransform : null;
         public RectTransform PreviewPanelRect => PreviewPanelImage != null ? PreviewPanelImage.rectTransform : null;
@@ -42,7 +55,16 @@ namespace BackyardLegends.Runtime
             FlavorText = FlavorText != null ? FlavorText : FindByPath<Text>("Lobby Sheet/Preview Panel/Flavor");
             RuleSummaryText = RuleSummaryText != null ? RuleSummaryText : FindByPath<Text>("Lobby Sheet/Preview Panel/Rule Summary");
             SelectionSummaryText = SelectionSummaryText != null ? SelectionSummaryText : FindByPath<Text>("Lobby Sheet/Selection Summary");
+            AccountStatusText = AccountStatusText != null ? AccountStatusText : FindByPath<Text>("Lobby Sheet/Account Status");
+            EmailInput = EmailInput != null ? EmailInput : FindByPath<InputField>("Lobby Sheet/Email Panel/Email Input");
+            PasswordInput = PasswordInput != null ? PasswordInput : FindByPath<InputField>("Lobby Sheet/Email Panel/Password Input");
             StartMatchButton = StartMatchButton != null ? StartMatchButton : FindByPath<Button>("Lobby Sheet/Start Match");
+            SignInGoogleButton = SignInGoogleButton != null ? SignInGoogleButton : FindByPath<Button>("Lobby Sheet/Account Row/Sign In Google");
+            SignInAppleButton = SignInAppleButton != null ? SignInAppleButton : FindByPath<Button>("Lobby Sheet/Account Row/Sign In Apple");
+            EmailRegisterButton = EmailRegisterButton != null ? EmailRegisterButton : FindByPath<Button>("Lobby Sheet/Email Panel/Email Register");
+            EmailSignInButton = EmailSignInButton != null ? EmailSignInButton : FindByPath<Button>("Lobby Sheet/Email Panel/Email Sign In");
+            SignOutButton = SignOutButton != null ? SignOutButton : FindByPath<Button>("Lobby Sheet/Sign Out");
+            SessionAccountLabel = SessionAccountLabel != null ? SessionAccountLabel : FindByPath<Text>("Lobby Sheet/Session Account");
             ModeButtons = ResolveButtons(
                 ModeButtons,
                 "Lobby Sheet/Mode Row/Classic Mode",

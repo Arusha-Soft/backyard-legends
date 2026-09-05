@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using BackyardLegends.Core;
+using BackyardLegends.Runtime.Firebase;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -17,6 +19,7 @@ namespace BackyardLegends.Runtime
         [SerializeField] private string gameplaySceneName = "GameplayScene";
 
         private RuleSetConfig[] ruleConfigs;
+        private Task authTask;
 
         public static BackyardLegendsSession Instance { get; private set; }
 
@@ -24,6 +27,9 @@ namespace BackyardLegends.Runtime
         public int SelectedModeIndex { get; private set; }
         public int SelectedTargetScore { get; private set; } = 100;
         public IReadOnlyList<RuleSetConfig> RuleConfigs => ruleConfigs;
+        public AuthUserSnapshot CurrentUser { get; private set; } = AuthUserSnapshot.None;
+        public bool IsAuthReady { get; private set; }
+        public string AuthStatusMessage { get; private set; } = "Signing in…";
 
         public RuleSetDefinition SelectedRule => GetSelectedRuleDefinition();
 
@@ -95,6 +101,11 @@ namespace BackyardLegends.Runtime
             SceneManager.LoadScene(lobbySceneName);
         }
 
+        public Task WaitForAuthAsync()
+        {
+            return authTask ?? Task.CompletedTask;
+        }
+
         private void Initialize()
         {
             if (Instance != null && Instance != this)
@@ -119,6 +130,51 @@ namespace BackyardLegends.Runtime
             }
 
             ClampSelections();
+            BeginAuth();
+        }
+
+        private void BeginAuth()
+        {
+            if (authTask != null)
+            {
+                return;
+            }
+
+            authTask = EnsureAuthAsync();
+        }
+
+        private async Task EnsureAuthAsync()
+        {
+            IsAuthReady = false;
+            AuthStatusMessage = "Signing in…";
+
+            var auth = FirebaseAuthService.GetOrCreate();
+            auth.StateChanged -= HandleAuthStateChanged;
+            auth.StateChanged += HandleAuthStateChanged;
+
+            var user = await auth.EnsureSignedInAsync();
+            ApplyAuthUser(user, auth.LastError);
+        }
+
+        private void HandleAuthStateChanged(AuthUserSnapshot snapshot)
+        {
+            ApplyAuthUser(snapshot, FirebaseAuthService.Instance != null ? FirebaseAuthService.Instance.LastError : string.Empty);
+        }
+
+        private void ApplyAuthUser(AuthUserSnapshot snapshot, string error)
+        {
+            CurrentUser = snapshot ?? AuthUserSnapshot.None;
+            IsAuthReady = true;
+            if (!CurrentUser.IsSignedIn)
+            {
+                AuthStatusMessage = string.IsNullOrEmpty(error)
+                    ? "Offline guest (Firebase unavailable)"
+                    : $"Auth unavailable · {error}";
+            }
+            else
+            {
+                AuthStatusMessage = CurrentUser.StatusLabel;
+            }
         }
 
         private void ClampSelections()
@@ -200,6 +256,19 @@ namespace BackyardLegends.Runtime
             }
 
             return configs.ToArray();
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance == this)
+            {
+                if (FirebaseAuthService.Instance != null)
+                {
+                    FirebaseAuthService.Instance.StateChanged -= HandleAuthStateChanged;
+                }
+
+                Instance = null;
+            }
         }
     }
 }

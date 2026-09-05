@@ -1,0 +1,15 @@
+﻿{
+  "firestore": {
+    "rules": "firebase/firestore.rules"
+  },
+  "auth": {
+    "providers": {
+      "anonymous": true,
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Backyard Legends",
+        "supportEmail": "rango.ir@gmail.com"
+      }
+    }
+  }
+}

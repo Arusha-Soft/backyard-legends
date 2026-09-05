@@ -63,6 +63,12 @@ sysinfo.txt
 # Crashlytics generated file
 crashlytics-build.properties
 
+# Firebase client config (download from Firebase Console; do not commit)
+**/google-services.json
+**/GoogleService-Info.plist
+Assets/StreamingAssets/google-services-desktop.json
+Assets/StreamingAssets/google-services-desktop.json.meta
+
 # Packed Addressables
 /[Aa]ssets/[Aa]ddressable[Aa]ssets[Dd]ata/*/*.bin*
 

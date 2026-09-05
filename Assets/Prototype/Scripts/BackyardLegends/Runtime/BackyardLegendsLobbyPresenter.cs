@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using BackyardLegends.Core;
+using BackyardLegends.Runtime.Firebase;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -28,6 +29,9 @@ namespace BackyardLegends.Runtime
         private Coroutine backgroundSharpenRoutine;
         private Component backgroundDestroyedFx;
         private Component backgroundSharpenFx;
+        private Coroutine authRefreshRoutine;
+        private bool authActionInFlight;
+        private bool authGateCompleted;
 
         private const float BackgroundDestroyedRevealSeconds = 1f;
         private const float BackgroundSharpenMin = 0.001f;
@@ -64,6 +68,8 @@ namespace BackyardLegends.Runtime
             }
 
             sceneRefs.ResolveMissingReferences();
+            EnsureAccountUi();
+            sceneRefs.ResolveMissingReferences();
             CacheButtons();
             if (!HasRequiredReferences())
             {
@@ -75,10 +81,32 @@ namespace BackyardLegends.Runtime
             CacheModeSelectionMarkers();
             ConfigureFeedbackAudio();
             ConfigureUiCallbacks();
+            ConfigureAuthCallbacks();
             ApplyTheme();
             ConfigureBackgroundEffects();
             ConfigureButtonFeedback();
             RefreshContent();
+            RefreshAccountUi();
+            if (authRefreshRoutine != null)
+            {
+                StopCoroutine(authRefreshRoutine);
+            }
+
+            authRefreshRoutine = StartCoroutine(WatchAuthStatus());
+        }
+
+        private void OnDestroy()
+        {
+            if (authRefreshRoutine != null)
+            {
+                StopCoroutine(authRefreshRoutine);
+                authRefreshRoutine = null;
+            }
+
+            if (FirebaseAuthService.Instance != null)
+            {
+                FirebaseAuthService.Instance.StateChanged -= HandleAuthStateChanged;
+            }
         }
 
         private void CacheButtons()
@@ -88,6 +116,11 @@ namespace BackyardLegends.Runtime
             transparentHitAreaButtons.Clear();
 
             PrepareButtonForRuntime(sceneRefs.StartMatchButton, false);
+            PrepareButtonForRuntime(sceneRefs.SignInGoogleButton, false);
+            PrepareButtonForRuntime(sceneRefs.SignInAppleButton, false);
+            PrepareButtonForRuntime(sceneRefs.EmailRegisterButton, false);
+            PrepareButtonForRuntime(sceneRefs.EmailSignInButton, false);
+            PrepareButtonForRuntime(sceneRefs.SignOutButton, false);
             CacheConfiguredButtons(sceneRefs.ModeButtons, modeButtons, true);
             CacheConfiguredButtons(sceneRefs.TargetButtons, targetButtons, false);
         }
@@ -149,6 +182,600 @@ namespace BackyardLegends.Runtime
             }
         }
 
+        private void ConfigureAuthCallbacks()
+        {
+            if (FirebaseAuthService.Instance != null)
+            {
+                FirebaseAuthService.Instance.StateChanged -= HandleAuthStateChanged;
+                FirebaseAuthService.Instance.StateChanged += HandleAuthStateChanged;
+            }
+
+            BindButtonFamily(sceneRefs.SignInGoogleButton, () =>
+            {
+                if (authActionInFlight)
+                {
+                    return;
+                }
+
+                PlayFeedback(FeedbackCue.Select, 0.85f);
+                StartCoroutine(RunAuthAction(() => FirebaseAuthService.GetOrCreate().LinkWithGoogleAsync()));
+            });
+
+            BindButtonFamily(sceneRefs.SignInAppleButton, () =>
+            {
+                if (authActionInFlight)
+                {
+                    return;
+                }
+
+                PlayFeedback(FeedbackCue.Select, 0.85f);
+                StartCoroutine(RunAuthAction(() => FirebaseAuthService.GetOrCreate().LinkWithAppleAsync()));
+            });
+
+            BindButtonFamily(sceneRefs.EmailRegisterButton, () =>
+            {
+                if (authActionInFlight)
+                {
+                    return;
+                }
+
+                PlayFeedback(FeedbackCue.Select, 0.85f);
+                var email = sceneRefs.EmailInput != null ? sceneRefs.EmailInput.text : string.Empty;
+                var password = sceneRefs.PasswordInput != null ? sceneRefs.PasswordInput.text : string.Empty;
+                StartCoroutine(RunAuthAction(() => FirebaseAuthService.GetOrCreate().RegisterWithEmailPasswordAsync(email, password)));
+            });
+
+            BindButtonFamily(sceneRefs.EmailSignInButton, () =>
+            {
+                if (authActionInFlight)
+                {
+                    return;
+                }
+
+                PlayFeedback(FeedbackCue.Select, 0.85f);
+                var email = sceneRefs.EmailInput != null ? sceneRefs.EmailInput.text : string.Empty;
+                var password = sceneRefs.PasswordInput != null ? sceneRefs.PasswordInput.text : string.Empty;
+                StartCoroutine(RunAuthAction(() => FirebaseAuthService.GetOrCreate().SignInWithEmailPasswordAsync(email, password)));
+            });
+
+            BindButtonFamily(sceneRefs.SignOutButton, () =>
+            {
+                if (authActionInFlight)
+                {
+                    return;
+                }
+
+                PlayFeedback(FeedbackCue.Select, 0.85f);
+                StartCoroutine(RunSignOutAction());
+            });
+        }
+
+        private void HandleAuthStateChanged(AuthUserSnapshot snapshot)
+        {
+            if (snapshot != null && snapshot.IsSignedIn && !snapshot.IsAnonymous && string.IsNullOrEmpty(FirebaseAuthService.Instance?.LastError))
+            {
+                authGateCompleted = true;
+            }
+
+            RefreshAccountUi();
+        }
+
+        private IEnumerator WatchAuthStatus()
+        {
+            var wait = new WaitForSecondsRealtime(0.25f);
+            while (enabled)
+            {
+                RefreshAccountUi();
+                if (session != null && session.IsAuthReady)
+                {
+                    if (session.CurrentUser != null && session.CurrentUser.IsSignedIn && !session.CurrentUser.IsAnonymous)
+                    {
+                        authGateCompleted = true;
+                        RefreshAccountUi();
+                    }
+
+                    yield break;
+                }
+
+                yield return wait;
+            }
+        }
+
+        private IEnumerator RunAuthAction(System.Func<System.Threading.Tasks.Task> action)
+        {
+            authActionInFlight = true;
+            RefreshAccountUi();
+            var task = action();
+            while (task != null && !task.IsCompleted)
+            {
+                yield return null;
+            }
+
+            authActionInFlight = false;
+            var auth = FirebaseAuthService.Instance;
+            if (auth != null
+                && string.IsNullOrEmpty(auth.LastError)
+                && auth.CurrentUser != null
+                && auth.CurrentUser.IsSignedIn
+                && !auth.CurrentUser.IsAnonymous)
+            {
+                authGateCompleted = true;
+            }
+
+            RefreshAccountUi();
+            RefreshContent();
+        }
+
+        private IEnumerator RunSignOutAction()
+        {
+            authActionInFlight = true;
+            RefreshAccountUi();
+            var task = FirebaseAuthService.GetOrCreate().SignOutAsync();
+            while (task != null && !task.IsCompleted)
+            {
+                yield return null;
+            }
+
+            authActionInFlight = false;
+            authGateCompleted = false;
+            RefreshAccountUi();
+            RefreshContent();
+        }
+
+        private void EnsureAccountUi()
+        {
+            if (sceneRefs.SheetImage == null)
+            {
+                return;
+            }
+
+            EnsureSessionAccountChrome();
+
+            if (TryMountLoginAuthPrefab())
+            {
+                return;
+            }
+
+            var sheet = sceneRefs.SheetImage.transform;
+            if (sceneRefs.AccountStatusText == null)
+            {
+                sceneRefs.AccountStatusText = CreateRuntimeText(
+                    "Account Status",
+                    sheet,
+                    "Signing in…",
+                    18,
+                    FontStyle.Bold,
+                    theme != null ? theme.mutedText : new Color(0.75f, 0.75f, 0.78f),
+                    TextAnchor.MiddleCenter,
+                    new Vector2(0.10f, 0.705f),
+                    new Vector2(0.90f, 0.745f));
+            }
+
+            var accountRow = sheet.Find("Account Row");
+            if (accountRow == null)
+            {
+                var rowGo = new GameObject("Account Row", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+                accountRow = rowGo.transform;
+                accountRow.SetParent(sheet, false);
+                var rowRect = rowGo.GetComponent<RectTransform>();
+                rowRect.anchorMin = new Vector2(0.10f, 0.655f);
+                rowRect.anchorMax = new Vector2(0.90f, 0.700f);
+                rowRect.offsetMin = Vector2.zero;
+                rowRect.offsetMax = Vector2.zero;
+                var layout = rowGo.GetComponent<HorizontalLayoutGroup>();
+                layout.spacing = 12f;
+                layout.childControlWidth = true;
+                layout.childControlHeight = true;
+                layout.childForceExpandWidth = true;
+                layout.childForceExpandHeight = true;
+            }
+
+            if (sceneRefs.SignInGoogleButton == null)
+            {
+                sceneRefs.SignInGoogleButton = CreateRuntimeButton(
+                    "Sign In Google",
+                    accountRow,
+                    "GOOGLE",
+                    theme != null ? theme.gold : new Color(0.83f, 0.69f, 0.22f),
+                    Vector2.zero,
+                    Vector2.one);
+            }
+
+            if (sceneRefs.SignInAppleButton == null)
+            {
+                sceneRefs.SignInAppleButton = CreateRuntimeButton(
+                    "Sign In Apple",
+                    accountRow,
+                    "APPLE",
+                    theme != null ? theme.panelStroke : new Color(0.35f, 0.36f, 0.40f),
+                    Vector2.zero,
+                    Vector2.one);
+            }
+
+            var emailPanel = sheet.Find("Email Panel");
+            if (emailPanel == null)
+            {
+                var panelGo = new GameObject("Email Panel", typeof(RectTransform));
+                emailPanel = panelGo.transform;
+                emailPanel.SetParent(sheet, false);
+                var panelRect = panelGo.GetComponent<RectTransform>();
+                panelRect.anchorMin = new Vector2(0.10f, 0.600f);
+                panelRect.anchorMax = new Vector2(0.90f, 0.650f);
+                panelRect.offsetMin = Vector2.zero;
+                panelRect.offsetMax = Vector2.zero;
+            }
+
+            if (sceneRefs.EmailInput == null)
+            {
+                sceneRefs.EmailInput = CreateRuntimeInputField(
+                    "Email Input",
+                    emailPanel,
+                    "Email",
+                    InputField.ContentType.EmailAddress,
+                    new Vector2(0.00f, 0.05f),
+                    new Vector2(0.38f, 0.95f));
+            }
+
+            if (sceneRefs.PasswordInput == null)
+            {
+                sceneRefs.PasswordInput = CreateRuntimeInputField(
+                    "Password Input",
+                    emailPanel,
+                    "Password",
+                    InputField.ContentType.Password,
+                    new Vector2(0.40f, 0.05f),
+                    new Vector2(0.72f, 0.95f));
+            }
+
+            if (sceneRefs.EmailRegisterButton == null)
+            {
+                sceneRefs.EmailRegisterButton = CreateRuntimeButton(
+                    "Email Register",
+                    emailPanel,
+                    "CREATE",
+                    theme != null ? theme.green : new Color(0.25f, 0.65f, 0.35f),
+                    new Vector2(0.74f, 0.05f),
+                    new Vector2(0.86f, 0.95f));
+            }
+
+            if (sceneRefs.EmailSignInButton == null)
+            {
+                sceneRefs.EmailSignInButton = CreateRuntimeButton(
+                    "Email Sign In",
+                    emailPanel,
+                    "SIGN IN",
+                    theme != null ? theme.gold : new Color(0.83f, 0.69f, 0.22f),
+                    new Vector2(0.88f, 0.05f),
+                    new Vector2(1.00f, 0.95f));
+            }
+        }
+
+        private bool TryMountLoginAuthPrefab()
+        {
+            if (sceneRefs.LoginAuthPanelInstance != null)
+            {
+                sceneRefs.LoginAuthPanelInstance.ApplyToLobbyRefs(sceneRefs);
+                BindContinueAsGuest(sceneRefs.LoginAuthPanelInstance);
+                return HasMountedAuthControls();
+            }
+
+            var prefab = sceneRefs.LoginAuthPanelPrefab;
+            if (prefab == null)
+            {
+                prefab = Resources.Load<BackyardLegendsLoginAuthView>("BackyardLegends/LoginAuthPanel");
+            }
+
+            if (prefab == null)
+            {
+                var prefabGo = Resources.Load<GameObject>("BackyardLegends/LoginAuthPanel");
+                if (prefabGo != null)
+                {
+                    prefab = prefabGo.GetComponent<BackyardLegendsLoginAuthView>();
+                }
+            }
+
+            if (prefab == null || sceneRefs.SheetImage == null)
+            {
+                return false;
+            }
+
+            var instance = Instantiate(prefab, sceneRefs.SheetImage.transform, false);
+            instance.name = "LoginAuthPanel";
+            var rect = instance.GetComponent<RectTransform>();
+            if (rect != null)
+            {
+                rect.anchorMin = new Vector2(0.06f, 0.58f);
+                rect.anchorMax = new Vector2(0.94f, 0.88f);
+                rect.offsetMin = Vector2.zero;
+                rect.offsetMax = Vector2.zero;
+            }
+
+            sceneRefs.LoginAuthPanelInstance = instance;
+            instance.ApplyToLobbyRefs(sceneRefs);
+            BindContinueAsGuest(instance);
+            return HasMountedAuthControls();
+        }
+
+        private bool HasMountedAuthControls()
+        {
+            return sceneRefs.AccountStatusText != null
+                   && sceneRefs.EmailInput != null
+                   && sceneRefs.PasswordInput != null
+                   && sceneRefs.EmailRegisterButton != null
+                   && sceneRefs.EmailSignInButton != null;
+        }
+
+        private void BindContinueAsGuest(BackyardLegendsLoginAuthView view)
+        {
+            if (view == null || view.ContinueAsGuestButton == null)
+            {
+                return;
+            }
+
+            BindButtonFamily(view.ContinueAsGuestButton, () =>
+            {
+                PlayFeedback(FeedbackCue.Confirm, 0.9f);
+                authGateCompleted = true;
+                RefreshAccountUi();
+            });
+        }
+
+        private void EnsureSessionAccountChrome()
+        {
+            var sheet = sceneRefs.SheetImage.transform;
+            if (sceneRefs.SessionAccountLabel == null)
+            {
+                sceneRefs.SessionAccountLabel = CreateRuntimeText(
+                    "Session Account",
+                    sheet,
+                    string.Empty,
+                    18,
+                    FontStyle.Bold,
+                    theme != null ? theme.mutedText : new Color(0.75f, 0.75f, 0.78f),
+                    TextAnchor.MiddleLeft,
+                    new Vector2(0.06f, 0.925f),
+                    new Vector2(0.62f, 0.985f));
+            }
+
+            if (sceneRefs.SignOutButton == null)
+            {
+                sceneRefs.SignOutButton = CreateRuntimeButton(
+                    "Sign Out",
+                    sheet,
+                    "SIGN OUT",
+                    theme != null ? theme.red : new Color(0.75f, 0.28f, 0.28f),
+                    new Vector2(0.66f, 0.925f),
+                    new Vector2(0.94f, 0.985f));
+            }
+        }
+
+        private void RefreshAccountUi()
+        {
+            var user = session != null ? session.CurrentUser : AuthUserSnapshot.None;
+            var auth = FirebaseAuthService.Instance;
+            if (auth != null && auth.CurrentUser != null && auth.CurrentUser.IsSignedIn)
+            {
+                user = auth.CurrentUser;
+            }
+
+            if (sceneRefs.AccountStatusText != null)
+            {
+                var status = session != null ? session.AuthStatusMessage : "Signing in…";
+                if (authActionInFlight)
+                {
+                    status = "Updating account…";
+                }
+
+                if (auth != null && !string.IsNullOrEmpty(auth.LastError) && !authActionInFlight)
+                {
+                    status = $"{status}\n{auth.LastError}";
+                }
+
+                sceneRefs.AccountStatusText.text = status;
+            }
+
+            if (sceneRefs.SessionAccountLabel != null)
+            {
+                if (authGateCompleted && user != null && user.IsSignedIn)
+                {
+                    sceneRefs.SessionAccountLabel.text = user.StatusLabel;
+                    sceneRefs.SessionAccountLabel.gameObject.SetActive(true);
+                }
+                else
+                {
+                    sceneRefs.SessionAccountLabel.text = string.Empty;
+                    sceneRefs.SessionAccountLabel.gameObject.SetActive(false);
+                }
+            }
+
+            SetLoginAuthPanelVisible(!authGateCompleted);
+
+            var showGoogle = false;
+            var showApple = false;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            showGoogle = true;
+#elif UNITY_IOS && !UNITY_EDITOR
+            showApple = true;
+#endif
+#if UNITY_EDITOR
+            showGoogle = true;
+            showApple = true;
+#endif
+
+            var controlsInteractable = !authActionInFlight && !authGateCompleted;
+            SetAuthButtonVisible(sceneRefs.SignInGoogleButton, showGoogle && !authGateCompleted, controlsInteractable);
+            SetAuthButtonVisible(sceneRefs.SignInAppleButton, showApple && !authGateCompleted, controlsInteractable);
+            SetAuthButtonVisible(sceneRefs.EmailRegisterButton, !authGateCompleted, controlsInteractable);
+            SetAuthButtonVisible(sceneRefs.EmailSignInButton, !authGateCompleted, controlsInteractable);
+            SetAuthButtonVisible(sceneRefs.SignOutButton, authGateCompleted, !authActionInFlight && authGateCompleted);
+
+            if (sceneRefs.EmailInput != null)
+            {
+                sceneRefs.EmailInput.interactable = controlsInteractable;
+            }
+
+            if (sceneRefs.PasswordInput != null)
+            {
+                sceneRefs.PasswordInput.interactable = controlsInteractable;
+            }
+
+#if UNITY_EDITOR
+            if (sceneRefs.SignInGoogleButton != null && sceneRefs.SignInGoogleButton.gameObject.activeSelf)
+            {
+                sceneRefs.SignInGoogleButton.interactable = false;
+            }
+
+            if (sceneRefs.SignInAppleButton != null && sceneRefs.SignInAppleButton.gameObject.activeSelf)
+            {
+                sceneRefs.SignInAppleButton.interactable = false;
+            }
+#endif
+        }
+
+        private void SetLoginAuthPanelVisible(bool visible)
+        {
+            if (sceneRefs.LoginAuthPanelInstance != null)
+            {
+                sceneRefs.LoginAuthPanelInstance.gameObject.SetActive(visible);
+            }
+        }
+
+        private static void SetAuthButtonVisible(Button button, bool visible, bool interactable)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.gameObject.SetActive(visible);
+            button.interactable = visible && interactable;
+        }
+
+        private Text CreateRuntimeText(
+            string name,
+            Transform parent,
+            string value,
+            int size,
+            FontStyle style,
+            Color color,
+            TextAnchor alignment,
+            Vector2 anchorMin,
+            Vector2 anchorMax)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Text));
+            go.transform.SetParent(parent, false);
+            var text = go.GetComponent<Text>();
+            text.text = value;
+            text.fontSize = size;
+            text.fontStyle = style;
+            text.color = color;
+            text.alignment = alignment;
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.raycastTarget = false;
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            var rect = text.rectTransform;
+            rect.anchorMin = anchorMin;
+            rect.anchorMax = anchorMax;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+            return text;
+        }
+
+        private Button CreateRuntimeButton(
+            string name,
+            Transform parent,
+            string label,
+            Color color,
+            Vector2 anchorMin,
+            Vector2 anchorMax)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var image = go.GetComponent<Image>();
+            image.color = color;
+            var button = go.GetComponent<Button>();
+            button.targetGraphic = image;
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = anchorMin;
+            rect.anchorMax = anchorMax;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+
+            var labelGo = new GameObject("Label", typeof(RectTransform), typeof(Text));
+            labelGo.transform.SetParent(go.transform, false);
+            var text = labelGo.GetComponent<Text>();
+            text.text = label;
+            text.fontSize = 18;
+            text.fontStyle = FontStyle.Bold;
+            text.color = Color.black;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.raycastTarget = false;
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            var labelRect = text.rectTransform;
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
+            return button;
+        }
+
+        private InputField CreateRuntimeInputField(
+            string name,
+            Transform parent,
+            string placeholder,
+            InputField.ContentType contentType,
+            Vector2 anchorMin,
+            Vector2 anchorMax)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(InputField));
+            go.transform.SetParent(parent, false);
+            var image = go.GetComponent<Image>();
+            image.color = new Color(0.12f, 0.13f, 0.15f, 0.95f);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = anchorMin;
+            rect.anchorMax = anchorMax;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+
+            var textGo = new GameObject("Text", typeof(RectTransform), typeof(Text));
+            textGo.transform.SetParent(go.transform, false);
+            var text = textGo.GetComponent<Text>();
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.fontSize = 16;
+            text.color = Color.white;
+            text.alignment = TextAnchor.MiddleLeft;
+            text.supportRichText = false;
+            var textRect = text.rectTransform;
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.offsetMin = new Vector2(10f, 4f);
+            textRect.offsetMax = new Vector2(-10f, -4f);
+
+            var placeholderGo = new GameObject("Placeholder", typeof(RectTransform), typeof(Text));
+            placeholderGo.transform.SetParent(go.transform, false);
+            var placeholderText = placeholderGo.GetComponent<Text>();
+            placeholderText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            placeholderText.fontSize = 16;
+            placeholderText.fontStyle = FontStyle.Italic;
+            placeholderText.color = new Color(1f, 1f, 1f, 0.35f);
+            placeholderText.alignment = TextAnchor.MiddleLeft;
+            placeholderText.text = placeholder;
+            var placeholderRect = placeholderText.rectTransform;
+            placeholderRect.anchorMin = Vector2.zero;
+            placeholderRect.anchorMax = Vector2.one;
+            placeholderRect.offsetMin = new Vector2(10f, 4f);
+            placeholderRect.offsetMax = new Vector2(-10f, -4f);
+
+            var input = go.GetComponent<InputField>();
+            input.targetGraphic = image;
+            input.textComponent = text;
+            input.placeholder = placeholderText;
+            input.contentType = contentType;
+            input.lineType = InputField.LineType.SingleLine;
+            return input;
+        }
+
         private void ConfigureFeedbackAudio()
         {
             feedbackAudioSource = GetComponent<AudioSource>();
@@ -183,7 +810,14 @@ namespace BackyardLegends.Runtime
             EnsureFont(sceneRefs.FlavorText);
             EnsureFont(sceneRefs.RuleSummaryText);
             EnsureFont(sceneRefs.SelectionSummaryText);
+            EnsureFont(sceneRefs.AccountStatusText);
             EnsureButtonFont(sceneRefs.StartMatchButton);
+            EnsureButtonFont(sceneRefs.SignInGoogleButton);
+            EnsureButtonFont(sceneRefs.SignInAppleButton);
+            EnsureButtonFont(sceneRefs.EmailRegisterButton);
+            EnsureButtonFont(sceneRefs.EmailSignInButton);
+            EnsureButtonFont(sceneRefs.SignOutButton);
+            EnsureFont(sceneRefs.SessionAccountLabel);
             foreach (var button in modeButtons)
             {
                 EnsureButtonFont(button);
@@ -200,6 +834,11 @@ namespace BackyardLegends.Runtime
             buttonFeedback.Clear();
 
             ConfigureButtonFeedback(sceneRefs.StartMatchButton, true);
+            ConfigureButtonFeedback(sceneRefs.SignInGoogleButton);
+            ConfigureButtonFeedback(sceneRefs.SignInAppleButton);
+            ConfigureButtonFeedback(sceneRefs.EmailRegisterButton);
+            ConfigureButtonFeedback(sceneRefs.EmailSignInButton);
+            ConfigureButtonFeedback(sceneRefs.SignOutButton);
             foreach (var button in modeButtons)
             {
                 ConfigureButtonFeedback(button);
@@ -262,6 +901,7 @@ namespace BackyardLegends.Runtime
                     "Backyard energy over casino polish. Short, sharp rounds with enough swagger to sell the street-table tone.";
             }
 
+            RefreshAccountUi();
             UpdateSelectionButtons();
         }
 

@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@string/gcm_defaultSenderId,@string/google_storage_bucket,@string/project_id,@string/google_api_key,@string/google_crash_reporting_api_key,@string/google_app_id,@string/default_android_client_id,@string/default_web_client_id">
+  <string name="gcm_defaultSenderId" translatable="false">699148197424</string>
+  <string name="google_storage_bucket" translatable="false">backyard-legends.firebasestorage.app</string>
+  <string name="project_id" translatable="false">backyard-legends</string>
+  <string name="google_api_key" translatable="false">AIzaSyCOAG4KOF9U_bsErbl8nrUZsx5tng6vTvA</string>
+  <string name="google_crash_reporting_api_key" translatable="false">AIzaSyCOAG4KOF9U_bsErbl8nrUZsx5tng6vTvA</string>
+  <string name="google_app_id" translatable="false">1:699148197424:android:799a08f0b1b0bbc2ca17f5</string>
+  <string name="default_android_client_id" translatable="false">699148197424-i54aq81m08u06g37o9b5i8hbtgho4l1j.apps.googleusercontent.com</string>
+  <string name="default_web_client_id" translatable="false">699148197424-v8qk3mdohb33kltqjqt0bl43v8s3vj5v.apps.googleusercontent.com</string>
+</resources>
