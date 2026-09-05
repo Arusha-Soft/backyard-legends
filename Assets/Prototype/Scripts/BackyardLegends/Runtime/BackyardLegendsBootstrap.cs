@@ -234,6 +234,7 @@ namespace BackyardLegends.Runtime
         private float gameplayCameraEffectDuration;
         private Vector2 gameplayCameraEffectDirection;
         private float gameplayCameraEffectIntensity;
+        private bool gameplayCameraPreCullHooked;
         private SpadesMatchController controller;
         private IRuleEngine ruleEngine;
         private BackyardLegendsSession session;
@@ -1032,23 +1033,67 @@ namespace BackyardLegends.Runtime
             RestoreSeatRootScales();
         }
 
+        private void OnEnable()
+        {
+            HookGameplayCameraPreCull(true);
+        }
+
         private void LateUpdate()
+        {
+            ApplyGameplayCameraFrame();
+        }
+
+        private void OnDisable()
+        {
+            HookGameplayCameraPreCull(false);
+            CancelGameplayCameraEffect();
+        }
+
+        private void OnDestroy()
+        {
+            HookGameplayCameraPreCull(false);
+            CancelGameplayCameraEffect();
+        }
+
+        private void HookGameplayCameraPreCull(bool hook)
+        {
+            if (hook)
+            {
+                if (!gameplayCameraPreCullHooked)
+                {
+                    Camera.onPreCull += HandleGameplayCameraPreCull;
+                    gameplayCameraPreCullHooked = true;
+                }
+
+                return;
+            }
+
+            if (!gameplayCameraPreCullHooked)
+            {
+                return;
+            }
+
+            Camera.onPreCull -= HandleGameplayCameraPreCull;
+            gameplayCameraPreCullHooked = false;
+        }
+
+        private void HandleGameplayCameraPreCull(Camera camera)
+        {
+            if (!isActiveAndEnabled || gameplayCamera == null || camera != gameplayCamera)
+            {
+                return;
+            }
+
+            ApplyGameplayCameraFrame();
+        }
+
+        private void ApplyGameplayCameraFrame()
         {
             // Always rebuild the camera from its authored baseline before applying the
             // current finite effect. Nothing is added to the previous frame, so camera
             // motion cannot accumulate or remain stranded by an interrupted coroutine.
             RestoreGameplayCameraState();
             ApplyGameplayCameraEffect();
-        }
-
-        private void OnDisable()
-        {
-            CancelGameplayCameraEffect();
-        }
-
-        private void OnDestroy()
-        {
-            CancelGameplayCameraEffect();
         }
 
 #if UNITY_EDITOR
@@ -6785,10 +6830,11 @@ namespace BackyardLegends.Runtime
             var travel = gameplayCamera.orthographic
                 ? Mathf.Max(0.62f, gameplayCameraDefaultOrthographicSize * 0.28f)
                 : 0.72f;
+            var zDolly = gameplayCamera.orthographic ? 0f : 0.75f;
             var focusOffset = new Vector3(
                 gameplayCameraEffectDirection.x * travel,
                 gameplayCameraEffectDirection.y * travel * 0.86f,
-                0f) * focus;
+                zDolly) * focus;
             var floatDrift = gameplayCameraDefaultRotation * Vector3.up * (Mathf.Sin(t * Mathf.PI) * 0.035f * focus);
             gameplayCamera.transform.localPosition = gameplayCameraDefaultPosition + focusOffset + floatDrift;
             gameplayCamera.transform.localRotation = gameplayCameraDefaultRotation;
@@ -6824,10 +6870,11 @@ namespace BackyardLegends.Runtime
             var punchTravel = gameplayCamera.orthographic
                 ? Mathf.Max(0.13f, gameplayCameraDefaultOrthographicSize * 0.065f) * shakePower
                 : 0.26f * shakePower;
+            var zPunch = gameplayCamera.orthographic ? 0f : 0.18f * shakePower;
             var punchOffset = new Vector3(
                 gameplayCameraEffectDirection.x * punchTravel,
                 gameplayCameraEffectDirection.y * punchTravel * 0.72f,
-                0f);
+                zPunch);
             gameplayCamera.transform.localPosition = gameplayCameraDefaultPosition + punchOffset * punch + new Vector3(x, y, 0f);
             gameplayCamera.transform.localRotation = gameplayCameraDefaultRotation * Quaternion.Euler(0f, 0f, roll);
             if (gameplayCamera.orthographic)
