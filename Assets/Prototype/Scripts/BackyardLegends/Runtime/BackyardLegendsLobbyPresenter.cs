@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using BackyardLegends.Core;
 using BackyardLegends.Runtime.Firebase;
+using BackyardLegends.Runtime.Network;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -32,6 +33,7 @@ namespace BackyardLegends.Runtime
         private Coroutine authRefreshRoutine;
         private bool authActionInFlight;
         private bool authGateCompleted;
+        private bool onlineActionInFlight;
 
         private const float BackgroundDestroyedRevealSeconds = 1f;
         private const float BackgroundSharpenMin = 0.001f;
@@ -69,6 +71,7 @@ namespace BackyardLegends.Runtime
 
             sceneRefs.ResolveMissingReferences();
             EnsureAccountUi();
+            EnsureOnlineUi();
             sceneRefs.ResolveMissingReferences();
             CacheButtons();
             if (!HasRequiredReferences())
@@ -116,6 +119,8 @@ namespace BackyardLegends.Runtime
             transparentHitAreaButtons.Clear();
 
             PrepareButtonForRuntime(sceneRefs.StartMatchButton, false);
+            PrepareButtonForRuntime(sceneRefs.HostTableButton, false);
+            PrepareButtonForRuntime(sceneRefs.JoinTableButton, false);
             PrepareButtonForRuntime(sceneRefs.SignInGoogleButton, false);
             PrepareButtonForRuntime(sceneRefs.SignInAppleButton, false);
             PrepareButtonForRuntime(sceneRefs.EmailRegisterButton, false);
@@ -149,6 +154,31 @@ namespace BackyardLegends.Runtime
                 PlayFeedback(FeedbackCue.Confirm, 0.95f);
                 KickButton(sceneRefs.StartMatchButton, 0.7f);
                 session.LoadGameplayScene();
+            });
+
+            BindButtonFamily(sceneRefs.HostTableButton, () =>
+            {
+                if (onlineActionInFlight)
+                {
+                    return;
+                }
+
+                PlayFeedback(FeedbackCue.Confirm, 0.95f);
+                KickButton(sceneRefs.HostTableButton, 0.7f);
+                StartCoroutine(RunHostOnline());
+            });
+
+            BindButtonFamily(sceneRefs.JoinTableButton, () =>
+            {
+                if (onlineActionInFlight)
+                {
+                    return;
+                }
+
+                PlayFeedback(FeedbackCue.Confirm, 0.95f);
+                KickButton(sceneRefs.JoinTableButton, 0.7f);
+                var code = sceneRefs.JoinCodeInput != null ? sceneRefs.JoinCodeInput.text : SpadesRelayService.LocalJoinCode;
+                StartCoroutine(RunJoinOnline(code));
             });
 
             for (var i = 0; i < modeButtons.Count; i++)
@@ -248,6 +278,137 @@ namespace BackyardLegends.Runtime
                 PlayFeedback(FeedbackCue.Select, 0.85f);
                 StartCoroutine(RunSignOutAction());
             });
+        }
+
+        private IEnumerator RunHostOnline()
+        {
+            onlineActionInFlight = true;
+            SetOnlineStatus("Hosting…");
+            var task = session.HostOnlineTableAsync();
+            while (!task.IsCompleted)
+            {
+                yield return null;
+            }
+
+            onlineActionInFlight = false;
+            if (task.IsFaulted)
+            {
+                SetOnlineStatus(task.Exception?.GetBaseException().Message ?? "Host failed.");
+            }
+        }
+
+        private IEnumerator RunJoinOnline(string joinCode)
+        {
+            onlineActionInFlight = true;
+            SetOnlineStatus($"Joining {joinCode}…");
+            var task = session.JoinOnlineTableAsync(joinCode);
+            while (!task.IsCompleted)
+            {
+                yield return null;
+            }
+
+            onlineActionInFlight = false;
+            if (task.IsFaulted)
+            {
+                SetOnlineStatus(task.Exception?.GetBaseException().Message ?? "Join failed.");
+            }
+        }
+
+        private void SetOnlineStatus(string message)
+        {
+            if (sceneRefs.OnlineStatusText != null)
+            {
+                sceneRefs.OnlineStatusText.text = message ?? string.Empty;
+            }
+
+            var networkSession = SpadesNetworkSession.Instance;
+            if (networkSession != null && !string.IsNullOrEmpty(networkSession.JoinCode) && sceneRefs.OnlineStatusText != null)
+            {
+                sceneRefs.OnlineStatusText.text = $"{message} · code {networkSession.JoinCode}";
+            }
+        }
+
+        private void EnsureOnlineUi()
+        {
+            if (sceneRefs.SheetImage == null)
+            {
+                return;
+            }
+
+            var sheet = sceneRefs.SheetImage.transform;
+            var onlineRow = sheet.Find("Online Row");
+            if (onlineRow == null)
+            {
+                var rowGo = new GameObject("Online Row", typeof(RectTransform));
+                onlineRow = rowGo.transform;
+                onlineRow.SetParent(sheet, false);
+                var rowRect = rowGo.GetComponent<RectTransform>();
+                rowRect.anchorMin = new Vector2(0.08f, 0.095f);
+                rowRect.anchorMax = new Vector2(0.92f, 0.145f);
+                rowRect.offsetMin = Vector2.zero;
+                rowRect.offsetMax = Vector2.zero;
+            }
+
+            if (sceneRefs.HostTableButton == null)
+            {
+                sceneRefs.HostTableButton = CreateRuntimeButton(
+                    "Host Table",
+                    onlineRow,
+                    "HOST",
+                    theme != null ? theme.green : new Color(0.25f, 0.65f, 0.35f),
+                    new Vector2(0.00f, 0.05f),
+                    new Vector2(0.22f, 0.95f));
+            }
+
+            if (sceneRefs.JoinCodeInput == null)
+            {
+                sceneRefs.JoinCodeInput = CreateRuntimeInputField(
+                    "Join Code Input",
+                    onlineRow,
+                    "LOCAL or join code",
+                    InputField.ContentType.Standard,
+                    new Vector2(0.24f, 0.05f),
+                    new Vector2(0.72f, 0.95f));
+                if (sceneRefs.JoinCodeInput != null)
+                {
+                    sceneRefs.JoinCodeInput.text = SpadesRelayService.LocalJoinCode;
+                }
+            }
+
+            if (sceneRefs.JoinTableButton == null)
+            {
+                sceneRefs.JoinTableButton = CreateRuntimeButton(
+                    "Join Table",
+                    onlineRow,
+                    "JOIN",
+                    theme != null ? theme.gold : new Color(0.83f, 0.69f, 0.22f),
+                    new Vector2(0.74f, 0.05f),
+                    new Vector2(1.00f, 0.95f));
+            }
+
+            if (sceneRefs.OnlineStatusText == null)
+            {
+                sceneRefs.OnlineStatusText = CreateRuntimeText(
+                    "Online Status",
+                    sheet,
+                    "Online: Host / Join (Relay or LOCAL)",
+                    16,
+                    FontStyle.Normal,
+                    theme != null ? theme.mutedText : new Color(0.75f, 0.75f, 0.78f),
+                    TextAnchor.MiddleCenter,
+                    new Vector2(0.10f, 0.055f),
+                    new Vector2(0.90f, 0.090f));
+            }
+
+            if (sceneRefs.StartMatchButton != null)
+            {
+                var startRect = sceneRefs.StartMatchButton.transform as RectTransform;
+                if (startRect != null)
+                {
+                    startRect.anchorMin = new Vector2(0.18f, 0.155f);
+                    startRect.anchorMax = new Vector2(0.82f, 0.215f);
+                }
+            }
         }
 
         private void HandleAuthStateChanged(AuthUserSnapshot snapshot)

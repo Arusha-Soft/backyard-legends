@@ -2,7 +2,8 @@
   "name": "BackyardLegends.Editor",
   "rootNamespace": "BackyardLegends.Editor",
   "references": [
-    "BackyardLegends"
+    "BackyardLegends",
+    "Unity.Netcode.Runtime"
   ],
   "includePlatforms": [
     "Editor"

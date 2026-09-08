@@ -1,8 +1,10 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using BackyardLegends.Core;
 using BackyardLegends.Runtime.Firebase;
+using BackyardLegends.Runtime.Network;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -93,13 +95,53 @@ namespace BackyardLegends.Runtime
 
         public void LoadGameplayScene()
         {
+            SpadesNetworkSession.GetOrCreate().ConfigureOffline();
+            SceneManager.LoadScene(gameplaySceneName);
+        }
+
+        public async Task HostOnlineTableAsync()
+        {
+            var networkSession = SpadesNetworkSession.GetOrCreate();
+            networkSession.BeginHost(SelectedRule);
+            var host = SpadesNetworkManagerHost.GetOrCreate();
+            var started = await host.StartHostAsync();
+            if (!started)
+            {
+                throw new InvalidOperationException(networkSession.StatusMessage);
+            }
+
+            SceneManager.LoadScene(gameplaySceneName);
+        }
+
+        public async Task JoinOnlineTableAsync(string joinCode)
+        {
+            var networkSession = SpadesNetworkSession.GetOrCreate();
+            networkSession.BeginClient(joinCode, SelectedRule);
+            var host = SpadesNetworkManagerHost.GetOrCreate();
+            var started = await host.StartClientAsync(joinCode);
+            if (!started)
+            {
+                throw new InvalidOperationException(networkSession.StatusMessage);
+            }
+
             SceneManager.LoadScene(gameplaySceneName);
         }
 
         public void LoadLobbyScene()
         {
+            if (SpadesNetworkManagerHost.Instance != null)
+            {
+                SpadesNetworkManagerHost.Instance.Shutdown();
+            }
+            else
+            {
+                SpadesNetworkSession.GetOrCreate().ConfigureOffline();
+            }
+
             SceneManager.LoadScene(lobbySceneName);
         }
+
+        public string GameplaySceneName => gameplaySceneName;
 
         public Task WaitForAuthAsync()
         {

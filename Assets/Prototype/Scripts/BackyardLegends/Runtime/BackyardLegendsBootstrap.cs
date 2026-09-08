@@ -2,6 +2,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using BackyardLegends.Core;
+using BackyardLegends.Runtime.Network;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -238,6 +240,11 @@ namespace BackyardLegends.Runtime
         private SpadesMatchController controller;
         private IRuleEngine ruleEngine;
         private BackyardLegendsSession session;
+        private SpadesNetworkSession networkSession;
+        private SpadesTableNetwork tableNetwork;
+        private SpadesSeatMapper seatMapper;
+        private bool onlineMatch;
+        private bool onlinePresentationReady;
         private AudioSource feedbackAudioSource;
         private Image openingStackEffectImage;
         private AudioClip bidClip;
@@ -561,6 +568,177 @@ namespace BackyardLegends.Runtime
             ConfigureUiCallbacks();
             ApplyTheme();
             StartConfiguredMatch();
+        }
+
+        private bool IsOnlineMatch => onlineMatch && networkSession != null && networkSession.IsOnline;
+
+        private void BindOnlineTable(SpadesTableNetwork table)
+        {
+            if (tableNetwork != null)
+            {
+                tableNetwork.NetworkEventReceived -= HandleOnlineNetworkEvent;
+                tableNetwork.LocalSeatAssigned -= HandleOnlineSeatAssigned;
+                tableNetwork.MatchBound -= HandleOnlineMatchBound;
+                tableNetwork.PrivateHandUpdated -= HandleOnlinePrivateHandUpdated;
+            }
+
+            tableNetwork = table;
+            if (tableNetwork == null)
+            {
+                return;
+            }
+
+            tableNetwork.NetworkEventReceived += HandleOnlineNetworkEvent;
+            tableNetwork.LocalSeatAssigned += HandleOnlineSeatAssigned;
+            tableNetwork.MatchBound += HandleOnlineMatchBound;
+            tableNetwork.PrivateHandUpdated += HandleOnlinePrivateHandUpdated;
+
+            if (networkSession != null && networkSession.SeatAssigned)
+            {
+                seatMapper = new SpadesSeatMapper(networkSession.LocalLogicalSeat);
+            }
+
+            if (tableNetwork.IsServer && tableNetwork.HostController != null)
+            {
+                HandleOnlineMatchBound();
+            }
+        }
+
+        private void HandleOnlineSeatAssigned(SeatId seat)
+        {
+            seatMapper = new SpadesSeatMapper(seat);
+            FlashStatus($"Seated {seat}", theme != null ? theme.gold : Color.yellow);
+        }
+
+        private void HandleOnlinePrivateHandUpdated()
+        {
+            if (!IsOnlineMatch || controller?.State?.RoundState == null || networkSession == null || !networkSession.SeatAssigned)
+            {
+                return;
+            }
+
+            var localSeat = networkSession.LocalLogicalSeat;
+            var visualSeat = seatMapper != null ? seatMapper.ToVisual(localSeat) : SeatId.Bottom;
+            controller.State.RoundState.HandsBySeat[visualSeat] = tableNetwork != null
+                ? tableNetwork.LocalPrivateHand.ToList()
+                : new List<Card>();
+            RenderAll();
+        }
+
+        private void HandleOnlineMatchBound()
+        {
+            if (tableNetwork == null || !tableNetwork.IsServer || tableNetwork.HostController == null)
+            {
+                return;
+            }
+
+            if (controller != null)
+            {
+                controller.EventRaised -= OnMatchEvent;
+            }
+
+            controller = tableNetwork.HostController;
+            controller.EventRaised += OnMatchEvent;
+            selectedRule = controller.State.RuleSet;
+            ruleEngine = new SpadesRuleEngine();
+            onlinePresentationReady = true;
+            AddFeedMessage("Online host table bound.");
+            RenderAll();
+        }
+
+        private void HandleOnlineNetworkEvent(SpadesNetworkEventPayload payload)
+        {
+            if (payload.Kind == (byte)SpadesNetworkEventKind.ActionRejected)
+            {
+                PlayFeedback(FeedbackCue.Invalid, 0.18f);
+                FlashStatus(payload.Message, theme != null ? theme.red : Color.red);
+                return;
+            }
+
+            if (payload.Kind == (byte)SpadesNetworkEventKind.SeatAssigned)
+            {
+                return;
+            }
+
+            if (tableNetwork != null && tableNetwork.IsServer)
+            {
+                // Host already consumes live controller events.
+                if (payload.Kind == (byte)SpadesNetworkEventKind.TableReady)
+                {
+                    FlashStatus(payload.Message, theme != null ? theme.gold : Color.yellow);
+                }
+
+                return;
+            }
+
+            EnsureOnlineClientController();
+            var localSeat = networkSession != null && networkSession.SeatAssigned
+                ? networkSession.LocalLogicalSeat
+                : SeatId.Bottom;
+            seatMapper ??= new SpadesSeatMapper(localSeat);
+
+            if (payload.PublicState != null)
+            {
+                SpadesNetworkStateApplier.ApplyPublicState(
+                    controller.State,
+                    payload.PublicState,
+                    localSeat,
+                    tableNetwork != null ? tableNetwork.LocalPrivateHand : null,
+                    seatMapper);
+            }
+
+            var matchEvent = SpadesNetworkStateApplier.ToMatchEvent(payload, controller.State, seatMapper);
+            if (payload.Kind != (byte)SpadesNetworkEventKind.TableReady)
+            {
+                OnMatchEvent(matchEvent);
+            }
+            else
+            {
+                RenderAll();
+            }
+        }
+
+        private void EnsureOnlineClientController()
+        {
+            if (controller != null)
+            {
+                return;
+            }
+
+            selectedRule = networkSession?.PendingRules ?? session.SelectedRule;
+            ruleEngine = new SpadesRuleEngine();
+            controller = new SpadesMatchController(
+                selectedRule,
+                ruleEngine,
+                new Dictionary<SeatId, IAiAgent>());
+            onlinePresentationReady = true;
+        }
+
+        private IEnumerator WatchOnlineTableSpawn()
+        {
+            var timeout = Time.time + 12f;
+            while (SpadesTableNetwork.Instance == null && Time.time < timeout)
+            {
+                if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+                {
+                    SpadesNetworkManagerHost.GetOrCreate().SpawnTableIfHost();
+                }
+
+                yield return null;
+            }
+
+            if (SpadesTableNetwork.Instance == null)
+            {
+                FlashStatus("Online table failed to spawn.", theme != null ? theme.red : Color.red);
+                yield break;
+            }
+
+            BindOnlineTable(SpadesTableNetwork.Instance);
+            if (networkSession != null)
+            {
+                var code = networkSession.JoinCode;
+                FlashStatus(string.IsNullOrEmpty(code) ? "Online table connected." : $"Online · {code}", theme != null ? theme.gold : Color.yellow);
+            }
         }
 
         private RectTransform ResolveVisibleAnimationRoot()
@@ -1712,6 +1890,12 @@ namespace BackyardLegends.Runtime
             SetSheetVisible(sceneRefs.EndSheet, false);
             lastRenderedHand.Clear();
             selectedCard = null;
+            if (IsOnlineMatch && tableNetwork != null)
+            {
+                tableNetwork.ReadyForNextHandServerRpc();
+                return;
+            }
+
             controller.StartNextRound();
             RenderAll();
             ScheduleAiLoop();
@@ -2264,6 +2448,14 @@ namespace BackyardLegends.Runtime
 
         private void StartConfiguredMatch()
         {
+            networkSession = SpadesNetworkSession.GetOrCreate();
+            onlineMatch = networkSession.IsOnline;
+            if (onlineMatch)
+            {
+                StartOnlineConfiguredMatch();
+                return;
+            }
+
             if (controller != null)
             {
                 controller.EventRaised -= OnMatchEvent;
@@ -2333,6 +2525,50 @@ namespace BackyardLegends.Runtime
             ResetExitPromptVisualState();
             RenderAll();
             StartAvatarIntro();
+        }
+
+        private void StartOnlineConfiguredMatch()
+        {
+            if (controller != null)
+            {
+                controller.EventRaised -= OnMatchEvent;
+                controller = null;
+            }
+
+            ClearTransientMotionState(true);
+            recentFeed.Clear();
+            selectedCard = null;
+            pendingBidSelection = null;
+            lastRenderedHand.Clear();
+            HideAllBidBubbles(true);
+            onlinePresentationReady = false;
+            seatMapper = networkSession.SeatAssigned
+                ? new SpadesSeatMapper(networkSession.LocalLogicalSeat)
+                : new SpadesSeatMapper(SeatId.Bottom);
+            selectedRule = networkSession.PendingRules ?? (session != null ? session.SelectedRule : RuleSetConfig.CreateClassic(100));
+            ruleEngine = new SpadesRuleEngine();
+
+            avatarIntroRunning = false;
+            openingDealPending = false;
+            openingDealRunning = false;
+            SetBidSheetVisible(false);
+            SetSheetVisible(sceneRefs.RoundSheet, false);
+            SetSheetVisible(sceneRefs.EndSheet, false);
+            SetOptionsMenuVisibleImmediate(false);
+            SetSheetVisible(sceneRefs.ExitPromptOverlay, false);
+            ResetExitPromptVisualState();
+            AddFeedMessage($"Online table: {selectedRule.DisplayName} to {selectedRule.TargetScore}.");
+            if (sceneRefs.StatusText != null)
+            {
+                sceneRefs.StatusText.text = "Connecting to online table…";
+            }
+
+            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+            {
+                SpadesNetworkManagerHost.GetOrCreate().SpawnTableIfHost();
+            }
+
+            StartCoroutine(WatchOnlineTableSpawn());
         }
 
         private void OnMatchEvent(SpadesMatchEvent matchEvent)
@@ -4587,6 +4823,15 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
+            if (IsOnlineMatch && tableNetwork != null)
+            {
+                pendingBidSelection = null;
+                SetBidSheetVisible(false);
+                HideAllBidBubbles(true);
+                tableNetwork.SubmitBidServerRpc(bid);
+                return;
+            }
+
             if (!controller.TrySubmitBid(SeatId.Bottom, bid, out var error))
             {
                 PlayFeedback(FeedbackCue.Invalid, 0.18f);
@@ -4705,6 +4950,14 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
+            if (IsOnlineMatch && tableNetwork != null)
+            {
+                var card = selectedCard.Value;
+                selectedCard = null;
+                tableNetwork.PlayCardServerRpc((byte)card.Suit, (byte)card.Rank);
+                return;
+            }
+
             if (!controller.TryPlayCard(SeatId.Bottom, selectedCard.Value, out var error))
             {
                 PlayFeedback(FeedbackCue.Invalid, 0.18f);
@@ -4729,6 +4982,12 @@ namespace BackyardLegends.Runtime
 
         private void ScheduleAiLoop()
         {
+            if (IsOnlineMatch)
+            {
+                // Host advances AI inside SpadesTableNetwork after each committed action.
+                return;
+            }
+
             if (aiLoop != null)
             {
                 StopCoroutine(aiLoop);
@@ -8662,6 +8921,12 @@ namespace BackyardLegends.Runtime
             ClearTransientMotionState(true);
             SetBidSheetVisible(false);
             SetOptionsMenuVisibleImmediate(false);
+            if (IsOnlineMatch && tableNetwork != null)
+            {
+                tableNetwork.ForfeitMatchServerRpc();
+                return;
+            }
+
             if (!controller.TryForfeitMatch(TeamId.Home, out var error))
             {
                 PlayFeedback(FeedbackCue.Invalid, 0.18f);
@@ -8678,6 +8943,12 @@ namespace BackyardLegends.Runtime
             if (controller == null)
             {
                 ScheduleAiLoop();
+                return;
+            }
+
+            if (IsOnlineMatch && tableNetwork != null)
+            {
+                tableNetwork.ClaimRemainingBooksServerRpc();
                 return;
             }
 

@@ -1,7 +1,13 @@
 {
   "name": "BackyardLegends",
   "rootNamespace": "BackyardLegends",
-  "references": [],
+  "references": [
+    "Unity.Netcode.Runtime",
+    "Unity.Services.Core",
+    "Unity.Services.Authentication",
+    "Unity.Services.Multiplayer",
+    "Unity.Networking.Transport"
+  ],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,

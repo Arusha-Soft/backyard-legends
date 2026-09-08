@@ -37,9 +37,34 @@ namespace BackyardLegends.Core
 
         public MatchState State { get; }
         public SeatId HumanSeat => SeatId.Bottom;
-        public bool NeedsAiTurn =>
-            (State.Phase == MatchPhase.Bidding && State.RoundState.BidState.CurrentBidder != HumanSeat) ||
-            (State.Phase == MatchPhase.TrickPlay && State.RoundState.TrickState.CurrentTurn != HumanSeat);
+
+        public bool IsAiSeat(SeatId seat)
+        {
+            return aiAgents != null && aiAgents.ContainsKey(seat);
+        }
+
+        public bool NeedsAiTurn
+        {
+            get
+            {
+                if (State.RoundState == null)
+                {
+                    return false;
+                }
+
+                if (State.Phase == MatchPhase.Bidding)
+                {
+                    return IsAiSeat(State.RoundState.BidState.CurrentBidder);
+                }
+
+                if (State.Phase == MatchPhase.TrickPlay)
+                {
+                    return IsAiSeat(State.RoundState.TrickState.CurrentTurn);
+                }
+
+                return false;
+            }
+        }
 
         public void StartMatch()
         {
@@ -255,6 +280,11 @@ namespace BackyardLegends.Core
             if (State.Phase == MatchPhase.Bidding)
             {
                 var seat = State.RoundState.BidState.CurrentBidder;
+                if (!IsAiSeat(seat))
+                {
+                    return;
+                }
+
                 var context = new AiBidContext
                 {
                     Seat = seat,
@@ -271,6 +301,11 @@ namespace BackyardLegends.Core
             if (State.Phase == MatchPhase.TrickPlay)
             {
                 var seat = State.RoundState.TrickState.CurrentTurn;
+                if (!IsAiSeat(seat))
+                {
+                    return;
+                }
+
                 var context = new AiPlayContext
                 {
                     Seat = seat,
