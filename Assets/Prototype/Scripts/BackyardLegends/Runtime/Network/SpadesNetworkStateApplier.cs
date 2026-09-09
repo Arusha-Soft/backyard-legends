@@ -141,8 +141,15 @@ namespace BackyardLegends.Runtime.Network
                     return new MatchForfeitedEvent(snapshot, (TeamId)payload.Team, (TeamId)payload.WinningTeam);
                 case SpadesNetworkEventKind.SetBookReached:
                     return new SetBookReachedEvent(snapshot, (TeamId)payload.Team);
+                case SpadesNetworkEventKind.PlayerAway:
+                case SpadesNetworkEventKind.PlayerReturned:
+                case SpadesNetworkEventKind.CatchUpState:
+                case SpadesNetworkEventKind.TableReady:
+                case SpadesNetworkEventKind.SeatAssigned:
+                case SpadesNetworkEventKind.ActionRejected:
+                    return null;
                 default:
-                    return new MatchStartedEvent(snapshot);
+                    return null;
             }
         }
 

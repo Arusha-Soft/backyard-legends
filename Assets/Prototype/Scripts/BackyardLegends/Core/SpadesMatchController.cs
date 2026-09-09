@@ -17,7 +17,7 @@ namespace BackyardLegends.Core
             int? seed = null)
         {
             this.ruleEngine = ruleEngine;
-            this.aiAgents = aiAgents;
+            this.aiAgents = aiAgents ?? new Dictionary<SeatId, IAiAgent>();
             random = seed.HasValue ? new Random(seed.Value) : new Random();
 
             State = new MatchState
@@ -40,7 +40,22 @@ namespace BackyardLegends.Core
 
         public bool IsAiSeat(SeatId seat)
         {
-            return aiAgents != null && aiAgents.ContainsKey(seat);
+            return aiAgents.ContainsKey(seat);
+        }
+
+        public void SetAiSitIn(SeatId seat, IAiAgent agent)
+        {
+            if (agent == null)
+            {
+                throw new ArgumentNullException(nameof(agent));
+            }
+
+            aiAgents[seat] = agent;
+        }
+
+        public void ClearAiSitIn(SeatId seat)
+        {
+            aiAgents.Remove(seat);
         }
 
         public bool NeedsAiTurn

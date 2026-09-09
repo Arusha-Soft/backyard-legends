@@ -19,7 +19,10 @@ namespace BackyardLegends.Runtime.Network
         SetBookReached = 10,
         ActionRejected = 11,
         SeatAssigned = 12,
-        TableReady = 13
+        TableReady = 13,
+        PlayerAway = 14,
+        PlayerReturned = 15,
+        CatchUpState = 16
     }
 
     public struct SpadesNetworkCard : INetworkSerializable

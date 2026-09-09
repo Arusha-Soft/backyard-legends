@@ -9,19 +9,30 @@ namespace BackyardLegends.Runtime.Network
 {
     public sealed class SpadesTableNetwork : NetworkBehaviour
     {
+        private const float ReconnectGraceSeconds = 90f;
+
         public static SpadesTableNetwork Instance { get; private set; }
 
         private readonly Dictionary<ulong, SeatId> seatByClient = new();
         private readonly Dictionary<SeatId, ulong> clientBySeat = new();
-        private readonly HashSet<SeatId> humanSeats = new();
+        private readonly Dictionary<ulong, string> uidByClient = new();
+        private readonly Dictionary<string, SeatId> seatByUid = new();
+        private readonly Dictionary<SeatId, string> uidBySeat = new();
+        private readonly Dictionary<SeatId, string> displayNameBySeat = new();
+        private readonly HashSet<SeatId> humanOwnedSeats = new();
+        private readonly HashSet<SeatId> connectedHumanSeats = new();
+        private readonly HashSet<SeatId> aiSitInSeats = new();
+        private readonly Dictionary<SeatId, float> graceEndsAtBySeat = new();
         private readonly HashSet<SeatId> readyForNextHand = new();
         private readonly Dictionary<ulong, List<Card>> privateHandsByClient = new();
+        private readonly HashSet<ulong> pendingRegistration = new();
 
         private SpadesMatchController hostController;
         private SpadesRuleEngine ruleEngine;
         private bool matchStarted;
         private float autoStartAt = -1f;
         private List<Card> localPrivateHand = new();
+        private bool localPlayerRegistered;
 
         public SpadesMatchController HostController => hostController;
         public bool MatchStarted => matchStarted;
@@ -48,6 +59,8 @@ namespace BackyardLegends.Runtime.Network
                 autoStartAt = Time.time + 2.5f;
                 SpadesNetworkSession.GetOrCreate().SetStatus("Waiting for players (AI fills empty seats)…");
             }
+
+            TryRegisterLocalPlayer();
         }
 
         public override void OnNetworkDespawn()
@@ -71,12 +84,12 @@ namespace BackyardLegends.Runtime.Network
 
         private void Update()
         {
-            if (!IsServer || matchStarted || autoStartAt < 0f)
+            if (!IsServer)
             {
                 return;
             }
 
-            if (Time.time >= autoStartAt)
+            if (!matchStarted && autoStartAt >= 0f && Time.time >= autoStartAt)
             {
                 TryStartMatchWithAiFill();
             }
@@ -86,23 +99,25 @@ namespace BackyardLegends.Runtime.Network
         {
             foreach (var clientId in NetworkManager.ConnectedClientsIds)
             {
-                AssignSeatToClient(clientId);
+                pendingRegistration.Add(clientId);
             }
         }
 
         private void HandleClientConnected(ulong clientId)
         {
-            if (matchStarted)
+            pendingRegistration.Add(clientId);
+            if (!matchStarted)
             {
-                return;
+                autoStartAt = Time.time + 1.25f;
             }
-
-            AssignSeatToClient(clientId);
-            autoStartAt = Time.time + 1.25f;
         }
 
         private void HandleClientDisconnected(ulong clientId)
         {
+            pendingRegistration.Remove(clientId);
+            uidByClient.Remove(clientId);
+            privateHandsByClient.Remove(clientId);
+
             if (!seatByClient.TryGetValue(clientId, out var seat))
             {
                 return;
@@ -110,12 +125,116 @@ namespace BackyardLegends.Runtime.Network
 
             seatByClient.Remove(clientId);
             clientBySeat.Remove(seat);
-            humanSeats.Remove(seat);
-            privateHandsByClient.Remove(clientId);
+            connectedHumanSeats.Remove(seat);
             readyForNextHand.Remove(seat);
+
+            if (!matchStarted || hostController == null)
+            {
+                humanOwnedSeats.Remove(seat);
+                if (uidBySeat.TryGetValue(seat, out var uid))
+                {
+                    seatByUid.Remove(uid);
+                    uidBySeat.Remove(seat);
+                }
+
+                displayNameBySeat.Remove(seat);
+                return;
+            }
+
+            // Host listen-server process owns the table; if the host client drops, session dies.
+            if (clientId == NetworkManager.LocalClientId)
+            {
+                return;
+            }
+
+            BeginAiSitIn(seat, "disconnected");
         }
 
-        private void AssignSeatToClient(ulong clientId)
+        private void TryRegisterLocalPlayer()
+        {
+            if (!IsClient && !IsHost)
+            {
+                return;
+            }
+
+            if (localPlayerRegistered)
+            {
+                return;
+            }
+
+            var session = SpadesNetworkSession.GetOrCreate();
+            ResolveAndStoreLocalIdentity(session);
+            RegisterPlayerServerRpc(session.LocalPlayerId, session.LocalDisplayName);
+            localPlayerRegistered = true;
+        }
+
+        private static void ResolveAndStoreLocalIdentity(SpadesNetworkSession session)
+        {
+            session.EnsureLocalPlayerId();
+            var backyard = BackyardLegendsSession.Instance;
+            var uid = session.LocalPlayerId;
+            var displayName = session.LocalDisplayName;
+            if (backyard?.CurrentUser != null && backyard.CurrentUser.IsSignedIn)
+            {
+                if (!string.IsNullOrWhiteSpace(backyard.CurrentUser.Uid))
+                {
+                    uid = backyard.CurrentUser.Uid;
+                }
+
+                if (!string.IsNullOrWhiteSpace(backyard.CurrentUser.DisplayName))
+                {
+                    displayName = backyard.CurrentUser.DisplayName;
+                }
+            }
+
+            session.SetLocalPlayerIdentity(uid, displayName);
+        }
+
+        [ServerRpc(RequireOwnership = false)]
+        public void RegisterPlayerServerRpc(string uid, string displayName, ServerRpcParams rpcParams = default)
+        {
+            var clientId = rpcParams.Receive.SenderClientId;
+            pendingRegistration.Remove(clientId);
+
+            if (string.IsNullOrWhiteSpace(uid))
+            {
+                Reject(clientId, "Missing player id.");
+                return;
+            }
+
+            uid = uid.Trim();
+            displayName = string.IsNullOrWhiteSpace(displayName) ? $"Player {clientId}" : displayName.Trim();
+            uidByClient[clientId] = uid;
+
+            if (seatByClient.ContainsKey(clientId))
+            {
+                return;
+            }
+
+            if (matchStarted)
+            {
+                if (seatByUid.TryGetValue(uid, out var reclaimSeat) &&
+                    humanOwnedSeats.Contains(reclaimSeat) &&
+                    aiSitInSeats.Contains(reclaimSeat))
+                {
+                    ReclaimSeat(clientId, reclaimSeat, displayName);
+                    return;
+                }
+
+                Reject(clientId, "Match already in progress.");
+                if (NetworkManager != null)
+                {
+                    NetworkManager.DisconnectClient(clientId);
+                }
+
+                return;
+            }
+
+            AssignSeatToClient(clientId, uid, displayName);
+            autoStartAt = Time.time + 1.25f;
+        }
+
+        private void AssignSeatToClient(ulong clientId, string uid, string displayName)
         {
             if (seatByClient.ContainsKey(clientId))
             {
@@ -126,21 +245,72 @@ namespace BackyardLegends.Runtime.Network
             if (!seat.HasValue)
             {
                 Debug.LogWarning($"No seats left for client {clientId}");
+                Reject(clientId, "Table is full.");
                 return;
             }
 
-            seatByClient[clientId] = seat.Value;
-            clientBySeat[seat.Value] = clientId;
-            humanSeats.Add(seat.Value);
+            BindClientToSeat(clientId, seat.Value, uid, displayName, sendCatchUp: false);
+        }
 
-            var displayName = clientId == NetworkManager.LocalClientId
-                ? ResolveLocalDisplayName()
-                : $"Player {(int)seat.Value + 1}";
+        private void ReclaimSeat(ulong clientId, SeatId seat, string displayName)
+        {
+            if (hostController != null)
+            {
+                hostController.ClearAiSitIn(seat);
+                if (displayNameBySeat.TryGetValue(seat, out var originalName) &&
+                    !string.IsNullOrWhiteSpace(originalName))
+                {
+                    hostController.State.SeatNames[seat] = originalName;
+                }
+                else
+                {
+                    hostController.State.SeatNames[seat] = displayName;
+                    displayNameBySeat[seat] = displayName;
+                }
+            }
+
+            aiSitInSeats.Remove(seat);
+            graceEndsAtBySeat.Remove(seat);
+
+            var uid = uidByClient.TryGetValue(clientId, out var registeredUid)
+                ? registeredUid
+                : (uidBySeat.TryGetValue(seat, out var seatUid) ? seatUid : string.Empty);
+            var reclaimName = displayNameBySeat.TryGetValue(seat, out var storedName) && !string.IsNullOrWhiteSpace(storedName)
+                ? storedName
+                : displayName;
+            BindClientToSeat(clientId, seat, uid, reclaimName, sendCatchUp: true);
+
+            var returnedPayload = new SpadesNetworkEventPayload
+            {
+                Kind = (byte)SpadesNetworkEventKind.PlayerReturned,
+                Seat = (byte)seat,
+                Message = $"{hostController?.State.SeatNames[seat] ?? displayName} returned",
+                PublicState = hostController != null
+                    ? SpadesNetworkPublicState.FromMatchState(hostController.State)
+                    : null
+            };
+            SendEventClientRpc(returnedPayload);
+            SpadesNetworkSession.GetOrCreate().SetStatus("Match live");
+        }
+
+        private void BindClientToSeat(ulong clientId, SeatId seat, string uid, string displayName, bool sendCatchUp)
+        {
+            seatByClient[clientId] = seat;
+            clientBySeat[seat] = clientId;
+            humanOwnedSeats.Add(seat);
+            connectedHumanSeats.Add(seat);
+            if (!string.IsNullOrWhiteSpace(uid))
+            {
+                seatByUid[uid] = seat;
+                uidBySeat[seat] = uid;
+            }
+
+            displayNameBySeat[seat] = displayName;
 
             var payload = new SpadesNetworkEventPayload
             {
                 Kind = (byte)SpadesNetworkEventKind.SeatAssigned,
-                Seat = (byte)seat.Value,
+                Seat = (byte)seat,
                 Message = displayName
             };
 
@@ -155,15 +325,70 @@ namespace BackyardLegends.Runtime.Network
 
             if (clientId == NetworkManager.LocalClientId)
             {
-                ApplyLocalSeat(seat.Value, displayName);
+                ApplyLocalSeat(seat, displayName);
             }
+
+            if (sendCatchUp && hostController != null)
+            {
+                SendCatchUpToClient(clientId, seat);
+            }
+        }
+
+        private void SendCatchUpToClient(ulong clientId, SeatId seat)
+        {
+            var catchUp = new SpadesNetworkEventPayload
+            {
+                Kind = (byte)SpadesNetworkEventKind.CatchUpState,
+                Seat = (byte)seat,
+                Message = "Reconnected — catching up",
+                PublicState = SpadesNetworkPublicState.FromMatchState(hostController.State)
+            };
+            var target = new ClientRpcParams
+            {
+                Send = new ClientRpcSendParams
+                {
+                    TargetClientIds = new[] { clientId }
+                }
+            };
+            SendEventClientRpc(catchUp, target);
+            PushPrivateHandToClient(clientId, seat);
+        }
+
+        private void BeginAiSitIn(SeatId seat, string reason)
+        {
+            if (hostController == null || hostController.State.Phase == MatchPhase.MatchEnded)
+            {
+                return;
+            }
+
+            if (!aiSitInSeats.Contains(seat))
+            {
+                hostController.SetAiSitIn(seat, new SimpleAiAgent());
+                aiSitInSeats.Add(seat);
+            }
+
+            graceEndsAtBySeat[seat] = Time.time + ReconnectGraceSeconds;
+            var originalName = displayNameBySeat.TryGetValue(seat, out var name) && !string.IsNullOrWhiteSpace(name)
+                ? name
+                : seat.ToString();
+            hostController.State.SeatNames[seat] = $"{originalName} (AI)";
+
+            var awayPayload = new SpadesNetworkEventPayload
+            {
+                Kind = (byte)SpadesNetworkEventKind.PlayerAway,
+                Seat = (byte)seat,
+                Message = $"{originalName} away — AI playing ({reason})",
+                PublicState = SpadesNetworkPublicState.FromMatchState(hostController.State)
+            };
+            SendEventClientRpc(awayPayload);
+            AdvanceAiUntilHumanOrIdle();
         }
 
         private SeatId? PickNextSeat()
         {
             foreach (var seat in new[] { SeatId.Bottom, SeatId.Top, SeatId.Left, SeatId.Right })
             {
-                if (!clientBySeat.ContainsKey(seat))
+                if (!clientBySeat.ContainsKey(seat) && !humanOwnedSeats.Contains(seat))
                 {
                     return seat;
                 }
@@ -172,22 +397,23 @@ namespace BackyardLegends.Runtime.Network
             return null;
         }
 
-        private static string ResolveLocalDisplayName()
-        {
-            var session = BackyardLegendsSession.Instance;
-            if (session?.CurrentUser != null && session.CurrentUser.IsSignedIn &&
-                !string.IsNullOrWhiteSpace(session.CurrentUser.DisplayName))
-            {
-                return session.CurrentUser.DisplayName;
-            }
-
-            return "You";
-        }
-
         private void TryStartMatchWithAiFill()
         {
             if (matchStarted)
             {
+                return;
+            }
+
+            // Wait until connected clients have registered identities.
+            if (pendingRegistration.Count > 0)
+            {
+                autoStartAt = Time.time + 0.75f;
+                return;
+            }
+
+            if (connectedHumanSeats.Count == 0)
+            {
+                autoStartAt = Time.time + 1.25f;
                 return;
             }
 
@@ -199,19 +425,18 @@ namespace BackyardLegends.Runtime.Network
             var aiAgents = new Dictionary<SeatId, IAiAgent>();
             foreach (var seat in SpadesSeatUtility.TurnOrder)
             {
-                if (!humanSeats.Contains(seat))
+                if (!humanOwnedSeats.Contains(seat))
                 {
                     aiAgents[seat] = new SimpleAiAgent();
                 }
             }
 
             hostController = new SpadesMatchController(rules, ruleEngine, aiAgents);
-            foreach (var pair in seatByClient)
+            foreach (var seat in humanOwnedSeats)
             {
-                var name = pair.Key == NetworkManager.LocalClientId
-                    ? ResolveLocalDisplayName()
-                    : $"Player {(int)pair.Value + 1}";
-                hostController.State.SeatNames[pair.Value] = name;
+                hostController.State.SeatNames[seat] = displayNameBySeat.TryGetValue(seat, out var name)
+                    ? name
+                    : $"Player {(int)seat + 1}";
             }
 
             foreach (var seat in aiAgents.Keys)
@@ -221,6 +446,7 @@ namespace BackyardLegends.Runtime.Network
 
             hostController.EventRaised += HandleHostMatchEvent;
             matchStarted = true;
+            session.MarkMatchLive();
             MatchBound?.Invoke();
 
             var readyPayload = new SpadesNetworkEventPayload
@@ -242,7 +468,6 @@ namespace BackyardLegends.Runtime.Network
             PushPrivateHands();
             if (IsHost)
             {
-                // Host also drives local presentation through the same event path.
                 var localPayload = BuildPayload(matchEvent, includeState: true);
                 ApplyLocalEvent(localPayload);
             }
@@ -330,27 +555,37 @@ namespace BackyardLegends.Runtime.Network
 
             foreach (var pair in seatByClient)
             {
-                var seat = pair.Value;
-                if (!hostController.State.RoundState.HandsBySeat.TryGetValue(seat, out var hand))
-                {
-                    continue;
-                }
+                PushPrivateHandToClient(pair.Key, pair.Value);
+            }
+        }
 
-                var cards = hand.Select(SpadesNetworkCard.FromCard).ToArray();
-                privateHandsByClient[pair.Key] = hand.ToList();
-                var target = new ClientRpcParams
-                {
-                    Send = new ClientRpcSendParams
-                    {
-                        TargetClientIds = new[] { pair.Key }
-                    }
-                };
-                SendPrivateHandClientRpc(cards, target);
+        private void PushPrivateHandToClient(ulong clientId, SeatId seat)
+        {
+            if (hostController?.State?.RoundState?.HandsBySeat == null)
+            {
+                return;
+            }
 
-                if (pair.Key == NetworkManager.LocalClientId)
+            if (!hostController.State.RoundState.HandsBySeat.TryGetValue(seat, out var hand))
+            {
+                return;
+            }
+
+            var cards = hand.Select(SpadesNetworkCard.FromCard).ToArray();
+            privateHandsByClient[clientId] = hand.ToList();
+            var target = new ClientRpcParams
+            {
+                Send = new ClientRpcSendParams
                 {
-                    localPrivateHand = hand.ToList();
+                    TargetClientIds = new[] { clientId }
                 }
+            };
+            SendPrivateHandClientRpc(cards, target);
+
+            if (clientId == NetworkManager.LocalClientId)
+            {
+                localPrivateHand = hand.ToList();
+                PrivateHandUpdated?.Invoke();
             }
         }
 
@@ -366,11 +601,14 @@ namespace BackyardLegends.Runtime.Network
         [ClientRpc]
         private void SendEventClientRpc(SpadesNetworkEventPayload payload, ClientRpcParams rpcParams = default)
         {
-            if (IsHost && payload.Kind != (byte)SpadesNetworkEventKind.SeatAssigned)
+            if (IsHost &&
+                payload.Kind != (byte)SpadesNetworkEventKind.SeatAssigned &&
+                payload.Kind != (byte)SpadesNetworkEventKind.CatchUpState)
             {
-                // Host already applied live controller events locally in HandleHostMatchEvent.
                 if (payload.Kind != (byte)SpadesNetworkEventKind.TableReady &&
-                    payload.Kind != (byte)SpadesNetworkEventKind.ActionRejected)
+                    payload.Kind != (byte)SpadesNetworkEventKind.ActionRejected &&
+                    payload.Kind != (byte)SpadesNetworkEventKind.PlayerAway &&
+                    payload.Kind != (byte)SpadesNetworkEventKind.PlayerReturned)
                 {
                     return;
                 }
@@ -384,6 +622,17 @@ namespace BackyardLegends.Runtime.Network
             if (payload.Kind == (byte)SpadesNetworkEventKind.SeatAssigned)
             {
                 ApplyLocalSeat((SeatId)payload.Seat, payload.Message);
+            }
+
+            if (payload.Kind == (byte)SpadesNetworkEventKind.MatchEnded ||
+                payload.Kind == (byte)SpadesNetworkEventKind.MatchForfeited)
+            {
+                SpadesNetworkSession.GetOrCreate().DisableAutoReconnect();
+            }
+
+            if (payload.Kind == (byte)SpadesNetworkEventKind.TableReady)
+            {
+                SpadesNetworkSession.GetOrCreate().MarkMatchLive();
             }
 
             NetworkEventReceived?.Invoke(payload);
@@ -541,7 +790,7 @@ namespace BackyardLegends.Runtime.Network
             }
 
             readyForNextHand.Add(seat);
-            foreach (var human in humanSeats)
+            foreach (var human in connectedHumanSeats)
             {
                 if (!readyForNextHand.Contains(human))
                 {

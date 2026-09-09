@@ -103,6 +103,7 @@ namespace BackyardLegends.Runtime
         {
             var networkSession = SpadesNetworkSession.GetOrCreate();
             networkSession.BeginHost(SelectedRule);
+            ApplyLocalNetworkIdentity(networkSession);
             var host = SpadesNetworkManagerHost.GetOrCreate();
             var started = await host.StartHostAsync();
             if (!started)
@@ -117,6 +118,7 @@ namespace BackyardLegends.Runtime
         {
             var networkSession = SpadesNetworkSession.GetOrCreate();
             networkSession.BeginClient(joinCode, SelectedRule);
+            ApplyLocalNetworkIdentity(networkSession);
             var host = SpadesNetworkManagerHost.GetOrCreate();
             var started = await host.StartClientAsync(joinCode);
             if (!started)
@@ -125,6 +127,18 @@ namespace BackyardLegends.Runtime
             }
 
             SceneManager.LoadScene(gameplaySceneName);
+        }
+
+        private void ApplyLocalNetworkIdentity(SpadesNetworkSession networkSession)
+        {
+            networkSession.EnsureLocalPlayerId();
+            var uid = CurrentUser != null && CurrentUser.IsSignedIn && !string.IsNullOrWhiteSpace(CurrentUser.Uid)
+                ? CurrentUser.Uid
+                : networkSession.LocalPlayerId;
+            var displayName = CurrentUser != null && !string.IsNullOrWhiteSpace(CurrentUser.DisplayName)
+                ? CurrentUser.DisplayName
+                : "You";
+            networkSession.SetLocalPlayerIdentity(uid, displayName);
         }
 
         public void LoadLobbyScene()

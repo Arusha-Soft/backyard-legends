@@ -660,6 +660,52 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
+            if (payload.Kind == (byte)SpadesNetworkEventKind.PlayerAway)
+            {
+                FlashStatus(
+                    string.IsNullOrWhiteSpace(payload.Message) ? "Player away — AI playing" : payload.Message,
+                    theme != null ? theme.gold : Color.yellow);
+                AddFeedMessage(payload.Message);
+                if (tableNetwork != null && tableNetwork.IsServer)
+                {
+                    RenderAll();
+                    return;
+                }
+
+                ApplyOnlinePublicPayload(payload);
+                RenderAll();
+                return;
+            }
+
+            if (payload.Kind == (byte)SpadesNetworkEventKind.PlayerReturned)
+            {
+                FlashStatus(
+                    string.IsNullOrWhiteSpace(payload.Message) ? "Player returned" : payload.Message,
+                    theme != null ? theme.green : Color.green);
+                AddFeedMessage(payload.Message);
+                if (tableNetwork != null && tableNetwork.IsServer)
+                {
+                    RenderAll();
+                    return;
+                }
+
+                ApplyOnlinePublicPayload(payload);
+                RenderAll();
+                return;
+            }
+
+            if (payload.Kind == (byte)SpadesNetworkEventKind.CatchUpState)
+            {
+                FlashStatus(
+                    string.IsNullOrWhiteSpace(payload.Message) ? "Reconnected — catching up" : payload.Message,
+                    theme != null ? theme.gold : Color.yellow);
+                EnsureOnlineClientController();
+                ApplyOnlinePublicPayload(payload);
+                onlinePresentationReady = true;
+                RenderAll();
+                return;
+            }
+
             if (tableNetwork != null && tableNetwork.IsServer)
             {
                 // Host already consumes live controller events.
@@ -672,23 +718,10 @@ namespace BackyardLegends.Runtime
             }
 
             EnsureOnlineClientController();
-            var localSeat = networkSession != null && networkSession.SeatAssigned
-                ? networkSession.LocalLogicalSeat
-                : SeatId.Bottom;
-            seatMapper ??= new SpadesSeatMapper(localSeat);
-
-            if (payload.PublicState != null)
-            {
-                SpadesNetworkStateApplier.ApplyPublicState(
-                    controller.State,
-                    payload.PublicState,
-                    localSeat,
-                    tableNetwork != null ? tableNetwork.LocalPrivateHand : null,
-                    seatMapper);
-            }
+            ApplyOnlinePublicPayload(payload);
 
             var matchEvent = SpadesNetworkStateApplier.ToMatchEvent(payload, controller.State, seatMapper);
-            if (payload.Kind != (byte)SpadesNetworkEventKind.TableReady)
+            if (payload.Kind != (byte)SpadesNetworkEventKind.TableReady && matchEvent != null)
             {
                 OnMatchEvent(matchEvent);
             }
@@ -696,6 +729,31 @@ namespace BackyardLegends.Runtime
             {
                 RenderAll();
             }
+        }
+
+        private void ApplyOnlinePublicPayload(SpadesNetworkEventPayload payload)
+        {
+            if (controller == null)
+            {
+                EnsureOnlineClientController();
+            }
+
+            var localSeat = networkSession != null && networkSession.SeatAssigned
+                ? networkSession.LocalLogicalSeat
+                : SeatId.Bottom;
+            seatMapper ??= new SpadesSeatMapper(localSeat);
+
+            if (payload.PublicState == null)
+            {
+                return;
+            }
+
+            SpadesNetworkStateApplier.ApplyPublicState(
+                controller.State,
+                payload.PublicState,
+                localSeat,
+                tableNetwork != null ? tableNetwork.LocalPrivateHand : null,
+                seatMapper);
         }
 
         private void EnsureOnlineClientController()
@@ -738,6 +796,18 @@ namespace BackyardLegends.Runtime
             {
                 var code = networkSession.JoinCode;
                 FlashStatus(string.IsNullOrEmpty(code) ? "Online table connected." : $"Online · {code}", theme != null ? theme.gold : Color.yellow);
+            }
+
+            // Keep binding alive across client reconnect (table NetworkObject may respawn on client).
+            while (IsOnlineMatch)
+            {
+                if (SpadesTableNetwork.Instance != null && !ReferenceEquals(tableNetwork, SpadesTableNetwork.Instance))
+                {
+                    BindOnlineTable(SpadesTableNetwork.Instance);
+                    FlashStatus("Table reconnected.", theme != null ? theme.gold : Color.yellow);
+                }
+
+                yield return new WaitForSecondsRealtime(0.5f);
             }
         }
 

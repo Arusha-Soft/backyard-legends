@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Threading.Tasks;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
@@ -7,11 +8,17 @@ namespace BackyardLegends.Runtime.Network
 {
     public sealed class SpadesNetworkManagerHost : MonoBehaviour
     {
+        private const int MaxReconnectAttempts = 5;
+        private const float ReconnectBackoffSeconds = 2f;
+
         public static SpadesNetworkManagerHost Instance { get; private set; }
 
         [SerializeField] private GameObject tableNetworkPrefab;
 
         private readonly SpadesRelayService relayService = new();
+        private bool reconnectInFlight;
+        private Coroutine reconnectRoutine;
+        private bool clientDisconnectHooked;
 
         public NetworkManager NetworkManager => NetworkManager.Singleton;
         public UnityTransport Transport { get; private set; }
@@ -65,6 +72,7 @@ namespace BackyardLegends.Runtime.Network
                 }
 
                 EnsureTablePrefabRegistered();
+                HookClientDisconnect();
                 return;
             }
 
@@ -85,6 +93,92 @@ namespace BackyardLegends.Runtime.Network
             nm.NetworkConfig.EnableSceneManagement = true;
             nm.NetworkConfig.ConnectionApproval = false;
             EnsureTablePrefabRegistered();
+            HookClientDisconnect();
+        }
+
+        private void HookClientDisconnect()
+        {
+            if (clientDisconnectHooked || NetworkManager.Singleton == null)
+            {
+                return;
+            }
+
+            NetworkManager.Singleton.OnClientDisconnectCallback += HandleLocalClientDisconnected;
+            clientDisconnectHooked = true;
+        }
+
+        private void HandleLocalClientDisconnected(ulong clientId)
+        {
+            if (reconnectInFlight)
+            {
+                return;
+            }
+
+            var nm = NetworkManager.Singleton;
+            if (nm == null || nm.IsServer)
+            {
+                return;
+            }
+
+            if (clientId != nm.LocalClientId)
+            {
+                return;
+            }
+
+            var session = SpadesNetworkSession.GetOrCreate();
+            if (!session.AutoReconnectEnabled ||
+                session.Role != SpadesNetworkRole.Client ||
+                !session.MatchWasLive ||
+                string.IsNullOrWhiteSpace(session.JoinCode))
+            {
+                return;
+            }
+
+            if (reconnectRoutine != null)
+            {
+                StopCoroutine(reconnectRoutine);
+            }
+
+            reconnectRoutine = StartCoroutine(ReconnectClientRoutine(session.JoinCode));
+        }
+
+        private IEnumerator ReconnectClientRoutine(string joinCode)
+        {
+            reconnectInFlight = true;
+            var session = SpadesNetworkSession.GetOrCreate();
+            session.SetStatus("Disconnected — reconnecting…");
+
+            for (var attempt = 1; attempt <= MaxReconnectAttempts; attempt++)
+            {
+                if (!session.AutoReconnectEnabled || session.Role != SpadesNetworkRole.Client)
+                {
+                    break;
+                }
+
+                session.SetStatus($"Reconnect attempt {attempt}/{MaxReconnectAttempts}…");
+                ShutdownNetworkOnly();
+
+                var task = StartClientAsync(joinCode, preserveSession: true);
+                while (!task.IsCompleted)
+                {
+                    yield return null;
+                }
+
+                if (task.Status == TaskStatus.RanToCompletion && task.Result)
+                {
+                    session.SetStatus("Reconnected");
+                    reconnectInFlight = false;
+                    reconnectRoutine = null;
+                    yield break;
+                }
+
+                yield return new WaitForSecondsRealtime(ReconnectBackoffSeconds * attempt);
+            }
+
+            session.SetStatus("Reconnect failed. Return to lobby and rejoin.");
+            session.DisableAutoReconnect();
+            reconnectInFlight = false;
+            reconnectRoutine = null;
         }
 
         private void EnsureTablePrefabRegistered()
@@ -141,11 +235,19 @@ namespace BackyardLegends.Runtime.Network
             return NetworkManager.Singleton.IsListening;
         }
 
-        public async Task<bool> StartClientAsync(string joinCode)
+        public Task<bool> StartClientAsync(string joinCode)
+        {
+            return StartClientAsync(joinCode, preserveSession: false);
+        }
+
+        public async Task<bool> StartClientAsync(string joinCode, bool preserveSession)
         {
             EnsureNetworkManager();
             var session = SpadesNetworkSession.GetOrCreate();
-            session.SetStatus($"Joining {joinCode}…");
+            if (!preserveSession)
+            {
+                session.SetStatus($"Joining {joinCode}…");
+            }
 
             var (useDirect, error) = await relayService.JoinAsync(Transport, joinCode);
             session.SetConnectionInfo(joinCode, useDirect, "127.0.0.1", SpadesRelayService.DefaultDirectPort);
@@ -169,11 +271,15 @@ namespace BackyardLegends.Runtime.Network
             if (!NetworkManager.Singleton.IsConnectedClient)
             {
                 session.SetStatus("Timed out connecting to host.");
-                NetworkManager.Singleton.Shutdown();
+                ShutdownNetworkOnly();
                 return false;
             }
 
-            session.SetStatus("Connected");
+            if (!preserveSession)
+            {
+                session.SetStatus("Connected");
+            }
+
             return true;
         }
 
@@ -207,16 +313,33 @@ namespace BackyardLegends.Runtime.Network
 
         public void Shutdown()
         {
+            if (reconnectRoutine != null)
+            {
+                StopCoroutine(reconnectRoutine);
+                reconnectRoutine = null;
+            }
+
+            reconnectInFlight = false;
+            ShutdownNetworkOnly();
+            SpadesNetworkSession.GetOrCreate().ConfigureOffline();
+        }
+
+        private void ShutdownNetworkOnly()
+        {
             if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening)
             {
                 NetworkManager.Singleton.Shutdown();
             }
-
-            SpadesNetworkSession.GetOrCreate().ConfigureOffline();
         }
 
         private void OnDestroy()
         {
+            if (NetworkManager.Singleton != null && clientDisconnectHooked)
+            {
+                NetworkManager.Singleton.OnClientDisconnectCallback -= HandleLocalClientDisconnected;
+                clientDisconnectHooked = false;
+            }
+
             if (Instance == this)
             {
                 Instance = null;
