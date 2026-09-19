@@ -335,84 +335,31 @@ namespace BackyardLegends.Runtime
 
         private void EnsureOnlineUi()
         {
-            if (sceneRefs.SheetImage == null)
+            // Online Row + status are authored in LobbyScene under Lobby Sheet.
+            // Do not spawn them at runtime — design them in the scene.
+            if (sceneRefs.OnlineRow == null && sceneRefs.SheetImage != null)
             {
-                return;
+                sceneRefs.OnlineRow = sceneRefs.SheetImage.transform.Find("Online Row") as RectTransform;
             }
 
-            var sheet = sceneRefs.SheetImage.transform;
-            var onlineRow = sheet.Find("Online Row");
-            if (onlineRow == null)
+            if (sceneRefs.HostTableButton == null ||
+                sceneRefs.JoinTableButton == null ||
+                sceneRefs.JoinCodeInput == null ||
+                sceneRefs.OnlineStatusText == null)
             {
-                var rowGo = new GameObject("Online Row", typeof(RectTransform));
-                onlineRow = rowGo.transform;
-                onlineRow.SetParent(sheet, false);
-                var rowRect = rowGo.GetComponent<RectTransform>();
-                rowRect.anchorMin = new Vector2(0.08f, 0.095f);
-                rowRect.anchorMax = new Vector2(0.92f, 0.145f);
-                rowRect.offsetMin = Vector2.zero;
-                rowRect.offsetMax = Vector2.zero;
+                Debug.LogWarning(
+                    "Lobby Online UI missing from scene. Expected Lobby Sheet/Online Row " +
+                    "(Host Table, Join Code Input, Join Table) and Lobby Sheet/Online Status.");
             }
 
-            if (sceneRefs.HostTableButton == null)
+            if (sceneRefs.JoinCodeInput != null && string.IsNullOrWhiteSpace(sceneRefs.JoinCodeInput.text))
             {
-                sceneRefs.HostTableButton = CreateRuntimeButton(
-                    "Host Table",
-                    onlineRow,
-                    "HOST",
-                    theme != null ? theme.green : new Color(0.25f, 0.65f, 0.35f),
-                    new Vector2(0.00f, 0.05f),
-                    new Vector2(0.22f, 0.95f));
+                sceneRefs.JoinCodeInput.text = SpadesRelayService.LocalJoinCode;
             }
 
-            if (sceneRefs.JoinCodeInput == null)
+            if (sceneRefs.OnlineStatusText != null && string.IsNullOrWhiteSpace(sceneRefs.OnlineStatusText.text))
             {
-                sceneRefs.JoinCodeInput = CreateRuntimeInputField(
-                    "Join Code Input",
-                    onlineRow,
-                    "LOCAL or join code",
-                    InputField.ContentType.Standard,
-                    new Vector2(0.24f, 0.05f),
-                    new Vector2(0.72f, 0.95f));
-                if (sceneRefs.JoinCodeInput != null)
-                {
-                    sceneRefs.JoinCodeInput.text = SpadesRelayService.LocalJoinCode;
-                }
-            }
-
-            if (sceneRefs.JoinTableButton == null)
-            {
-                sceneRefs.JoinTableButton = CreateRuntimeButton(
-                    "Join Table",
-                    onlineRow,
-                    "JOIN",
-                    theme != null ? theme.gold : new Color(0.83f, 0.69f, 0.22f),
-                    new Vector2(0.74f, 0.05f),
-                    new Vector2(1.00f, 0.95f));
-            }
-
-            if (sceneRefs.OnlineStatusText == null)
-            {
-                sceneRefs.OnlineStatusText = CreateRuntimeText(
-                    "Online Status",
-                    sheet,
-                    "Online: Host / Join (Relay or LOCAL)",
-                    16,
-                    FontStyle.Normal,
-                    theme != null ? theme.mutedText : new Color(0.75f, 0.75f, 0.78f),
-                    TextAnchor.MiddleCenter,
-                    new Vector2(0.10f, 0.055f),
-                    new Vector2(0.90f, 0.090f));
-            }
-
-            if (sceneRefs.StartMatchButton != null)
-            {
-                var startRect = sceneRefs.StartMatchButton.transform as RectTransform;
-                if (startRect != null)
-                {
-                    startRect.anchorMin = new Vector2(0.18f, 0.155f);
-                    startRect.anchorMax = new Vector2(0.82f, 0.215f);
-                }
+                sceneRefs.OnlineStatusText.text = "Online: Host / Join (Relay or LOCAL)";
             }
         }
 

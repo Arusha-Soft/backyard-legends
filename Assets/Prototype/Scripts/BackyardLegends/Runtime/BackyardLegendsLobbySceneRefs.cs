@@ -21,10 +21,15 @@ namespace BackyardLegends.Runtime
         public InputField EmailInput;
         public InputField PasswordInput;
 
-        [Header("Buttons")]
-        public Button StartMatchButton;
+        [Header("Online Table")]
+        public RectTransform OnlineRow;
         public Button HostTableButton;
         public Button JoinTableButton;
+        public Text OnlineStatusText;
+        public InputField JoinCodeInput;
+
+        [Header("Buttons")]
+        public Button StartMatchButton;
         public Button[] ModeButtons;
         public Button[] TargetButtons;
         public Button SignInGoogleButton;
@@ -33,8 +38,6 @@ namespace BackyardLegends.Runtime
         public Button EmailSignInButton;
         public Button SignOutButton;
         public Text SessionAccountLabel;
-        public Text OnlineStatusText;
-        public InputField JoinCodeInput;
 
         [Header("Auth Prefab")]
         public BackyardLegendsLoginAuthView LoginAuthPanelPrefab;
@@ -63,6 +66,7 @@ namespace BackyardLegends.Runtime
             EmailInput = EmailInput != null ? EmailInput : FindByPath<InputField>("Lobby Sheet/Email Panel/Email Input");
             PasswordInput = PasswordInput != null ? PasswordInput : FindByPath<InputField>("Lobby Sheet/Email Panel/Password Input");
             StartMatchButton = StartMatchButton != null ? StartMatchButton : FindByPath<Button>("Lobby Sheet/Start Match");
+            OnlineRow = OnlineRow != null ? OnlineRow : FindByPath<RectTransform>("Lobby Sheet/Online Row");
             HostTableButton = HostTableButton != null ? HostTableButton : FindByPath<Button>("Lobby Sheet/Online Row/Host Table");
             JoinTableButton = JoinTableButton != null ? JoinTableButton : FindByPath<Button>("Lobby Sheet/Online Row/Join Table");
             OnlineStatusText = OnlineStatusText != null ? OnlineStatusText : FindByPath<Text>("Lobby Sheet/Online Status");
