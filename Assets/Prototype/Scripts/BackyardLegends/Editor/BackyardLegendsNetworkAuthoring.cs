@@ -7,17 +7,12 @@ namespace BackyardLegends.Editor
 {
     public static class BackyardLegendsNetworkAuthoring
     {
-        private const string PrefabFolder = "Assets/Prototype/Prefabs/Network";
-        private const string PrefabPath = PrefabFolder + "/SpadesTableNetwork.prefab";
         private const string ResourcesFolder = "Assets/Resources/BackyardLegends";
         private const string ResourcesPrefabPath = ResourcesFolder + "/SpadesTableNetwork.prefab";
 
         [MenuItem("Backyard Legends/Create Network Prefabs")]
         public static void CreateNetworkPrefabs()
         {
-            EnsureFolder("Assets/Prototype");
-            EnsureFolder("Assets/Prototype/Prefabs");
-            EnsureFolder(PrefabFolder);
             EnsureFolder("Assets/Resources");
             EnsureFolder(ResourcesFolder);
 
@@ -25,13 +20,12 @@ namespace BackyardLegends.Editor
             temp.AddComponent<NetworkObject>();
             temp.AddComponent<SpadesTableNetwork>();
 
-            PrefabUtility.SaveAsPrefabAsset(temp, PrefabPath);
             PrefabUtility.SaveAsPrefabAsset(temp, ResourcesPrefabPath);
             Object.DestroyImmediate(temp);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log($"Created Spades table network prefab at {PrefabPath} and {ResourcesPrefabPath}");
+            Debug.Log($"Created Spades table network prefab at {ResourcesPrefabPath}");
         }
 
         private static void EnsureFolder(string path)

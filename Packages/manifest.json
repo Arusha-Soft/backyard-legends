@@ -17,6 +17,7 @@
     "com.unity.multiplayer.center": "1.0.0",
     "com.unity.multiplayer.playmode": "1.6.3",
     "com.unity.netcode.gameobjects": "2.13.2",
+    "com.veriorpies.parrelsync": "https://github.com/VeriorPies/ParrelSync.git?path=/ParrelSync",
     "com.unity.recorder": "5.1.2",
     "com.unity.render-pipelines.universal": "17.1.0",
     "com.unity.services.multiplayer": "2.3.1",

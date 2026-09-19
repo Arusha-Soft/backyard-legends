@@ -31,6 +31,8 @@ namespace BackyardLegends.Runtime
         public IReadOnlyList<RuleSetConfig> RuleConfigs => ruleConfigs;
         public AuthUserSnapshot CurrentUser { get; private set; } = AuthUserSnapshot.None;
         public bool IsAuthReady { get; private set; }
+        /// <summary>Lobby auth wall dismissed (guest / signed-in). Survives lobby reloads.</summary>
+        public bool AuthGatePassed { get; private set; }
         public string AuthStatusMessage { get; private set; } = "Signing in…";
 
         public RuleSetDefinition SelectedRule => GetSelectedRuleDefinition();
@@ -101,6 +103,7 @@ namespace BackyardLegends.Runtime
 
         public async Task HostOnlineTableAsync()
         {
+            await EnsureAuthReadyForOnlineAsync();
             var networkSession = SpadesNetworkSession.GetOrCreate();
             networkSession.BeginHost(SelectedRule);
             ApplyLocalNetworkIdentity(networkSession);
@@ -116,25 +119,53 @@ namespace BackyardLegends.Runtime
 
         public async Task JoinOnlineTableAsync(string joinCode)
         {
+            await EnsureAuthReadyForOnlineAsync();
+            var code = string.IsNullOrWhiteSpace(joinCode)
+                ? SpadesRelayService.LocalJoinCode
+                : joinCode.Trim();
             var networkSession = SpadesNetworkSession.GetOrCreate();
-            networkSession.BeginClient(joinCode, SelectedRule);
+            networkSession.BeginClient(code, SelectedRule);
             ApplyLocalNetworkIdentity(networkSession);
-            var host = SpadesNetworkManagerHost.GetOrCreate();
-            var started = await host.StartClientAsync(joinCode);
-            if (!started)
-            {
-                throw new InvalidOperationException(networkSession.StatusMessage);
-            }
-
+            // Load gameplay first, then connect from Bootstrap so the replicated table spawns
+            // after the scene is up (client replicas were destroyed by LoadScene before).
+            networkSession.SetStatus($"Joining {code}…");
+            Debug.Log($"Join → load gameplay then connect code={code} role={networkSession.Role}");
             SceneManager.LoadScene(gameplaySceneName);
+        }
+
+        private async Task EnsureAuthReadyForOnlineAsync()
+        {
+            await WaitForAuthAsync();
+            var auth = FirebaseAuthService.GetOrCreate();
+            var user = await auth.EnsureSignedInAsync();
+            ApplyAuthUser(user, auth.LastError);
         }
 
         private void ApplyLocalNetworkIdentity(SpadesNetworkSession networkSession)
         {
             networkSession.EnsureLocalPlayerId();
-            var uid = CurrentUser != null && CurrentUser.IsSignedIn && !string.IsNullOrWhiteSpace(CurrentUser.Uid)
-                ? CurrentUser.Uid
-                : networkSession.LocalPlayerId;
+            var firebaseUid = string.Empty;
+            try
+            {
+                var authUser = FirebaseBootstrap.GetAuth()?.CurrentUser;
+                if (authUser != null && !string.IsNullOrWhiteSpace(authUser.UserId))
+                {
+                    firebaseUid = authUser.UserId;
+                }
+            }
+            catch
+            {
+                // Firebase may be unavailable in editor without config.
+            }
+
+            var uid = !string.IsNullOrWhiteSpace(firebaseUid)
+                ? firebaseUid
+                : CurrentUser != null && CurrentUser.IsSignedIn && !string.IsNullOrWhiteSpace(CurrentUser.Uid)
+                    ? CurrentUser.Uid
+                    : networkSession.LocalPlayerId;
+#if UNITY_EDITOR
+            uid = SpadesNetworkSession.ApplyEditorCloneUidSuffix(uid);
+#endif
             var displayName = CurrentUser != null && !string.IsNullOrWhiteSpace(CurrentUser.DisplayName)
                 ? CurrentUser.DisplayName
                 : "You";
@@ -226,11 +257,28 @@ namespace BackyardLegends.Runtime
                 AuthStatusMessage = string.IsNullOrEmpty(error)
                     ? "Offline guest (Firebase unavailable)"
                     : $"Auth unavailable · {error}";
+                // Firebase down still allows local/ParrelSync play past the gate.
+                if (string.IsNullOrEmpty(error) || error.IndexOf("unavailable", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    AuthGatePassed = true;
+                }
             }
             else
             {
                 AuthStatusMessage = CurrentUser.StatusLabel;
+                // Anonymous guest from EnsureSignedIn counts as past the account wall.
+                AuthGatePassed = true;
             }
+        }
+
+        public void DismissAuthGate()
+        {
+            AuthGatePassed = true;
+        }
+
+        public void ClearAuthGate()
+        {
+            AuthGatePassed = false;
         }
 
         private void ClampSelections()

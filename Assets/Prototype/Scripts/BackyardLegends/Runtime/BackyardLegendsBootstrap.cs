@@ -593,6 +593,19 @@ namespace BackyardLegends.Runtime
             tableNetwork.MatchBound += HandleOnlineMatchBound;
             tableNetwork.PrivateHandUpdated += HandleOnlinePrivateHandUpdated;
 
+            var failover = SpadesHostFailover.GetOrCreate();
+            failover.HostFailoverStatus -= HandleHostFailoverStatus;
+            failover.HostFailoverStatus += HandleHostFailoverStatus;
+            failover.TablePausedForHostLoss -= HandleTablePausedForHostLoss;
+            failover.TablePausedForHostLoss += HandleTablePausedForHostLoss;
+
+            tableNetwork.EnsureLocalPlayerRegistered();
+            if (tableNetwork.IsClient && !tableNetwork.IsServer)
+            {
+                tableNetwork.RequestPresentationSyncServerRpc();
+            }
+
+            networkSession = SpadesNetworkSession.GetOrCreate();
             if (networkSession != null && networkSession.SeatAssigned)
             {
                 seatMapper = new SpadesSeatMapper(networkSession.LocalLogicalSeat);
@@ -602,12 +615,32 @@ namespace BackyardLegends.Runtime
             {
                 HandleOnlineMatchBound();
             }
+
+            Debug.Log(
+                $"Bound online table IsServer={tableNetwork.IsServer} IsClient={tableNetwork.IsClient} " +
+                $"seatAssigned={networkSession != null && networkSession.SeatAssigned} role={networkSession?.Role}");
+        }
+
+        private void HandleHostFailoverStatus(string message)
+        {
+            FlashStatus(message, theme != null ? theme.gold : Color.yellow);
+            AddFeedMessage(message);
+        }
+
+        private void HandleTablePausedForHostLoss()
+        {
+            FlashStatus("Host lost — table paused for reconnect/promotion", theme != null ? theme.red : Color.red);
+            AddFeedMessage("Table paused (host loss)");
         }
 
         private void HandleOnlineSeatAssigned(SeatId seat)
         {
             seatMapper = new SpadesSeatMapper(seat);
             FlashStatus($"Seated {seat}", theme != null ? theme.gold : Color.yellow);
+            if (tableNetwork != null && tableNetwork.IsClient && !tableNetwork.IsServer)
+            {
+                tableNetwork.RequestPresentationSyncServerRpc();
+            }
         }
 
         private void HandleOnlinePrivateHandUpdated()
@@ -652,6 +685,17 @@ namespace BackyardLegends.Runtime
             {
                 PlayFeedback(FeedbackCue.Invalid, 0.18f);
                 FlashStatus(payload.Message, theme != null ? theme.red : Color.red);
+                if (!string.IsNullOrWhiteSpace(payload.Message) &&
+                    payload.Message.IndexOf("Match already in progress", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    AddFeedMessage(payload.Message);
+                    // Drop back to lobby so Join failure does not look like an offline local match.
+                    if (session != null)
+                    {
+                        session.LoadLobbyScene();
+                    }
+                }
+
                 return;
             }
 
@@ -772,9 +816,54 @@ namespace BackyardLegends.Runtime
             onlinePresentationReady = true;
         }
 
-        private IEnumerator WatchOnlineTableSpawn()
+        private IEnumerator ConnectOnlineAndWatchTable()
         {
-            var timeout = Time.time + 12f;
+            networkSession = SpadesNetworkSession.GetOrCreate();
+            networkSession.RestorePendingOnlineIntent();
+
+            if (networkSession.Role == SpadesNetworkRole.Client &&
+                (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsConnectedClient))
+            {
+                var joinCode = networkSession.JoinCode;
+                FlashStatus($"Joining {joinCode}…", theme != null ? theme.gold : Color.yellow);
+                var connectTask = SpadesNetworkManagerHost.GetOrCreate().StartClientAsync(joinCode, preserveSession: true);
+                while (!connectTask.IsCompleted)
+                {
+                    yield return null;
+                }
+
+                networkSession = SpadesNetworkSession.GetOrCreate();
+                networkSession.RestorePendingOnlineIntent();
+                if (networkSession.Role != SpadesNetworkRole.Client)
+                {
+                    networkSession.BeginClient(joinCode, networkSession.PendingRules ?? selectedRule);
+                }
+
+                onlineMatch = true;
+
+                if (connectTask.IsFaulted || !connectTask.Result)
+                {
+                    var err = networkSession.StatusMessage;
+                    if (string.IsNullOrWhiteSpace(err))
+                    {
+                        err = $"Join failed for '{joinCode}'. Host must be running (LOCAL on same PC).";
+                    }
+
+                    Debug.LogWarning($"Online client connect failed: {err}");
+                    FlashStatus(err, theme != null ? theme.red : Color.red);
+                    yield break;
+                }
+
+                Debug.Log($"Joined online table as client code={joinCode} role={networkSession.Role}");
+                FlashStatus($"Connected · {joinCode}", theme != null ? theme.gold : Color.yellow);
+            }
+
+            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+            {
+                SpadesNetworkManagerHost.GetOrCreate().SpawnTableIfHost();
+            }
+
+            var timeout = Time.time + 20f;
             while (SpadesTableNetwork.Instance == null && Time.time < timeout)
             {
                 if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
@@ -792,15 +881,54 @@ namespace BackyardLegends.Runtime
             }
 
             BindOnlineTable(SpadesTableNetwork.Instance);
+
+            // Seat assignment ClientRpc can arrive before Bootstrap subscribed — retry until seated.
+            var seatWaitUntil = Time.time + 8f;
+            while (networkSession != null &&
+                   networkSession.Role == SpadesNetworkRole.Client &&
+                   !networkSession.SeatAssigned &&
+                   Time.time < seatWaitUntil)
+            {
+                if (tableNetwork != null)
+                {
+                    tableNetwork.EnsureLocalPlayerRegistered();
+                    if (tableNetwork.IsClient && !tableNetwork.IsServer)
+                    {
+                        tableNetwork.RequestPresentationSyncServerRpc();
+                    }
+                }
+
+                yield return new WaitForSecondsRealtime(0.35f);
+                networkSession = SpadesNetworkSession.GetOrCreate();
+                if (networkSession.SeatAssigned)
+                {
+                    seatMapper = new SpadesSeatMapper(networkSession.LocalLogicalSeat);
+                    FlashStatus($"Seated {networkSession.LocalLogicalSeat}", theme != null ? theme.gold : Color.yellow);
+                    break;
+                }
+            }
+
             if (networkSession != null)
             {
                 var code = networkSession.JoinCode;
-                FlashStatus(string.IsNullOrEmpty(code) ? "Online table connected." : $"Online · {code}", theme != null ? theme.gold : Color.yellow);
+                FlashStatus(
+                    networkSession.SeatAssigned
+                        ? (string.IsNullOrEmpty(code) ? "Online table connected." : $"Online · {code} · seated")
+                        : (string.IsNullOrEmpty(code) ? "Online table connected (waiting for seat)…" : $"Online · {code} (waiting for seat)…"),
+                    theme != null ? theme.gold : Color.yellow);
+                Debug.Log(
+                    $"Post-bind role={networkSession.Role} seatAssigned={networkSession.SeatAssigned} " +
+                    $"seat={networkSession.LocalLogicalSeat}");
             }
 
-            // Keep binding alive across client reconnect (table NetworkObject may respawn on client).
+            if (sceneRefs.CenterHintText != null && (controller == null || !onlinePresentationReady))
+            {
+                sceneRefs.CenterHintText.text = "Online — waiting for deal…";
+            }
+
             while (IsOnlineMatch)
             {
+                networkSession = SpadesNetworkSession.GetOrCreate();
                 if (SpadesTableNetwork.Instance != null && !ReferenceEquals(tableNetwork, SpadesTableNetwork.Instance))
                 {
                     BindOnlineTable(SpadesTableNetwork.Instance);
@@ -2519,7 +2647,9 @@ namespace BackyardLegends.Runtime
         private void StartConfiguredMatch()
         {
             networkSession = SpadesNetworkSession.GetOrCreate();
+            networkSession.RestorePendingOnlineIntent();
             onlineMatch = networkSession.IsOnline;
+            Debug.Log($"StartConfiguredMatch online={onlineMatch} role={networkSession.Role} join={networkSession.JoinCode}");
             if (onlineMatch)
             {
                 StartOnlineConfiguredMatch();
@@ -2627,18 +2757,37 @@ namespace BackyardLegends.Runtime
             SetOptionsMenuVisibleImmediate(false);
             SetSheetVisible(sceneRefs.ExitPromptOverlay, false);
             ResetExitPromptVisualState();
+            if (sceneRefs.DealButton != null)
+            {
+                sceneRefs.DealButton.gameObject.SetActive(false);
+            }
+
+            if (sceneRefs.OpeningStackImage != null)
+            {
+                sceneRefs.OpeningStackImage.gameObject.SetActive(false);
+            }
+
+            if (sceneRefs.OpeningStackText != null)
+            {
+                sceneRefs.OpeningStackText.gameObject.SetActive(false);
+            }
+
             AddFeedMessage($"Online table: {selectedRule.DisplayName} to {selectedRule.TargetScore}.");
             if (sceneRefs.StatusText != null)
             {
-                sceneRefs.StatusText.text = "Connecting to online table…";
+                sceneRefs.StatusText.text = networkSession.Role == SpadesNetworkRole.Client
+                    ? "Connecting to host…"
+                    : "Waiting for players…";
             }
 
-            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+            if (sceneRefs.CenterHintText != null)
             {
-                SpadesNetworkManagerHost.GetOrCreate().SpawnTableIfHost();
+                sceneRefs.CenterHintText.text = networkSession.Role == SpadesNetworkRole.Client
+                    ? "Joining online table…"
+                    : "Online lobby — AI fills empty seats after the wait.";
             }
 
-            StartCoroutine(WatchOnlineTableSpawn());
+            StartCoroutine(ConnectOnlineAndWatchTable());
         }
 
         private void OnMatchEvent(SpadesMatchEvent matchEvent)

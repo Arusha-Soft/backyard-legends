@@ -185,6 +185,8 @@ MonoBehaviour:
   EmailInput: {fileID: 1538586431}
   PasswordInput: {fileID: 1538586430}
   StartMatchButton: {fileID: 1131622570}
+  HostTableButton: {fileID: 0}
+  JoinTableButton: {fileID: 0}
   ModeButtons:
   - {fileID: 934058691}
   - {fileID: 715313182}
@@ -198,6 +200,8 @@ MonoBehaviour:
   EmailSignInButton: {fileID: 1538586428}
   SignOutButton: {fileID: 1930970235}
   SessionAccountLabel: {fileID: 1026355083}
+  OnlineStatusText: {fileID: 0}
+  JoinCodeInput: {fileID: 0}
   LoginAuthPanelPrefab: {fileID: 3881277041741093902, guid: b81cfa6fef779d7448f8dc176ee44a08, type: 3}
   LoginAuthPanelInstance: {fileID: 1538586433}
 --- !u!114 &35879247
@@ -2690,7 +2694,7 @@ MonoBehaviour:
     m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
     m_FontSize: 18
     m_FontStyle: 1
-    m_BestFit: 0
+    m_BestFit: 1
     m_MinSize: 10
     m_MaxSize: 40
     m_Alignment: 4
@@ -3943,7 +3947,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0.000030517578, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 246, y: 98}
   m_Pivot: {x: 1, y: 1}
 --- !u!114 &1930970235

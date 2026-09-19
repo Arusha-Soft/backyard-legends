@@ -55,6 +55,11 @@ namespace BackyardLegends.Runtime
             Application.runInBackground = true;
 
             session = BackyardLegendsSession.GetOrCreateRuntimeInstance();
+            if (session.AuthGatePassed)
+            {
+                authGateCompleted = true;
+            }
+
             theme = themeOverride != null ? themeOverride : session.Theme ?? ThemeConfig.CreateFallback();
             sceneRefs = sceneRefs != null ? sceneRefs : GetComponent<BackyardLegendsLobbySceneRefs>();
             if (sceneRefs == null)
@@ -426,12 +431,19 @@ namespace BackyardLegends.Runtime
             var wait = new WaitForSecondsRealtime(0.25f);
             while (enabled)
             {
+                if (session != null && session.AuthGatePassed)
+                {
+                    authGateCompleted = true;
+                }
+
                 RefreshAccountUi();
                 if (session != null && session.IsAuthReady)
                 {
-                    if (session.CurrentUser != null && session.CurrentUser.IsSignedIn && !session.CurrentUser.IsAnonymous)
+                    if (session.AuthGatePassed ||
+                        (session.CurrentUser != null && session.CurrentUser.IsSignedIn))
                     {
                         authGateCompleted = true;
+                        session.DismissAuthGate();
                         RefreshAccountUi();
                     }
 
@@ -479,6 +491,7 @@ namespace BackyardLegends.Runtime
 
             authActionInFlight = false;
             authGateCompleted = false;
+            session?.ClearAuthGate();
             RefreshAccountUi();
             RefreshContent();
         }
@@ -677,6 +690,7 @@ namespace BackyardLegends.Runtime
             {
                 PlayFeedback(FeedbackCue.Confirm, 0.9f);
                 authGateCompleted = true;
+                session?.DismissAuthGate();
                 RefreshAccountUi();
             });
         }

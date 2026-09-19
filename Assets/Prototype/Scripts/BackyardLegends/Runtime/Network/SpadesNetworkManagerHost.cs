@@ -1,5 +1,8 @@
+using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using BackyardLegends.Runtime.Firebase;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
 using UnityEngine;
@@ -20,7 +23,7 @@ namespace BackyardLegends.Runtime.Network
         private Coroutine reconnectRoutine;
         private bool clientDisconnectHooked;
 
-        public NetworkManager NetworkManager => NetworkManager.Singleton;
+        public Unity.Netcode.NetworkManager NetManager => Unity.Netcode.NetworkManager.Singleton;
         public UnityTransport Transport { get; private set; }
         public GameObject TablePrefab => tableNetworkPrefab;
 
@@ -62,15 +65,16 @@ namespace BackyardLegends.Runtime.Network
 
         public void EnsureNetworkManager()
         {
-            if (NetworkManager.Singleton != null)
+            var singleton = Unity.Netcode.NetworkManager.Singleton;
+            if (singleton != null)
             {
-                Transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+                Transport = singleton.GetComponent<UnityTransport>();
                 if (Transport == null)
                 {
-                    Transport = NetworkManager.Singleton.gameObject.AddComponent<UnityTransport>();
-                    NetworkManager.Singleton.NetworkConfig.NetworkTransport = Transport;
+                    Transport = singleton.gameObject.AddComponent<UnityTransport>();
                 }
 
+                ApplyNetworkConfig(singleton);
                 EnsureTablePrefabRegistered();
                 HookClientDisconnect();
                 return;
@@ -83,27 +87,50 @@ namespace BackyardLegends.Runtime.Network
                 Transport = go.AddComponent<UnityTransport>();
             }
 
-            var nm = go.GetComponent<NetworkManager>();
+            var nm = go.GetComponent<Unity.Netcode.NetworkManager>();
             if (nm == null)
             {
-                nm = go.AddComponent<NetworkManager>();
+                nm = go.AddComponent<Unity.Netcode.NetworkManager>();
             }
 
-            nm.NetworkConfig.NetworkTransport = Transport;
-            nm.NetworkConfig.EnableSceneManagement = true;
-            nm.NetworkConfig.ConnectionApproval = false;
+            if (nm == null)
+            {
+                Debug.LogError("Failed to create Unity Netcode NetworkManager.");
+                return;
+            }
+
+            ApplyNetworkConfig(nm);
             EnsureTablePrefabRegistered();
             HookClientDisconnect();
         }
 
-        private void HookClientDisconnect()
+        private void ApplyNetworkConfig(Unity.Netcode.NetworkManager nm)
         {
-            if (clientDisconnectHooked || NetworkManager.Singleton == null)
+            if (nm == null)
             {
                 return;
             }
 
-            NetworkManager.Singleton.OnClientDisconnectCallback += HandleLocalClientDisconnected;
+            if (nm.NetworkConfig == null)
+            {
+                nm.NetworkConfig = new NetworkConfig();
+            }
+
+            nm.NetworkConfig.NetworkTransport = Transport;
+            // Manual SceneManager loads in Host/Join — NGO scene sync fights ParrelSync joins.
+            nm.NetworkConfig.EnableSceneManagement = false;
+            nm.NetworkConfig.ConnectionApproval = false;
+        }
+
+        private void HookClientDisconnect()
+        {
+            var singleton = Unity.Netcode.NetworkManager.Singleton;
+            if (clientDisconnectHooked || singleton == null)
+            {
+                return;
+            }
+
+            singleton.OnClientDisconnectCallback += HandleLocalClientDisconnected;
             clientDisconnectHooked = true;
         }
 
@@ -114,7 +141,7 @@ namespace BackyardLegends.Runtime.Network
                 return;
             }
 
-            var nm = NetworkManager.Singleton;
+            var nm = Unity.Netcode.NetworkManager.Singleton;
             if (nm == null || nm.IsServer)
             {
                 return;
@@ -175,8 +202,9 @@ namespace BackyardLegends.Runtime.Network
                 yield return new WaitForSecondsRealtime(ReconnectBackoffSeconds * attempt);
             }
 
-            session.SetStatus("Reconnect failed. Return to lobby and rejoin.");
+            session.SetStatus("Reconnect failed — attempting host failover…");
             session.DisableAutoReconnect();
+            SpadesHostFailover.GetOrCreate().NotifyPossibleHostLoss();
             reconnectInFlight = false;
             reconnectRoutine = null;
         }
@@ -194,18 +222,25 @@ namespace BackyardLegends.Runtime.Network
                 return;
             }
 
-            if (NetworkManager.Singleton == null)
+            var nm = Unity.Netcode.NetworkManager.Singleton;
+            if (nm?.NetworkConfig == null)
+            {
+                return;
+            }
+
+            var prefabs = nm.NetworkConfig.Prefabs;
+            if (prefabs != null && prefabs.Contains(TablePrefab))
             {
                 return;
             }
 
             try
             {
-                NetworkManager.Singleton.AddNetworkPrefab(TablePrefab);
+                nm.AddNetworkPrefab(TablePrefab);
             }
-            catch
+            catch (Exception ex)
             {
-                // Already registered.
+                Debug.LogWarning($"SpadesTableNetwork prefab already registered: {ex.Message}");
             }
         }
 
@@ -226,13 +261,93 @@ namespace BackyardLegends.Runtime.Network
                 session.SetStatus($"Hosting · code {joinCode}");
             }
 
-            if (!NetworkManager.Singleton.StartHost())
+            if (!Unity.Netcode.NetworkManager.Singleton.StartHost())
             {
                 session.SetStatus("Failed to start host.");
                 return false;
             }
 
-            return NetworkManager.Singleton.IsListening;
+            // Spawn before gameplay LoadScene so late joiners never miss the table object.
+            SpawnTableIfHost();
+            await EnsureFirestoreTableForHostAsync(session);
+            return Unity.Netcode.NetworkManager.Singleton.IsListening;
+        }
+
+        private static async Task EnsureFirestoreTableForHostAsync(SpadesNetworkSession session)
+        {
+            await FirebaseBootstrap.EnsureInitializedAsync();
+            if (!TableSessionService.IsAvailable)
+            {
+                Debug.LogWarning("Firebase unavailable — host migration will not run for this table.");
+                return;
+            }
+
+            // Rules require hostUid == request.auth.uid.
+            var authUid = string.Empty;
+            try
+            {
+                authUid = FirebaseBootstrap.GetAuth()?.CurrentUser?.UserId ?? string.Empty;
+            }
+            catch
+            {
+                authUid = string.Empty;
+            }
+
+            if (string.IsNullOrWhiteSpace(authUid))
+            {
+                var auth = FirebaseAuthService.GetOrCreate();
+                var user = await auth.EnsureSignedInAsync();
+                authUid = user != null && user.IsSignedIn ? user.Uid : string.Empty;
+            }
+
+            if (string.IsNullOrWhiteSpace(authUid))
+            {
+                Debug.LogWarning("No Firebase Auth uid — cannot create Firestore table.");
+                return;
+            }
+
+            session.SetLocalPlayerIdentity(authUid, session.LocalDisplayName);
+
+            if (!string.IsNullOrEmpty(session.TableId) && session.PendingRestoreState != null)
+            {
+                await TableSessionService.WriteRelayAsync(session.TableId, session.JoinCode, authUid);
+                return;
+            }
+
+            var rules = session.PendingRules ?? BackyardLegendsSession.GetOrCreateRuntimeInstance().SelectedRule;
+            var sessionKey = string.IsNullOrEmpty(session.SessionKey)
+                ? System.Guid.NewGuid().ToString("N")
+                : session.SessionKey;
+
+            try
+            {
+                var table = await TableSessionService.CreateTableAsync(
+                    authUid,
+                    session.LocalDisplayName,
+                    rules,
+                    session.JoinCode,
+                    sessionKey);
+                if (table != null)
+                {
+                    session.SetTableSession(table.TableId, table.SessionKey, authUid);
+                    SpadesHostFailover.GetOrCreate().BeginWatchingTable(table.TableId);
+                    Debug.Log($"Firestore table ready: {table.TableId} join={session.JoinCode}");
+
+                    // If gameplay table already spawned, push tableId to connected clients now.
+                    if (SpadesTableNetwork.Instance != null && SpadesTableNetwork.Instance.IsServer)
+                    {
+                        SpadesTableNetwork.Instance.SyncTableSessionToClients();
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning("CreateTableAsync returned null.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Failed to create Firestore table: {ex.Message}");
+            }
         }
 
         public Task<bool> StartClientAsync(string joinCode)
@@ -256,21 +371,22 @@ namespace BackyardLegends.Runtime.Network
                 session.SetStatus($"Direct join fallback — {error}");
             }
 
-            if (!NetworkManager.Singleton.StartClient())
+            if (!Unity.Netcode.NetworkManager.Singleton.StartClient())
             {
                 session.SetStatus("Failed to start client.");
                 return false;
             }
 
-            var timeoutAt = Time.realtimeSinceStartup + 12f;
-            while (!NetworkManager.Singleton.IsConnectedClient && Time.realtimeSinceStartup < timeoutAt)
+            var timeoutAt = Time.realtimeSinceStartup + 20f;
+            while (!Unity.Netcode.NetworkManager.Singleton.IsConnectedClient && Time.realtimeSinceStartup < timeoutAt)
             {
                 await Task.Yield();
             }
 
-            if (!NetworkManager.Singleton.IsConnectedClient)
+            if (!Unity.Netcode.NetworkManager.Singleton.IsConnectedClient)
             {
                 session.SetStatus("Timed out connecting to host.");
+                Debug.LogWarning($"StartClient timed out for joinCode={joinCode}. Is host running on LOCAL/127.0.0.1:7777?");
                 ShutdownNetworkOnly();
                 return false;
             }
@@ -285,7 +401,7 @@ namespace BackyardLegends.Runtime.Network
 
         public void SpawnTableIfHost()
         {
-            if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer)
+            if (Unity.Netcode.NetworkManager.Singleton == null || !Unity.Netcode.NetworkManager.Singleton.IsServer)
             {
                 return;
             }
@@ -307,12 +423,33 @@ namespace BackyardLegends.Runtime.Network
             instance.name = "Spades Table Network";
             instance.hideFlags = HideFlags.None;
             instance.SetActive(true);
+            // Survive client/host SceneManager.LoadScene(Single) after connect.
+            DontDestroyOnLoad(instance);
             var netObj = instance.GetComponent<NetworkObject>();
+            if (netObj.IsSpawned)
+            {
+                return;
+            }
+
             netObj.Spawn(true);
+            Debug.Log($"Spawned SpadesTableNetwork netId={netObj.NetworkObjectId} (DDOL)");
+        }
+
+        public void ShutdownNetworkKeepingSession()
+        {
+            if (reconnectRoutine != null)
+            {
+                StopCoroutine(reconnectRoutine);
+                reconnectRoutine = null;
+            }
+
+            reconnectInFlight = false;
+            ShutdownNetworkOnly();
         }
 
         public void Shutdown()
         {
+            SpadesHostFailover.GetOrCreate().StopWatching();
             if (reconnectRoutine != null)
             {
                 StopCoroutine(reconnectRoutine);
@@ -326,17 +463,17 @@ namespace BackyardLegends.Runtime.Network
 
         private void ShutdownNetworkOnly()
         {
-            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening)
+            if (Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsListening)
             {
-                NetworkManager.Singleton.Shutdown();
+                Unity.Netcode.NetworkManager.Singleton.Shutdown();
             }
         }
 
         private void OnDestroy()
         {
-            if (NetworkManager.Singleton != null && clientDisconnectHooked)
+            if (Unity.Netcode.NetworkManager.Singleton != null && clientDisconnectHooked)
             {
-                NetworkManager.Singleton.OnClientDisconnectCallback -= HandleLocalClientDisconnected;
+                Unity.Netcode.NetworkManager.Singleton.OnClientDisconnectCallback -= HandleLocalClientDisconnected;
                 clientDisconnectHooked = false;
             }
 

@@ -342,7 +342,12 @@ namespace BackyardLegends.Runtime.Firebase
                 return;
             }
 
-            auth = global::Firebase.Auth.FirebaseAuth.DefaultInstance;
+            auth = FirebaseBootstrap.GetAuth();
+            if (auth == null)
+            {
+                return;
+            }
+
             auth.StateChanged += HandleAuthStateChanged;
         }
 

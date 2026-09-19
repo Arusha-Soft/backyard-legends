@@ -30,7 +30,12 @@ namespace BackyardLegends.Runtime.Firebase
                 return null;
             }
 
-            var db = global::Firebase.Firestore.FirebaseFirestore.DefaultInstance;
+            var db = FirebaseBootstrap.GetFirestore();
+            if (db == null)
+            {
+                return null;
+            }
+
             var doc = db.Collection(CollectionName).Document(uid);
             var snapshot = await doc.GetSnapshotAsync();
 

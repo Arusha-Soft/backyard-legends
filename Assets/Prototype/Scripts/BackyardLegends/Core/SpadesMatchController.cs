@@ -492,22 +492,55 @@ namespace BackyardLegends.Core
             EventRaised?.Invoke(matchEvent);
         }
 
-        private MatchState CreateSnapshot()
+        public MatchState CloneState()
         {
+            return CreateSnapshot();
+        }
+
+        public void RestoreState(MatchState source)
+        {
+            if (source == null)
+            {
+                throw new ArgumentNullException(nameof(source));
+            }
+
+            var clone = CloneMatchState(source);
+            State.Phase = clone.Phase;
+            State.TargetScore = clone.TargetScore;
+            State.WinningTeam = clone.WinningTeam;
+            State.RuleSet = clone.RuleSet;
+            State.SeatNames.Clear();
+            foreach (var pair in clone.SeatNames)
+            {
+                State.SeatNames[pair.Key] = pair.Value;
+            }
+
+            State.Scores.Clear();
+            foreach (var pair in clone.Scores)
+            {
+                State.Scores[pair.Key] = pair.Value;
+            }
+
+            State.RoundState = clone.RoundState;
+        }
+
+        private static MatchState CloneMatchState(MatchState source)
+        {
+            // Reuse CreateSnapshot logic by temporarily copying via a throwaway controller path:
             var snapshot = new MatchState
             {
-                Phase = State.Phase,
-                TargetScore = State.TargetScore,
-                RuleSet = State.RuleSet.CloneForTarget(State.RuleSet.TargetScore),
-                WinningTeam = State.WinningTeam
+                Phase = source.Phase,
+                TargetScore = source.TargetScore,
+                RuleSet = source.RuleSet?.CloneForTarget(source.TargetScore) ?? new RuleSetDefinition { TargetScore = source.TargetScore },
+                WinningTeam = source.WinningTeam
             };
 
-            foreach (var name in State.SeatNames)
+            foreach (var name in source.SeatNames)
             {
                 snapshot.SeatNames[name.Key] = name.Value;
             }
 
-            foreach (var score in State.Scores)
+            foreach (var score in source.Scores)
             {
                 snapshot.Scores[score.Key] = new ScoreSnapshot
                 {
@@ -524,44 +557,43 @@ namespace BackyardLegends.Core
                 };
             }
 
-            if (State.RoundState == null)
+            if (source.RoundState == null)
             {
                 return snapshot;
             }
 
             snapshot.RoundState = new RoundState
             {
-                RoundNumber = State.RoundState.RoundNumber,
-                Dealer = State.RoundState.Dealer,
-                LastStatusMessage = State.RoundState.LastStatusMessage
+                RoundNumber = source.RoundState.RoundNumber,
+                Dealer = source.RoundState.Dealer,
+                LastStatusMessage = source.RoundState.LastStatusMessage
             };
-
-            snapshot.RoundState.BidState.CurrentBidder = State.RoundState.BidState.CurrentBidder;
-            foreach (var bid in State.RoundState.BidState.BidsBySeat)
+            snapshot.RoundState.BidState.CurrentBidder = source.RoundState.BidState.CurrentBidder;
+            foreach (var bid in source.RoundState.BidState.BidsBySeat)
             {
                 snapshot.RoundState.BidState.BidsBySeat[bid.Key] = bid.Value;
             }
 
-            snapshot.RoundState.TrickState.Leader = State.RoundState.TrickState.Leader;
-            snapshot.RoundState.TrickState.CurrentTurn = State.RoundState.TrickState.CurrentTurn;
-            snapshot.RoundState.TrickState.LeadSuit = State.RoundState.TrickState.LeadSuit;
-            snapshot.RoundState.TrickState.SpadesBroken = State.RoundState.TrickState.SpadesBroken;
-            foreach (var play in State.RoundState.TrickState.Plays)
+            snapshot.RoundState.TrickState.Leader = source.RoundState.TrickState.Leader;
+            snapshot.RoundState.TrickState.CurrentTurn = source.RoundState.TrickState.CurrentTurn;
+            snapshot.RoundState.TrickState.LeadSuit = source.RoundState.TrickState.LeadSuit;
+            snapshot.RoundState.TrickState.SpadesBroken = source.RoundState.TrickState.SpadesBroken;
+            foreach (var play in source.RoundState.TrickState.Plays)
             {
                 snapshot.RoundState.TrickState.Plays.Add(new TrickPlay { Seat = play.Seat, Card = play.Card });
             }
 
-            foreach (var hand in State.RoundState.HandsBySeat)
+            foreach (var hand in source.RoundState.HandsBySeat)
             {
-                snapshot.RoundState.HandsBySeat[hand.Key] = hand.Value.ToList();
+                snapshot.RoundState.HandsBySeat[hand.Key] = hand.Value != null ? hand.Value.ToList() : new List<Card>();
             }
 
-            foreach (var trick in State.RoundState.TricksWonBySeat)
+            foreach (var trick in source.RoundState.TricksWonBySeat)
             {
                 snapshot.RoundState.TricksWonBySeat[trick.Key] = trick.Value;
             }
 
-            foreach (var completed in State.RoundState.CompletedTricks)
+            foreach (var completed in source.RoundState.CompletedTricks)
             {
                 snapshot.RoundState.CompletedTricks.Add(completed.Select(play => new TrickPlay
                 {
@@ -570,12 +602,17 @@ namespace BackyardLegends.Core
                 }).ToList());
             }
 
-            foreach (var seat in State.RoundState.RenegeSeats)
+            foreach (var seat in source.RoundState.RenegeSeats)
             {
                 snapshot.RoundState.RenegeSeats.Add(seat);
             }
 
             return snapshot;
+        }
+
+        private MatchState CreateSnapshot()
+        {
+            return CloneMatchState(State);
         }
 
         private static string BidLabel(int bid)
