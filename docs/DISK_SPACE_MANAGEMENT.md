@@ -17,10 +17,10 @@ Large games can still exceed hosted-runner disk capacity. Check the runner disk 
 - Unity Library caching defaults **off**. Enable `CACHE_UNITY_LIBRARY=true` only when the build-time saving justifies cache storage. Cache keys include Unity version, platform, project/package settings, and commit.
 - The temporary iOS transfer artifact expires after one day and is deleted after successful iOS delivery. A failed iOS job retains it for retries until expiry. Downloading uses the original artifact ID, so retrying only the macOS job still works when the run-attempt number changes. Only that artifact is deleted; unrelated builds are not pruned.
 - A small Linux diagnostics artifact preserves Unity logs before iOS continues on macOS.
-- Final GitHub upload errors are reported but do not prevent Telegram from receiving the build. A successful Telegram delivery can keep a build successful despite a GitHub storage failure. Failed builds or store uploads remain failed.
+- Final GitHub upload errors are reported but do not prevent Telegram from receiving the build. A successful Telegram delivery can keep a build successful despite a GitHub storage failure. Conversely, Telegram errors become warnings when the packaged build is available in GitHub. Losing both delivery routes, failed builds, packaging errors, or failed store uploads still fail the run.
 
 Short retention reduces accumulation; it cannot bypass an exhausted account quota or instantly refresh GitHub's storage accounting. The iOS Linux-to-macOS handoff requires temporary artifact capacity: if that upload fails, signing cannot start and the Linux job reports the failure through Telegram. Free space/delete old artifacts in GitHub before retrying. See [artifact storage documentation](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/remove-workflow-artifacts).
 
 ## Telegram
 
-Telegram delivery uses the local build files, independently of the GitHub artifact upload. Files are streamed from disk, split below 45 MB when needed, and sent in groups of up to ten. See [Telegram limits and reassembly](TELEGRAM_FILE_LIMITS.md).
+Telegram delivery uses the local build files, independently of the GitHub artifact upload. Files are streamed from disk, split into parts of at most 45 MB when needed, and grouped with both a ten-file limit and a 45 MB combined payload limit. Albums rejected with 400/413 are retried as individual files. See [Telegram limits and reassembly](TELEGRAM_FILE_LIMITS.md).

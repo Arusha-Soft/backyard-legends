@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { prepareConfig, redact, storeDescription } from '../.github/scripts/ci.mjs';
-import { Telegram, batches, message, splitFile, textChunks } from '../.github/scripts/telegram.mjs';
+import { FILE_LIMIT, Telegram, batches, message, splitFile, textChunks } from '../.github/scripts/telegram.mjs';
 import { configureProject, validateProfile } from '../.github/scripts/sign-ios.mjs';
 
 const settings = fs.readFileSync(new URL('../ProjectSettings/ProjectSettings.asset', import.meta.url), 'utf8');
@@ -116,11 +116,95 @@ test('albums use JSON serialization, omit empty topics, and respect ten-file bat
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 });
 test('long captions are delivered intact as text before files', async () => {
-  const { telegram, calls } = mockTelegram();
-  telegram.album = async (_, caption) => { assert.ok(caption.length < 1024); };
-  const caption = 'hello 🎮'.repeat(1000);
-  await telegram.deliver(['fake.zip'], caption);
-  assert.equal(calls.map(call => call.body.get('text')).join(''), caption);
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-ci-caption-'));
+  try {
+    const file = path.join(temp, 'game.zip');
+    fs.writeFileSync(file, 'fixture');
+    const { telegram, calls } = mockTelegram();
+    telegram.album = async (_, caption) => { assert.ok(caption.length < 1024); };
+    const caption = 'hello 🎮'.repeat(1000);
+    await telegram.deliver([file], caption);
+    assert.equal(calls.map(call => call.body.get('text')).join(''), caption);
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+});
+
+test('large parts are sent separately and smaller files share a size-limited album', async () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-ci-batch-size-'));
+  try {
+    const sizes = [FILE_LIMIT, FILE_LIMIT, FILE_LIMIT - 100, 100, 1];
+    const files = sizes.map((size, i) => {
+      const file = path.join(temp, `Game.zip.${String(i + 1).padStart(3, '0')}`);
+      fs.writeFileSync(file, '');
+      fs.truncateSync(file, size);
+      return file;
+    });
+    const { telegram, calls, waits } = mockTelegram();
+    await telegram.deliver(files, 'Build status');
+    assert.deepEqual(calls.map(call => call.method), ['sendDocument', 'sendDocument', 'sendMediaGroup', 'sendDocument']);
+    const uploaded = [];
+    for (const call of calls) {
+      const attachments = call.method === 'sendDocument' ? [call.body.get('document')] :
+        JSON.parse(call.body.get('media')).map(item => call.body.get(item.media.replace('attach://', '')));
+      assert.ok(attachments.reduce((total, file) => total + file.size, 0) <= FILE_LIMIT);
+      uploaded.push(...attachments.map(file => file.name));
+    }
+    assert.deepEqual(uploaded, files.map(file => path.basename(file)));
+    assert.deepEqual(waits, [1100, 1100, 1100]);
+    assert.equal(calls[0].body.get('caption'), 'Build status');
+    assert.deepEqual(batches([]), []);
+    fs.truncateSync(files[0], FILE_LIMIT + 1);
+    assert.throws(() => batches([files[0]]), /exceeds the upload limit/);
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+});
+
+test('413 album rejection falls back to individual files for JSON and gateway responses', async () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-ci-413-'));
+  try {
+    const files = ['game.zip.001', 'game.zip.002', 'logs.zip'].map(name => path.join(temp, name));
+    for (const file of files) fs.writeFileSync(file, 'fixture');
+    for (const gateway of [false, true]) {
+      const { telegram, calls, waits } = mockTelegram(index => index === 1 ? {
+        ok: !gateway, status: gateway ? 413 : 200,
+        json: async () => { if (gateway) throw new SyntaxError('HTML gateway response'); return { ok: false, error_code: 413, description: 'Request Entity Too Large' }; },
+      } : { ok: true, status: 200, json: async () => ({ ok: true, result: {} }) });
+      await telegram.deliver(files, 'Build status');
+      assert.deepEqual(calls.map(call => call.method), ['sendMediaGroup', 'sendDocument', 'sendDocument', 'sendDocument']);
+      assert.deepEqual(calls.slice(1).map(call => call.body.get('document').name), files.map(file => path.basename(file)));
+      assert.deepEqual(calls.slice(1).map(call => call.body.get('caption')), ['Build status', null, null]);
+      assert.deepEqual(waits, [1100, 1100]);
+    }
+    const failed = mockTelegram(index => ({ ok: false, status: index === 1 ? 413 : 403,
+      json: async () => ({ ok: false, error_code: index === 1 ? 413 : 403, description: 'Rejected' }) }));
+    await assert.rejects(failed.telegram.deliver(files, 'Build status'), /403/);
+    assert.deepEqual(failed.calls.map(call => call.method), ['sendMediaGroup', 'sendDocument']);
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+});
+
+test('Telegram CLI reports delivery failures as warnings with an explicit failed output', () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'unity-ci-telegram-warning-'));
+  const script = fileURLToPath(new URL('../.github/scripts/telegram.mjs', import.meta.url));
+  try {
+    const mock = path.join(temp, 'mock-fetch.mjs');
+    fs.writeFileSync(mock, 'globalThis.fetch = async () => ({ ok: false, status: 403, json: async () => ({ ok: false, error_code: 403, description: "Forbidden" }) });');
+    fs.mkdirSync(path.join(temp, 'ci-delivery'));
+    fs.writeFileSync(path.join(temp, 'ci-delivery/game.apk'), 'fixture');
+    fs.writeFileSync(path.join(temp, 'ci-delivery/SHA256SUMS.txt'), 'checksum');
+    fs.writeFileSync(path.join(temp, 'ci-delivery/READ-ME.txt'), 'instructions');
+    const output = path.join(temp, 'outputs.txt');
+    const result = spawnSync(process.execPath, ['--import', pathToFileURL(mock).href, script, 'finish'], { cwd: temp, encoding: 'utf8', env: {
+      ...process.env, TELEGRAM_BOT_TOKEN: 'dummy-token', TELEGRAM_CHAT_ID: '123', STAGE_RESULT: 'success',
+      BUILD_RESULT: 'success', ARTIFACT_RESULT: 'success', GITHUB_OUTPUT: output,
+    } });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Telegram batch 1\/1: 1 file\(s\), 7 bytes/);
+    assert.doesNotMatch(result.stdout, /SHA256SUMS|READ-ME|instructions/);
+    assert.match(result.stderr, /::warning::Telegram delivery failed: Telegram 403/);
+    assert.doesNotMatch(result.stderr, /::error::|dummy-token/);
+    const outputs = fs.readFileSync(output, 'utf8');
+    assert.match(outputs, /status=failure/);
+    assert.match(outputs, /delivered=false/);
+    assert.doesNotMatch(outputs, /delivered=true/);
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 });
 test('HTTP 200 with ok=false fails, while 429 honors retry_after', async () => {
   const bad = mockTelegram(() => ({ ok: true, status: 200, json: async () => ({ ok: false, error_code: 403, description: 'Forbidden' }) }));
@@ -175,7 +259,16 @@ test('delivery outcomes preserve Telegram fallback without hiding requested uplo
     assert.equal(spawnSync(process.execPath, [script, 'summary'], { cwd: temp, env }).status, 0);
     assert.equal(spawnSync(process.execPath, [script, 'summary'], { cwd: temp, env: { ...env, TELEGRAM_RESULT: 'disabled', TELEGRAM_DELIVERED: 'false' } }).status, 1);
     assert.equal(spawnSync(process.execPath, [script, 'summary'], { cwd: temp, env: { ...env, CI_UPLOAD_STORE: 'true' } }).status, 1);
-    assert.equal(spawnSync(process.execPath, [script, 'summary'], { cwd: temp, env: { ...env, ARTIFACT_RESULT: 'success', TELEGRAM_RESULT: 'failure' } }).status, 1);
+    const summary = path.join(temp, 'summary.md');
+    const githubFallback = { ...env, ARTIFACT_RESULT: 'success', TELEGRAM_RESULT: 'failure', TELEGRAM_DELIVERED: 'false', GITHUB_STEP_SUMMARY: summary };
+    assert.equal(spawnSync(process.execPath, [script, 'summary'], { cwd: temp, env: githubFallback }).status, 0);
+    assert.match(fs.readFileSync(summary, 'utf8'), /Telegram: failure \(warning; build available in GitHub artifacts\)/);
+    for (const failure of [
+      { BUILD_RESULT: 'failure' }, { BUILD_RESULT: 'cancelled' }, { STAGE_RESULT: 'failure' },
+      { CI_UPLOAD_STORE: 'true', STORE_RESULT: 'failure' }, { CI_UPLOAD_STORE: 'true', STORE_RESULT: 'skipped' },
+      { ARTIFACT_RESULT: 'failure' },
+    ]) assert.equal(spawnSync(process.execPath, [script, 'summary'], { cwd: temp, env: { ...githubFallback, ...failure } }).status, 1);
+    assert.equal(spawnSync(process.execPath, [script, 'summary'], { cwd: temp, env: { ...env, TELEGRAM_RESULT: 'failure' } }).status, 1);
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 });
 test('definitive album rejection falls back, and a failed document is not reported as delivered', async () => {

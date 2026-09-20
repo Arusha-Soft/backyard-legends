@@ -174,22 +174,25 @@ async function stage() {
 function summary() {
   const env = process.env;
   const report = fs.existsSync('.ci-report.json') ? JSON.parse(fs.readFileSync('.ci-report.json', 'utf8')) : {};
+  const telegramWarning = env.TELEGRAM_RESULT === 'failure' && env.ARTIFACT_RESULT === 'success' && env.STAGE_RESULT === 'success';
   const lines = [
     `### ${env.CI_PLATFORM} / ${env.CI_BUILD_TYPE}`, '',
     `- Build: ${env.BUILD_RESULT}`,
     `- Store: ${storeDescription(env, env.STORE_RESULT)}`,
     `- GitHub artifacts: ${env.ARTIFACT_RESULT || 'skipped'}`,
-    `- Telegram: ${env.TELEGRAM_RESULT || 'skipped'}`,
+    `- Telegram: ${env.TELEGRAM_RESULT || 'skipped'}${telegramWarning ? ' (warning; build available in GitHub artifacts)' : ''}`,
     report.note ? `- ${report.note}` : '',
     report.error ? `- Setup error: ${report.error}` : '',
     '- Full Unity / signing / store action output is in this workflow run.',
   ];
   if (env.GITHUB_STEP_SUMMARY) fs.appendFileSync(env.GITHUB_STEP_SUMMARY, `${lines.filter(Boolean).join('\n')}\n`);
-  // Optional GitHub storage can fail (quota); Telegram still delivers the build.
-  // An explicitly configured but failed Telegram delivery must be visible.
+  // Either delivery route can preserve the build. Telegram failures are warnings
+  // when GitHub has the artifact; losing both routes must still fail visibly.
+  const delivered = env.ARTIFACT_RESULT === 'success' ||
+    (env.TELEGRAM_RESULT === 'delivered' && env.TELEGRAM_DELIVERED === 'true');
   const failed = env.BUILD_RESULT !== 'success' || env.STORE_RESULT === 'failure' ||
     (env.CI_UPLOAD_STORE === 'true' && env.STORE_RESULT !== 'success') || env.STAGE_RESULT === 'failure' ||
-    env.TELEGRAM_RESULT === 'failure' || (env.ARTIFACT_RESULT !== 'success' && env.TELEGRAM_DELIVERED !== 'true');
+    !delivered;
   if (failed && env.DIAGNOSTICS_ONLY !== 'true') throw new Error('Build, deployment, or delivery failed. See the status summary and the failed step.');
 }
 export async function main(command) {
