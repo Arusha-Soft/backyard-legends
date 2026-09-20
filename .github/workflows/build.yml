@@ -1,0 +1,37 @@
+name: Build
+run-name: ${{ inputs.platform }} · ${{ inputs.build_type }} · ${{ github.ref_name }}${{ inputs.upload_to_store && ' · store upload' || '' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform
+        type: choice
+        options: [Android, iOS, Windows, All]
+        default: Android
+      build_type:
+        description: Build type
+        type: choice
+        options: [test, release]
+        default: test
+      upload_to_store:
+        description: Upload to Google Play / App Store Connect (requires signing and store setup)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write # Delete this run's temporary iOS transfer artifact after download.
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(inputs.platform == 'All' && '["Android","iOS","Windows"]' || format('["{0}"]', inputs.platform)) }}
+    uses: ./.github/workflows/build-platform.yml
+    with:
+      platform: ${{ matrix.platform }}
+      build_type: ${{ inputs.build_type }}
+      upload_to_store: ${{ inputs.upload_to_store && matrix.platform != 'Windows' }}
+    secrets: inherit
