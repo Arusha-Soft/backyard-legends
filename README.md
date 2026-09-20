@@ -58,9 +58,9 @@ Windows currently cross-builds with Mono on Linux. Switching Windows to IL2CPP r
 
 Each platform publishes its build and a diagnostics ZIP. GitHub artifacts also include SHA-256 checksums; Telegram omits checksum and README files and file-joining instructions. Default GitHub retention is **one day**, and Unity Library caching is disabled by default to conserve storage. Temporary iOS transfer artifacts are deleted after successful iOS delivery; a failed job retains its transfer for retry until expiry.
 
-Telegram preserves the existing project/platform/flavor/branch/commit/status/footer format and adds store status. Files are grouped into albums of up to ten; large files are split into parts below 45 MB. Longer messages are sent intact as text when they exceed caption limits. See [Telegram delivery](docs/TELEGRAM_FILE_LIMITS.md).
+Telegram preserves the existing project/platform/flavor/branch/commit/status/footer format and adds store status. Files are grouped into albums of up to ten with at most 45 MB combined per upload; large files are split into parts and full-size parts travel separately. Rejected albums (400/413) fall back to individual files. Longer messages are sent intact as text when they exceed caption limits. See [Telegram delivery](docs/TELEGRAM_FILE_LIMITS.md).
 
-Build success, store upload, and artifact delivery are reported separately. A failed store upload fails the run while still delivering the successfully built binary. GitHub storage errors do not block Telegram delivery. If both delivery routes are unavailable, the run fails instead of silently losing the output. The iOS transfer still requires temporary GitHub artifact capacity. See [storage management](docs/DISK_SPACE_MANAGEMENT.md).
+Build success, store upload, and artifact delivery are reported separately. A failed store upload fails the run while still delivering the successfully built binary. GitHub storage errors do not block Telegram delivery. A Telegram error is a warning when GitHub has the packaged build, so it does not turn a successful build red. If both delivery routes are unavailable, the run fails instead of silently losing the output. The iOS transfer still requires temporary GitHub artifact capacity. See [storage management](docs/DISK_SPACE_MANAGEMENT.md).
 
 ## Maintain and validate
 

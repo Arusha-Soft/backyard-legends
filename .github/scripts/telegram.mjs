@@ -39,9 +39,22 @@ export function textChunks(text, limit = 4096) {
   if (chunk) chunks.push(chunk);
   return chunks;
 }
-export function batches(files) {
+export function batches(files, limit = FILE_LIMIT) {
   const groups = [];
-  for (let i = 0; i < files.length; i += 10) groups.push(files.slice(i, i + 10));
+  let group = [];
+  let bytes = 0;
+  for (const file of files) {
+    const size = fs.statSync(file).size;
+    if (size > limit) throw new Error(`Telegram file exceeds the upload limit: ${path.basename(file)} (${size} bytes).`);
+    if (group.length && (group.length === 10 || bytes + size > limit)) {
+      groups.push(group);
+      group = [];
+      bytes = 0;
+    }
+    group.push(file);
+    bytes += size;
+  }
+  if (group.length) groups.push(group);
   return groups;
 }
 export async function splitFile(file, directory, limit = FILE_LIMIT) {
@@ -99,6 +112,8 @@ export class Telegram {
         // Do not blindly resend an album and create duplicate attachments.
         throw new TelegramError('Telegram connection failed or timed out; delivery could not be confirmed.', 0);
       }
+      // Upload gateways can return an HTML/plain-text 413 instead of Bot API JSON.
+      if (response.status === 413) throw new TelegramError('Telegram 413: Request Entity Too Large', 413);
       let body;
       try { body = await response.json(); } catch { throw new TelegramError('Telegram returned an invalid response.', response.status); }
       if (response.ok && body.ok === true) return body.result;
@@ -141,11 +156,11 @@ export class Telegram {
         return form;
       });
     } catch (error) {
-      if (error.code !== 400) throw error;
-      console.log('Telegram rejected the album; trying individual documents.');
+      if (![400, 413].includes(error.code)) throw error;
+      console.log(`Telegram rejected the album (${error.code}); trying individual documents.`);
       for (let i = 0; i < files.length; i++) {
         await this.document(files[i], i === 0 ? caption : '');
-        await this.waiter(1100);
+        if (i + 1 < files.length) await this.waiter(1100);
       }
     }
   }
@@ -154,6 +169,9 @@ export class Telegram {
     if (!files.length || longCaption) await this.text(caption);
     const groups = batches(files);
     for (let i = 0; i < groups.length; i++) {
+      const sizes = groups[i].map(file => fs.statSync(file).size);
+      console.log(`Telegram batch ${i + 1}/${groups.length}: ${groups[i].length} file(s), ${sizes.reduce((sum, size) => sum + size, 0)} bytes.`);
+      for (let j = 0; j < groups[i].length; j++) console.log(`Telegram file ${JSON.stringify(path.basename(groups[i][j]))}: ${sizes[j]} bytes.`);
       const label = longCaption || i > 0 ? `📎 Build attachments (${i + 1}/${groups.length})` : caption;
       await this.album(groups[i], label);
       if (i + 1 < groups.length) await this.waiter(1100);
@@ -196,5 +214,10 @@ async function main() {
   }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch(error => { output('status', 'failure'); console.error(`::error::${error.message.replace(/[\r\n]/g, ' ')}`); process.exitCode = 1; });
+  main().catch(error => {
+    output('delivered', false);
+    output('status', 'failure');
+    console.warn(`::warning::Telegram delivery failed: ${error.message.replace(/[\r\n]/g, ' ')}`);
+    // The final summary decides whether another route preserved the build.
+  });
 }
