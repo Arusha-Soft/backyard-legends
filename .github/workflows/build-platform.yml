@@ -1,0 +1,235 @@
+# Shared implementation. Only Build is manually runnable.
+name: Build platform
+on:
+  workflow_call:
+    inputs:
+      platform:
+        type: string
+        required: true
+      build_type:
+        type: string
+        required: true
+      upload_to_store:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write
+
+# Serialize a platform's builds, including uploads, across branches.
+# Do not cancel a running store transaction when another build is requested.
+concurrency:
+  group: unity-${{ github.repository }}-${{ inputs.platform }}
+  cancel-in-progress: false
+
+env:
+  CI_PLATFORM: ${{ inputs.platform }}
+  CI_BUILD_TYPE: ${{ inputs.build_type }}
+  CI_UPLOAD_STORE: ${{ inputs.upload_to_store }}
+  FORCE_COLOR: '0'
+
+jobs:
+  unity:
+    name: ${{ inputs.platform }} / ${{ inputs.build_type }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    outputs:
+      ios_sign: ${{ steps.prepare.outputs.ios_sign }}
+      artifact_name: ${{ steps.prepare.outputs.artifact_name }}
+      started: ${{ steps.prepare.outputs.started }}
+      transfer_id: ${{ steps.transfer.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Notify build started
+        continue-on-error: true
+        run: node .github/scripts/telegram.mjs start
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ vars.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_THREAD_ID: ${{ vars.TELEGRAM_CHAT_THREAD_ID }}
+      - name: Validate setup and prepare build
+        id: prepare
+        run: node .github/scripts/ci.mjs prepare
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEY_ALIAS_NAME: ${{ vars.ANDROID_KEY_ALIAS_NAME }}
+          ANDROID_KEY_ALIAS_PASS: ${{ secrets.ANDROID_KEY_ALIAS_PASS }}
+          ANDROID_PACKAGE_NAME: ${{ vars.ANDROID_PACKAGE_NAME }}
+          ANDROID_VERSION_CODE_BASE: ${{ vars.ANDROID_VERSION_CODE_BASE }}
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
+          IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
+          IOS_CERT_P12_BASE64: ${{ secrets.IOS_CERT_P12_BASE64 }}
+          IOS_CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
+          IOS_PROFILE_DEVELOPMENT_BASE64: ${{ secrets.IOS_PROFILE_DEVELOPMENT_BASE64 }}
+          IOS_PROFILE_APPSTORE_BASE64: ${{ secrets.IOS_PROFILE_APPSTORE_BASE64 }}
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          WIN_CERT_PFX_BASE64: ${{ secrets.WIN_CERT_PFX_BASE64 }}
+          WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+          ARTIFACT_RETENTION_DAYS: ${{ vars.ARTIFACT_RETENTION_DAYS }}
+      - name: Free space for the Unity container
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android
+          df -h /
+      - name: Restore Unity Library (optional)
+        if: vars.CACHE_UNITY_LIBRARY == 'true'
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: unity-${{ steps.prepare.outputs.unity_version }}-${{ inputs.platform }}-${{ hashFiles('Packages/**', 'ProjectSettings/**') }}-${{ github.sha }}
+          restore-keys: |
+            unity-${{ steps.prepare.outputs.unity_version }}-${{ inputs.platform }}-${{ hashFiles('Packages/**', 'ProjectSettings/**') }}-
+      - name: Build with Unity
+        id: unity
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: ${{ steps.prepare.outputs.unity_version }}
+          targetPlatform: ${{ steps.prepare.outputs.target }}
+          buildMethod: BuildScript.BuildCI
+          versioning: None
+          customParameters: -ciConfig .ci-build.json -logFile /github/workspace/Logs/UnityBuild.log
+          androidKeystoreName: ${{ steps.prepare.outputs.android_sign == 'true' && '.ci-key.keystore' || '' }}
+          androidKeystoreBase64: ${{ inputs.platform == 'Android' && secrets.ANDROID_KEYSTORE_BASE64 || '' }}
+          androidKeystorePass: ${{ inputs.platform == 'Android' && secrets.ANDROID_KEYSTORE_PASS || '' }}
+          androidKeyaliasName: ${{ inputs.platform == 'Android' && vars.ANDROID_KEY_ALIAS_NAME || '' }}
+          androidKeyaliasPass: ${{ inputs.platform == 'Android' && secrets.ANDROID_KEY_ALIAS_PASS || '' }}
+          runAsHostUser: true
+      - name: Sign Windows executable
+        if: inputs.platform == 'Windows' && steps.prepare.outputs.windows_sign == 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y osslsigncode
+          node .github/scripts/sign-windows.mjs
+        env:
+          WIN_CERT_PFX_BASE64: ${{ secrets.WIN_CERT_PFX_BASE64 }}
+          WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+      - name: Upload Android to Google Play
+        id: store
+        if: inputs.platform == 'Android' && inputs.upload_to_store
+        continue-on-error: true
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ steps.prepare.outputs.android_package }}
+          releaseFiles: build/Android/*.aab
+          track: ${{ inputs.build_type == 'test' && 'internal' || 'production' }}
+          status: ${{ inputs.build_type == 'test' && 'completed' || 'draft' }}
+          changesNotSentForReview: ${{ inputs.build_type == 'release' }}
+          releaseName: ${{ steps.prepare.outputs.artifact_name }}
+      - name: Prepare iOS transfer
+        if: inputs.platform == 'iOS' && steps.prepare.outputs.ios_sign == 'true'
+        run: tar -czf ios-project.tar.gz build/iOS .ci-build.json
+      - name: Transfer Xcode project to macOS
+        id: transfer
+        if: inputs.platform == 'iOS' && steps.prepare.outputs.ios_sign == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-project-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ios-project.tar.gz
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - name: Preserve Unity diagnostics before macOS handoff
+        if: always() && steps.transfer.outcome == 'success'
+        continue-on-error: true
+        uses: ./.github/actions/finish-build
+        with:
+          result: ${{ job.status }}
+          diagnostics_only: 'true'
+          redact_values: ${{ format('[{0},{1},{2},{3},{4},{5},{6}]', toJSON(secrets.UNITY_LICENSE), toJSON(secrets.UNITY_EMAIL), toJSON(secrets.UNITY_PASSWORD), toJSON(secrets.UNITY_SERIAL), toJSON(secrets.ANDROID_KEYSTORE_PASS), toJSON(secrets.ANDROID_KEY_ALIAS_PASS), toJSON(secrets.WIN_CERT_PASSWORD)) }}
+      - name: Deliver build and report status
+        if: always() && (inputs.platform != 'iOS' || steps.transfer.outcome != 'success' || failure() || cancelled())
+        uses: ./.github/actions/finish-build
+        with:
+          result: ${{ job.status }}
+          store_result: ${{ steps.store.outcome }}
+          bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          chat_id: ${{ vars.TELEGRAM_CHAT_ID }}
+          chat_thread_id: ${{ vars.TELEGRAM_CHAT_THREAD_ID }}
+          redact_values: ${{ format('[{0},{1},{2},{3},{4},{5},{6}]', toJSON(secrets.UNITY_LICENSE), toJSON(secrets.UNITY_EMAIL), toJSON(secrets.UNITY_PASSWORD), toJSON(secrets.UNITY_SERIAL), toJSON(secrets.ANDROID_KEYSTORE_PASS), toJSON(secrets.ANDROID_KEY_ALIAS_PASS), toJSON(secrets.WIN_CERT_PASSWORD)) }}
+      - name: Remove temporary Android keystore
+        if: always()
+        run: rm -f .ci-key.keystore
+
+  ios:
+    name: iOS signing and distribution
+    needs: unity
+    if: needs.unity.outputs.ios_sign == 'true'
+    runs-on: macos-15-intel
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Download Xcode project
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.unity.outputs.transfer_id }}
+          merge-multiple: true
+      - name: Extract Xcode project
+        run: tar -xzf ios-project.tar.gz && rm ios-project.tar.gz
+      - name: Archive and sign IPA
+        id: signing
+        run: node .github/scripts/sign-ios.mjs
+        env:
+          IOS_CERT_P12_BASE64: ${{ secrets.IOS_CERT_P12_BASE64 }}
+          IOS_CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
+          IOS_PROFILE_BASE64: ${{ (inputs.upload_to_store || inputs.build_type == 'release') && secrets.IOS_PROFILE_APPSTORE_BASE64 || secrets.IOS_PROFILE_DEVELOPMENT_BASE64 }}
+          IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
+      - name: Upload to TestFlight / App Store Connect
+        id: store
+        if: inputs.upload_to_store
+        continue-on-error: true
+        uses: apple-actions/upload-testflight-build@v3
+        with:
+          app-path: ${{ steps.signing.outputs.ipa_path }}
+          app-type: ios
+          issuer-id: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+          api-key-id: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
+          api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+      - name: Deliver build and report status
+        if: always()
+        uses: ./.github/actions/finish-build
+        with:
+          result: ${{ job.status }}
+          store_result: ${{ steps.store.outcome }}
+          bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          chat_id: ${{ vars.TELEGRAM_CHAT_ID }}
+          chat_thread_id: ${{ vars.TELEGRAM_CHAT_THREAD_ID }}
+          artifact_name: ${{ needs.unity.outputs.artifact_name }}
+          started: ${{ needs.unity.outputs.started }}
+          redact_values: ${{ format('[{0},{1}]', toJSON(secrets.IOS_CERT_PASSWORD), toJSON(secrets.APP_STORE_CONNECT_PRIVATE_KEY)) }}
+      - name: Remove temporary transfer artifact after successful delivery
+        if: success()
+        continue-on-error: true
+        run: node .github/scripts/ci.mjs cleanup-transfer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRANSFER_ID: ${{ needs.unity.outputs.transfer_id }}

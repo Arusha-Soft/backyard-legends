@@ -69,3 +69,21 @@ crashlytics-build.properties
 # Temporary auto-generated Android Assets
 /[Aa]ssets/[Ss]treamingAssets/aa.meta
 /[Aa]ssets/[Ss]treamingAssets/aa/*
+
+# CI credentials and generated delivery files
+*.keystore
+*.jks
+*.p12
+*.pfx
+*.p8
+*.ulf
+*.mobileprovision
+*.clixml
+.env
+.env.*
+.ci-*
+/ci-delivery/
+/ci-diagnostics/
+/ci-telegram/
+/ios-project.tar.gz
+/out.log

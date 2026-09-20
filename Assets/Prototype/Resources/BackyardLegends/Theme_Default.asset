@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 46e5719635f2f7845971e45790ebc730, type: 3}
+  m_Name: Theme_Default
+  m_EditorClassIdentifier: 
+  backgroundColor: {r: 0.07, g: 0.08, b: 0.09, a: 1}
+  backgroundSecondary: {r: 0.11, g: 0.12, b: 0.13, a: 1}
+  panelColor: {r: 0.13, g: 0.14, b: 0.16, a: 0.93}
+  panelStroke: {r: 0.23, g: 0.19, b: 0.11, a: 1}
+  gold: {r: 0.89, g: 0.73, b: 0.25, a: 1}
+  red: {r: 0.82, g: 0.24, b: 0.2, a: 1}
+  green: {r: 0.23, g: 0.72, b: 0.48, a: 1}
+  mutedText: {r: 0.66, g: 0.67, b: 0.7, a: 1}
+  primaryText: {r: 0.95, g: 0.95, b: 0.95, a: 1}
+  cardFace: {r: 0.96, g: 0.94, b: 0.9, a: 1}
+  cardBack: {r: 0.16, g: 0.12, b: 0.1, a: 1}
+  highlight: {r: 1, g: 0.84, b: 0.38, a: 1}
+  tableBackgroundSprite: {fileID: 21300000, guid: cae6c363c0dc3ea4195e938a69daff25, type: 3}
+  panelSprite: {fileID: 21300000, guid: 8074f24205b12444687f96030109a469, type: 3}
+  sheetSprite: {fileID: 21300000, guid: 5545a123808e38243b6bbc116bf9a8e9, type: 3}
+  softPanelSprite: {fileID: 21300000, guid: ab3dfb70922863c4f860dd9844121419, type: 3}
+  buttonSprite: {fileID: 21300000, guid: d7bcce6865adfed459359fbe7ca199b9, type: 3}
+  chipSprite: {fileID: 21300000, guid: 1410d31a4286ea94680583040a2536e4, type: 3}
+  cardFaceDefaultSprite: {fileID: 21300000, guid: 7e805bfb37a537547bf46f5b2267a07b, type: 3}
+  cardFacePlayableSprite: {fileID: 21300000, guid: a3cc119c77c841d4db82c9a76757c312, type: 3}
+  cardFaceSelectedSprite: {fileID: 21300000, guid: 4f31b8028f55b39429f23ead5adbb4fc, type: 3}
+  cardFaceMutedSprite: {fileID: 21300000, guid: d3b3bedf82c48db43a1dac3b0f8ab1e5, type: 3}
+  cardBackHeroSprite: {fileID: 21300000, guid: fe73edfbb641d3a4f88cdffdc458775c, type: 3}
+  baseSpacing: 14
+  cardLiftAmount: 26
+  selectedCardScale: 1.08
+  activePulseScale: 1.05
+  modalDuration: 0.22
+  pulseDuration: 0.3
+  shakeDuration: 0.18
+  bannerDuration: 1.2

@@ -1,0 +1,32 @@
+ART STYLE:
+
+For the “street-style” vibe, it’s more about the energy and culture of real-life Spades games rather than a literal street environment.
+
+Think:
+- Dark mode UI (charcoal/black base)
+- Bold, high-contrast colors (gold, red, green accents)
+- Clean but strong design — not cartoonish
+- Subtle textures (table/concrete feel)
+- Emphasis on competitive, high-pressure gameplay
+
+For multiplayer:
+- The plan is real-time multiplayer (not turn-based delay)
+- 4 players total (2v2 teams)
+- Cross-platform (iOS + Android in the same matchmaking pool)
+
+That said, I’m approaching this in phases:
+
+Phase 1 (current focus):
+- Core Spades game logic (4-player, 2v2)
+- Custom rules:
+  - Minimum team bid = 4  
+  - No Nil unless losing by more than 150 points  
+  - Only the losing team can bid Nil (regular Nil only)  
+- Game modes: first to 100, 200 (ranked), and 500  
+- Full turn system, trick resolution, and scoring  
+- Basic UI
+
+Phase 2:
+- Real-time multiplayer
+- Matchmaking system
+- Ranking system

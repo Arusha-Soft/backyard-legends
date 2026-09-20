@@ -1,0 +1,85 @@
+name: Deliver build
+description: Preserve diagnostics, publish artifacts, and report independent build/store/delivery outcomes.
+inputs:
+  result:
+    required: true
+    description: Build job status before delivery
+  store_result:
+    default: skipped
+    description: Store upload step outcome
+  bot_token:
+    default: ''
+    description: Telegram bot secret
+  chat_id:
+    default: ''
+    description: Telegram chat variable
+  chat_thread_id:
+    default: ''
+    description: Optional Telegram topic variable
+  artifact_name:
+    default: ''
+    description: Artifact name if the config could not be downloaded
+  started:
+    default: ''
+    description: Original build start time
+  diagnostics_only:
+    default: 'false'
+    description: Preserve logs before handing off to another runner
+  redact_values:
+    default: '{}'
+    description: Secret values to remove from collected log files (never printed)
+runs:
+  using: composite
+  steps:
+    - name: Prepare artifacts and sanitized diagnostics
+      id: stage
+      if: always()
+      continue-on-error: true
+      shell: bash
+      run: node .github/scripts/ci.mjs stage
+      env:
+        BUILD_RESULT: ${{ inputs.result }}
+        STORE_RESULT: ${{ inputs.store_result }}
+        ARTIFACT_NAME: ${{ inputs.artifact_name }}
+        DIAGNOSTICS_ONLY: ${{ inputs.diagnostics_only }}
+        REDACT_VALUES: ${{ inputs.redact_values }}
+    - name: Save artifacts in GitHub
+      id: artifacts
+      if: always()
+      continue-on-error: true
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.stage.outputs.artifact_name || inputs.artifact_name || 'build' }}-${{ runner.os }}
+        path: ${{ steps.stage.outcome == 'success' && 'ci-delivery/' || 'ci-diagnostics/' }}
+        retention-days: ${{ steps.stage.outputs.retention_days || '1' }}
+        compression-level: 0
+        if-no-files-found: error
+    - name: Deliver files and final status to Telegram
+      id: telegram
+      if: always() && inputs.diagnostics_only != 'true'
+      continue-on-error: true
+      shell: bash
+      run: node .github/scripts/telegram.mjs finish
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ inputs.bot_token }}
+        TELEGRAM_CHAT_ID: ${{ inputs.chat_id }}
+        TELEGRAM_CHAT_THREAD_ID: ${{ inputs.chat_thread_id }}
+        BUILD_RESULT: ${{ inputs.result }}
+        STORE_RESULT: ${{ inputs.store_result }}
+        ARTIFACT_RESULT: ${{ steps.artifacts.outcome }}
+        ARTIFACT_URL: ${{ steps.artifacts.outputs.artifact-url }}
+        STAGE_RESULT: ${{ steps.stage.outcome }}
+        ARTIFACT_NAME: ${{ steps.stage.outputs.artifact_name || inputs.artifact_name }}
+        BUILD_STARTED: ${{ inputs.started }}
+    - name: Record outcomes and fail if necessary
+      if: always()
+      shell: bash
+      run: node .github/scripts/ci.mjs summary
+      env:
+        BUILD_RESULT: ${{ inputs.result }}
+        STORE_RESULT: ${{ inputs.store_result }}
+        STAGE_RESULT: ${{ steps.stage.outcome }}
+        ARTIFACT_RESULT: ${{ steps.artifacts.outcome }}
+        TELEGRAM_RESULT: ${{ steps.telegram.outputs.status || steps.telegram.outcome }}
+        TELEGRAM_DELIVERED: ${{ steps.telegram.outputs.delivered }}
+        DIAGNOSTICS_ONLY: ${{ inputs.diagnostics_only }}
