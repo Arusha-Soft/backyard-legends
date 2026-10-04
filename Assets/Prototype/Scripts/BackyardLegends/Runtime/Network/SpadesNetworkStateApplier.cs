@@ -147,6 +147,10 @@ namespace BackyardLegends.Runtime.Network
                 case SpadesNetworkEventKind.TableReady:
                 case SpadesNetworkEventKind.SeatAssigned:
                 case SpadesNetworkEventKind.ActionRejected:
+                case SpadesNetworkEventKind.LobbyRoster:
+                case SpadesNetworkEventKind.LobbyReadyChanged:
+                case SpadesNetworkEventKind.TablePaused:
+                case SpadesNetworkEventKind.TableResumed:
                     return null;
                 default:
                     return null;

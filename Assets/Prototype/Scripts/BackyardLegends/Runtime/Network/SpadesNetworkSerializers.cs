@@ -22,7 +22,11 @@ namespace BackyardLegends.Runtime.Network
         TableReady = 13,
         PlayerAway = 14,
         PlayerReturned = 15,
-        CatchUpState = 16
+        CatchUpState = 16,
+        LobbyRoster = 17,
+        LobbyReadyChanged = 18,
+        TablePaused = 19,
+        TableResumed = 20
     }
 
     public struct SpadesNetworkCard : INetworkSerializable

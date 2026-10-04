@@ -11,12 +11,13 @@ namespace BackyardLegends.Runtime.Firebase
         public string Uid = string.Empty;
         public string DisplayName = string.Empty;
         public string Conn = "connected"; // connected | grace | ai
+        public bool Ready;
     }
 
     public sealed class TableSessionRecord
     {
         public string TableId = string.Empty;
-        public string Status = "waiting_relay"; // waiting_relay | in_play | paused | completed | abandoned
+        public string Status = "waiting_lobby"; // matching | waiting_lobby | waiting_relay | in_play | paused | completed | abandoned
         public string Mode = "Classic";
         public int TargetScore = 100;
         public bool Ranked;
@@ -115,7 +116,7 @@ namespace BackyardLegends.Runtime.Firebase
             var record = new TableSessionRecord
             {
                 TableId = doc.Id,
-                Status = "waiting_relay",
+                Status = "waiting_lobby",
                 Mode = rules?.DisplayName ?? "Classic",
                 TargetScore = rules?.TargetScore ?? 100,
                 HostUid = hostUid,
@@ -128,7 +129,8 @@ namespace BackyardLegends.Runtime.Firebase
             {
                 Uid = hostUid,
                 DisplayName = displayName ?? "Host",
-                Conn = "connected"
+                Conn = "connected",
+                Ready = false
             };
 
             await doc.SetAsync(ToFirestoreDictionary(record, includeSnapshot: false));
@@ -136,7 +138,7 @@ namespace BackyardLegends.Runtime.Firebase
             return record;
         }
 
-        public static async Task UpsertSeatAsync(string tableId, SeatId seat, string uid, string displayName, string conn)
+        public static async Task UpsertSeatAsync(string tableId, SeatId seat, string uid, string displayName, string conn, bool ready = false)
         {
             if (!IsAvailable || string.IsNullOrWhiteSpace(tableId))
             {
@@ -150,8 +152,93 @@ namespace BackyardLegends.Runtime.Firebase
                 [$"seats.{seat}.uid"] = uid ?? string.Empty,
                 [$"seats.{seat}.displayName"] = displayName ?? string.Empty,
                 [$"seats.{seat}.conn"] = conn ?? "connected",
+                [$"seats.{seat}.ready"] = ready,
                 ["updatedAt"] = global::Firebase.Firestore.FieldValue.ServerTimestamp
             });
+        }
+
+        public static async Task ClearSeatAsync(string tableId, SeatId seat)
+        {
+            if (!IsAvailable || string.IsNullOrWhiteSpace(tableId))
+            {
+                return;
+            }
+
+            var db = FirebaseBootstrap.GetFirestore();
+            await db.Collection(CollectionName).Document(tableId).UpdateAsync(new Dictionary<string, object>
+            {
+                [$"seats.{seat}"] = global::Firebase.Firestore.FieldValue.Delete,
+                ["updatedAt"] = global::Firebase.Firestore.FieldValue.ServerTimestamp
+            });
+        }
+
+        public static async Task SetSeatReadyAsync(string tableId, SeatId seat, bool ready)
+        {
+            if (!IsAvailable || string.IsNullOrWhiteSpace(tableId))
+            {
+                return;
+            }
+
+            var db = FirebaseBootstrap.GetFirestore();
+            await db.Collection(CollectionName).Document(tableId).UpdateAsync(new Dictionary<string, object>
+            {
+                [$"seats.{seat}.ready"] = ready,
+                ["updatedAt"] = global::Firebase.Firestore.FieldValue.ServerTimestamp
+            });
+        }
+
+        public static async Task SetStatusAsync(string tableId, string status)
+        {
+            if (!IsAvailable || string.IsNullOrWhiteSpace(tableId) || string.IsNullOrWhiteSpace(status))
+            {
+                return;
+            }
+
+            var db = FirebaseBootstrap.GetFirestore();
+            await db.Collection(CollectionName).Document(tableId).UpdateAsync(new Dictionary<string, object>
+            {
+                ["status"] = status,
+                ["updatedAt"] = global::Firebase.Firestore.FieldValue.ServerTimestamp
+            });
+        }
+
+        public static async Task MarkAbandonedAsync(string tableId, string reason = "")
+        {
+            if (!IsAvailable || string.IsNullOrWhiteSpace(tableId))
+            {
+                return;
+            }
+
+            var db = FirebaseBootstrap.GetFirestore();
+            await db.Collection(CollectionName).Document(tableId).UpdateAsync(new Dictionary<string, object>
+            {
+                ["status"] = "abandoned",
+                ["abandonReason"] = reason ?? string.Empty,
+                ["endedAt"] = global::Firebase.Firestore.FieldValue.ServerTimestamp,
+                ["updatedAt"] = global::Firebase.Firestore.FieldValue.ServerTimestamp
+            });
+        }
+
+        /// <summary>
+        /// Client leave before match start. Host leave abandons the room.
+        /// </summary>
+        public static async Task LeaveOrAbandonAsync(string tableId, string uid, bool isHost, SeatId? seat)
+        {
+            if (!IsAvailable || string.IsNullOrWhiteSpace(tableId) || string.IsNullOrWhiteSpace(uid))
+            {
+                return;
+            }
+
+            if (isHost)
+            {
+                await MarkAbandonedAsync(tableId, "host_left");
+                return;
+            }
+
+            if (seat.HasValue)
+            {
+                await ClearSeatAsync(tableId, seat.Value);
+            }
         }
 
         public static async Task WriteRelayAsync(string tableId, string joinCode, string hostUid)
@@ -170,9 +257,15 @@ namespace BackyardLegends.Runtime.Firebase
                 ["relay.joinCode"] = code,
                 ["hostUid"] = hostUid ?? string.Empty,
                 ["hostLeaseAt"] = now,
-                ["status"] = "in_play",
+                // Keep lobby status until the host starts the deal.
+                ["status"] = "waiting_lobby",
                 ["updatedAt"] = global::Firebase.Firestore.FieldValue.ServerTimestamp
             });
+        }
+
+        public static async Task MarkInPlayAsync(string tableId)
+        {
+            await SetStatusAsync(tableId, "in_play");
         }
 
         public static async Task HeartbeatAsync(string tableId, string hostUid)
@@ -413,7 +506,8 @@ namespace BackyardLegends.Runtime.Firebase
                 {
                     ["uid"] = pair.Value.Uid ?? string.Empty,
                     ["displayName"] = pair.Value.DisplayName ?? string.Empty,
-                    ["conn"] = pair.Value.Conn ?? "connected"
+                    ["conn"] = pair.Value.Conn ?? "connected",
+                    ["ready"] = pair.Value.Ready
                 };
             }
 
@@ -505,7 +599,8 @@ namespace BackyardLegends.Runtime.Firebase
                     {
                         Uid = MatchStateFirestoreCodec.GetString(seatMap, "uid", string.Empty),
                         DisplayName = MatchStateFirestoreCodec.GetString(seatMap, "displayName", string.Empty),
-                        Conn = MatchStateFirestoreCodec.GetString(seatMap, "conn", "connected")
+                        Conn = MatchStateFirestoreCodec.GetString(seatMap, "conn", "connected"),
+                        Ready = MatchStateFirestoreCodec.GetBool(seatMap, "ready", false)
                     };
                 }
             }

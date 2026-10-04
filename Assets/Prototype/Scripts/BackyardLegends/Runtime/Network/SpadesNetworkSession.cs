@@ -41,6 +41,12 @@ namespace BackyardLegends.Runtime.Network
         public MatchState PendingRestoreState { get; private set; }
         public int PendingRestoreActionSeq { get; private set; }
         public Dictionary<SeatId, (string Uid, string DisplayName)> PendingSeatRoster { get; private set; }
+        /// <summary>Online private/matchmade rooms require Unity Relay (no silent LOCAL).</summary>
+        public bool RequireRelay { get; private set; }
+        /// <summary>Wait for 4 humans + ready before deal (no 45s AI fill).</summary>
+        public bool RequireFullHumanLobby { get; private set; }
+        public bool IsPrivateRoom { get; private set; }
+        public bool IsMatchmade { get; private set; }
 
         public event Action StateChanged;
 
@@ -120,13 +126,17 @@ namespace BackyardLegends.Runtime.Network
             PendingRestoreState = null;
             PendingRestoreActionSeq = 0;
             PendingSeatRoster = null;
+            RequireRelay = false;
+            RequireFullHumanLobby = false;
+            IsPrivateRoom = false;
+            IsMatchmade = false;
             PlayerPrefs.DeleteKey(TableIdPrefsKey);
             PlayerPrefs.DeleteKey(SessionKeyPrefsKey);
             PlayerPrefs.DeleteKey(HostUidPrefsKey);
             RaiseChanged();
         }
 
-        public void BeginHost(RuleSetDefinition rules)
+        public void BeginHost(RuleSetDefinition rules, bool privateRoom = true, bool matchmade = false)
         {
             pendingRole = SpadesNetworkRole.Host;
             pendingJoinCode = string.Empty;
@@ -138,11 +148,15 @@ namespace BackyardLegends.Runtime.Network
             LocalLogicalSeat = SeatId.Bottom;
             MatchWasLive = false;
             AutoReconnectEnabled = false;
-            StatusMessage = "Hosting table…";
+            IsPrivateRoom = privateRoom;
+            IsMatchmade = matchmade;
+            RequireRelay = true;
+            RequireFullHumanLobby = true;
+            StatusMessage = matchmade ? "Hosting matchmade table…" : "Hosting private room…";
             RaiseChanged();
         }
 
-        public void BeginClient(string joinCode, RuleSetDefinition rules)
+        public void BeginClient(string joinCode, RuleSetDefinition rules, bool matchmade = false)
         {
             pendingRole = SpadesNetworkRole.Client;
             pendingJoinCode = joinCode?.Trim().ToUpperInvariant() ?? string.Empty;
@@ -154,6 +168,10 @@ namespace BackyardLegends.Runtime.Network
             SeatAssigned = false;
             MatchWasLive = false;
             AutoReconnectEnabled = true;
+            IsPrivateRoom = !matchmade;
+            IsMatchmade = matchmade;
+            RequireRelay = !string.Equals(JoinCode, SpadesRelayService.LocalJoinCode, StringComparison.OrdinalIgnoreCase);
+            RequireFullHumanLobby = true;
             StatusMessage = "Joining table…";
             RaiseChanged();
         }

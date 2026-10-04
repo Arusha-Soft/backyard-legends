@@ -105,13 +105,17 @@ namespace BackyardLegends.Runtime
         {
             await EnsureAuthReadyForOnlineAsync();
             var networkSession = SpadesNetworkSession.GetOrCreate();
-            networkSession.BeginHost(SelectedRule);
+            networkSession.BeginHost(SelectedRule, privateRoom: true, matchmade: false);
             ApplyLocalNetworkIdentity(networkSession);
             var host = SpadesNetworkManagerHost.GetOrCreate();
             var started = await host.StartHostAsync();
             if (!started)
             {
-                throw new InvalidOperationException(networkSession.StatusMessage);
+                var message = string.IsNullOrWhiteSpace(networkSession.StatusMessage)
+                    ? "Failed to host table."
+                    : networkSession.StatusMessage;
+                networkSession.ConfigureOffline();
+                throw new InvalidOperationException(message);
             }
 
             SceneManager.LoadScene(gameplaySceneName);
@@ -121,17 +125,187 @@ namespace BackyardLegends.Runtime
         {
             await EnsureAuthReadyForOnlineAsync();
             var code = string.IsNullOrWhiteSpace(joinCode)
-                ? SpadesRelayService.LocalJoinCode
+                ? string.Empty
                 : joinCode.Trim();
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                throw new InvalidOperationException("Enter an invite code to join.");
+            }
+
+            // Resolve Firestore table first when available (fresh Relay code + table id).
+            TableSessionRecord table = null;
+            if (TableSessionService.IsAvailable || FirebaseBootstrap.IsAvailable)
+            {
+                await FirebaseBootstrap.EnsureInitializedAsync();
+                table = await TableSessionService.FindByJoinCodeAsync(code);
+                if (table != null)
+                {
+                    if (string.Equals(table.Status, "completed", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(table.Status, "abandoned", StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException("That room is closed. Ask the host for a new code.");
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(table.JoinCode))
+                    {
+                        code = table.JoinCode;
+                    }
+                }
+            }
+
             var networkSession = SpadesNetworkSession.GetOrCreate();
-            networkSession.BeginClient(code, SelectedRule);
+            networkSession.BeginClient(code, SelectedRule, matchmade: false);
             ApplyLocalNetworkIdentity(networkSession);
-            // Load gameplay first, then connect from Bootstrap so the replicated table spawns
-            // after the scene is up (client replicas were destroyed by LoadScene before).
+            if (table != null)
+            {
+                networkSession.SetTableSession(table.TableId, table.SessionKey, table.HostUid);
+            }
+
             networkSession.SetStatus($"Joining {code}…");
             Debug.Log($"Join → load gameplay then connect code={code} role={networkSession.Role}");
             SceneManager.LoadScene(gameplaySceneName);
         }
+
+        public async Task QuickMatchAsync()
+        {
+            await EnsureAuthReadyForOnlineAsync();
+            ApplyLocalNetworkIdentity(SpadesNetworkSession.GetOrCreate());
+            var networkSession = SpadesNetworkSession.GetOrCreate();
+            var uid = networkSession.LocalPlayerId;
+            if (string.IsNullOrWhiteSpace(uid))
+            {
+                throw new InvalidOperationException("Sign in required for Quick Match.");
+            }
+
+            networkSession.SetStatus("Queuing for Quick Match…");
+            await MatchmakingService.QueueForMatchAsync(uid, networkSession.LocalDisplayName, SelectedRule);
+            var mode = SelectedRule?.DisplayName ?? "Classic";
+            var target = SelectedRule?.TargetScore ?? 100;
+            var bucketId = $"{mode}_{target}_auto".Replace(" ", string.Empty);
+
+            // Poll until matched (up to ~60s). Re-run matcher without resetting tickets.
+            var timeoutAt = Time.realtimeSinceStartup + 60f;
+            MatchmakingService.QueueTicket ticket = null;
+            while (Time.realtimeSinceStartup < timeoutAt)
+            {
+                ticket = await MatchmakingService.GetTicketAsync(uid);
+                if (ticket != null && string.Equals(ticket.Status, "matched", StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+
+                if (ticket != null && string.Equals(ticket.Status, "cancelled", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("Quick Match cancelled.");
+                }
+
+                await MatchmakingService.TryFormMatchForBucketAsync(bucketId, mode, target, SelectedRule);
+                await Task.Delay(750);
+            }
+
+            ticket = ticket ?? await MatchmakingService.GetTicketAsync(uid);
+            if (ticket == null || !string.Equals(ticket.Status, "matched", StringComparison.OrdinalIgnoreCase))
+            {
+                await MatchmakingService.CancelQueueAsync(uid);
+                throw new InvalidOperationException("Quick Match timed out — try again or create a private room.");
+            }
+
+            var table = await TableSessionService.GetTableAsync(ticket.TableId);
+            if (table == null)
+            {
+                throw new InvalidOperationException("Matched table missing.");
+            }
+
+            if (ticket.IsHost)
+            {
+                networkSession.BeginHost(SelectedRule, privateRoom: false, matchmade: true);
+                ApplyLocalNetworkIdentity(networkSession);
+                networkSession.SetTableSession(table.TableId, table.SessionKey, uid);
+                var host = SpadesNetworkManagerHost.GetOrCreate();
+                var started = await host.StartHostAsync();
+                if (!started)
+                {
+                    await MatchmakingService.CancelQueueAsync(uid);
+                    throw new InvalidOperationException(networkSession.StatusMessage);
+                }
+
+                // Publish Relay join code onto the matchmade table + tickets.
+                await TableSessionService.WriteRelayAsync(table.TableId, networkSession.JoinCode, uid);
+                await PublishMatchJoinCodeAsync(ticket.TableId, networkSession.JoinCode);
+                SceneManager.LoadScene(gameplaySceneName);
+                return;
+            }
+
+            // Non-host: wait briefly for host to publish join code.
+            var code = table.JoinCode;
+            var waitUntil = Time.realtimeSinceStartup + 25f;
+            while (string.IsNullOrWhiteSpace(code) && Time.realtimeSinceStartup < waitUntil)
+            {
+                await Task.Delay(500);
+                table = await TableSessionService.GetTableAsync(ticket.TableId);
+                code = table?.JoinCode;
+                var refreshed = await MatchmakingService.GetTicketAsync(uid);
+                if (refreshed != null && !string.IsNullOrWhiteSpace(refreshed.JoinCode))
+                {
+                    code = refreshed.JoinCode;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                throw new InvalidOperationException("Host did not publish a Relay code in time.");
+            }
+
+            networkSession.BeginClient(code, SelectedRule, matchmade: true);
+            ApplyLocalNetworkIdentity(networkSession);
+            networkSession.SetTableSession(table.TableId, table.SessionKey, table.HostUid);
+            SceneManager.LoadScene(gameplaySceneName);
+        }
+
+        public async Task CancelQuickMatchAsync()
+        {
+            var uid = SpadesNetworkSession.GetOrCreate().LocalPlayerId;
+            if (string.IsNullOrWhiteSpace(uid) && CurrentUser != null)
+            {
+                uid = CurrentUser.Uid;
+            }
+
+            await MatchmakingService.CancelQueueAsync(uid);
+            SpadesNetworkSession.GetOrCreate().SetStatus("Quick Match cancelled.");
+        }
+
+        private static async Task PublishMatchJoinCodeAsync(string tableId, string joinCode)
+        {
+            if (!TableSessionService.IsAvailable || string.IsNullOrWhiteSpace(tableId))
+            {
+                return;
+            }
+
+            var db = FirebaseBootstrap.GetFirestore();
+            var table = await TableSessionService.GetTableAsync(tableId);
+            if (table?.Seats == null)
+            {
+                return;
+            }
+
+            foreach (var pair in table.Seats)
+            {
+                var seatUid = pair.Value?.Uid;
+                if (string.IsNullOrWhiteSpace(seatUid))
+                {
+                    continue;
+                }
+
+                await db.Collection(MatchmakingService.QueueCollection).Document(seatUid).UpdateAsync(
+                    new Dictionary<string, object>
+                    {
+                        ["joinCode"] = (joinCode ?? string.Empty).Trim().ToUpperInvariant(),
+                        ["updatedAt"] = global::Firebase.Firestore.FieldValue.ServerTimestamp
+                    });
+            }
+        }
+
+        public string GameplaySceneName => gameplaySceneName;
 
         private async Task EnsureAuthReadyForOnlineAsync()
         {
@@ -185,8 +359,6 @@ namespace BackyardLegends.Runtime
 
             SceneManager.LoadScene(lobbySceneName);
         }
-
-        public string GameplaySceneName => gameplaySceneName;
 
         public Task WaitForAuthAsync()
         {

@@ -26,13 +26,19 @@ namespace BackyardLegends.Runtime.Network
         private readonly HashSet<SeatId> aiSitInSeats = new();
         private readonly Dictionary<SeatId, float> graceEndsAtBySeat = new();
         private readonly HashSet<SeatId> readyForNextHand = new();
+        private readonly HashSet<SeatId> readyForMatch = new();
+        private readonly HashSet<SeatId> gracePendingSeats = new();
         private readonly Dictionary<ulong, List<Card>> privateHandsByClient = new();
         private readonly HashSet<ulong> pendingRegistration = new();
+
+        private readonly Dictionary<string, SeatId> preferredSeatByUid = new();
+        private bool preferredSeatsLoaded;
 
         private SpadesMatchController hostController;
         private SpadesRuleEngine ruleEngine;
         private bool matchStarted;
         private float autoStartAt = -1f;
+        private bool requireFullHumanLobby;
         private List<Card> localPrivateHand = new();
         private bool localPlayerRegistered;
         private int actionSeq;
@@ -40,12 +46,17 @@ namespace BackyardLegends.Runtime.Network
 
         public SpadesMatchController HostController => hostController;
         public bool MatchStarted => matchStarted;
+        public bool IsWaitingInLobby => !matchStarted && requireFullHumanLobby;
+        public IReadOnlyCollection<SeatId> ReadySeats => readyForMatch;
+        public IReadOnlyDictionary<SeatId, string> DisplayNames => displayNameBySeat;
+        public IReadOnlyCollection<SeatId> OccupiedHumanSeats => humanOwnedSeats;
         public IReadOnlyList<Card> LocalPrivateHand => localPrivateHand;
 
         public event Action<SpadesNetworkEventPayload> NetworkEventReceived;
         public event Action<SeatId> LocalSeatAssigned;
         public event Action MatchBound;
         public event Action PrivateHandUpdated;
+        public event Action LobbyStateChanged;
 
         private void Awake()
         {
@@ -62,9 +73,19 @@ namespace BackyardLegends.Runtime.Network
                 BindExistingClients();
                 NetworkManager.OnClientConnectedCallback += HandleClientConnected;
                 NetworkManager.OnClientDisconnectCallback += HandleClientDisconnected;
-                // Long enough for ParrelSync clone to press Join before AI fill locks the table.
-                autoStartAt = Time.time + 45f;
-                SpadesNetworkSession.GetOrCreate().SetStatus("Waiting for players (AI fills in 45s)…");
+                var session = SpadesNetworkSession.GetOrCreate();
+                requireFullHumanLobby = session.RequireFullHumanLobby || session.IsOnline;
+                if (requireFullHumanLobby)
+                {
+                    autoStartAt = -1f;
+                    session.SetStatus("Private room lobby — waiting for 4 players…");
+                }
+                else
+                {
+                    // Legacy editor path: AI fill after wait when not in full-lobby mode.
+                    autoStartAt = Time.time + 45f;
+                    session.SetStatus("Waiting for players (AI fills in 45s)…");
+                }
             }
 
             TryRegisterLocalPlayer();
@@ -111,9 +132,42 @@ namespace BackyardLegends.Runtime.Network
                 return;
             }
 
-            if (!matchStarted && autoStartAt >= 0f && Time.time >= autoStartAt)
+            TickGraceExpiry();
+
+            if (!matchStarted && !requireFullHumanLobby && autoStartAt >= 0f && Time.time >= autoStartAt)
             {
                 TryStartMatchWithAiFill();
+            }
+        }
+
+        private void TickGraceExpiry()
+        {
+            if (!matchStarted || gracePendingSeats.Count == 0)
+            {
+                return;
+            }
+
+            var expired = new List<SeatId>();
+            foreach (var seat in gracePendingSeats)
+            {
+                if (!graceEndsAtBySeat.TryGetValue(seat, out var endsAt) || Time.time < endsAt)
+                {
+                    continue;
+                }
+
+                expired.Add(seat);
+            }
+
+            foreach (var seat in expired)
+            {
+                gracePendingSeats.Remove(seat);
+                ActivateAiSitInAfterGrace(seat);
+            }
+
+            if (gracePendingSeats.Count == 0 && matchStarted)
+            {
+                BroadcastTableEvent(SpadesNetworkEventKind.TableResumed, "Table resumed");
+                AdvanceAiUntilHumanOrIdle();
             }
         }
 
@@ -131,9 +185,11 @@ namespace BackyardLegends.Runtime.Network
             Debug.Log($"Client connected id={clientId} total={NetworkManager.ConnectedClientsIds.Count}");
             if (!matchStarted)
             {
-                // Never shorten the lobby wait — only push start further out for late joiners.
-                ExtendAutoStart(3f);
-                SpadesNetworkSession.GetOrCreate().SetStatus($"Players connected: {NetworkManager.ConnectedClientsIds.Count}/4");
+                SpadesNetworkSession.GetOrCreate().SetStatus(
+                    requireFullHumanLobby
+                        ? $"Lobby {NetworkManager.ConnectedClientsIds.Count}/4 — ready up to start"
+                        : $"Players connected: {NetworkManager.ConnectedClientsIds.Count}/4");
+                BroadcastLobbyRoster();
             }
         }
 
@@ -152,6 +208,7 @@ namespace BackyardLegends.Runtime.Network
             clientBySeat.Remove(seat);
             connectedHumanSeats.Remove(seat);
             readyForNextHand.Remove(seat);
+            readyForMatch.Remove(seat);
 
             if (!matchStarted || hostController == null)
             {
@@ -163,6 +220,14 @@ namespace BackyardLegends.Runtime.Network
                 }
 
                 displayNameBySeat.Remove(seat);
+                var session = SpadesNetworkSession.GetOrCreate();
+                if (!string.IsNullOrEmpty(session.TableId))
+                {
+                    _ = TableSessionService.ClearSeatAsync(session.TableId, seat);
+                }
+
+                BroadcastLobbyRoster();
+                LobbyStateChanged?.Invoke();
                 return;
             }
 
@@ -172,7 +237,7 @@ namespace BackyardLegends.Runtime.Network
                 return;
             }
 
-            BeginAiSitIn(seat, "disconnected");
+            BeginGracePeriod(seat, "disconnected");
         }
 
         public void EnsureLocalPlayerRegistered()
@@ -301,7 +366,7 @@ namespace BackyardLegends.Runtime.Network
                     return;
                 }
 
-                Reject(clientId, "Match already in progress — host started with AI. Join sooner, or host again and Join within 45s.");
+                Reject(clientId, "Match already in progress. Ask the host for a new private room code after this hand.");
                 if (NetworkManager != null)
                 {
                     NetworkManager.DisconnectClient(clientId);
@@ -325,9 +390,15 @@ namespace BackyardLegends.Runtime.Network
             }
 
             AssignSeatToClient(clientId, uid, displayName);
-            if (!matchStarted)
+            if (!matchStarted && !requireFullHumanLobby)
             {
                 ExtendAutoStart(5f);
+            }
+
+            if (!matchStarted)
+            {
+                BroadcastLobbyRoster();
+                TryAutoStartWhenLobbyReady();
             }
 
             var session = SpadesNetworkSession.GetOrCreate();
@@ -362,7 +433,19 @@ namespace BackyardLegends.Runtime.Network
                 return;
             }
 
-            var seat = PickNextSeat();
+            SeatId? seat = null;
+            if (preferredSeatByUid.TryGetValue(uid, out var preferred) &&
+                !clientBySeat.ContainsKey(preferred) &&
+                !humanOwnedSeats.Contains(preferred))
+            {
+                seat = preferred;
+            }
+
+            if (!seat.HasValue)
+            {
+                seat = PickNextSeat();
+            }
+
             if (!seat.HasValue)
             {
                 Debug.LogWarning($"No seats left for client {clientId}");
@@ -371,6 +454,34 @@ namespace BackyardLegends.Runtime.Network
             }
 
             BindClientToSeat(clientId, seat.Value, uid, displayName, sendCatchUp: false);
+        }
+
+        public void LoadPreferredSeatsFromTable(TableSessionRecord table)
+        {
+            preferredSeatByUid.Clear();
+            preferredSeatsLoaded = false;
+            if (table?.Seats == null)
+            {
+                return;
+            }
+
+            foreach (var pair in table.Seats)
+            {
+                if (!Enum.TryParse(pair.Key, true, out SeatId seat))
+                {
+                    continue;
+                }
+
+                var seatUid = pair.Value?.Uid;
+                if (string.IsNullOrWhiteSpace(seatUid))
+                {
+                    continue;
+                }
+
+                preferredSeatByUid[seatUid] = seat;
+            }
+
+            preferredSeatsLoaded = preferredSeatByUid.Count > 0;
         }
 
         private void ReclaimSeat(ulong clientId, SeatId seat, string displayName)
@@ -392,6 +503,7 @@ namespace BackyardLegends.Runtime.Network
 
             aiSitInSeats.Remove(seat);
             graceEndsAtBySeat.Remove(seat);
+            gracePendingSeats.Remove(seat);
 
             var uid = uidByClient.TryGetValue(clientId, out var registeredUid)
                 ? registeredUid
@@ -411,6 +523,12 @@ namespace BackyardLegends.Runtime.Network
                     : null
             };
             SendEventClientRpc(returnedPayload);
+            if (gracePendingSeats.Count == 0)
+            {
+                BroadcastTableEvent(SpadesNetworkEventKind.TableResumed, "Table resumed");
+                AdvanceAiUntilHumanOrIdle();
+            }
+
             SpadesNetworkSession.GetOrCreate().SetStatus("Match live");
         }
 
@@ -462,6 +580,11 @@ namespace BackyardLegends.Runtime.Network
             {
                 SendCatchUpToClient(clientId, seat);
             }
+
+            if (!matchStarted)
+            {
+                LobbyStateChanged?.Invoke();
+            }
         }
 
         private void SendCatchUpToClient(ulong clientId, SeatId seat)
@@ -484,7 +607,294 @@ namespace BackyardLegends.Runtime.Network
             PushPrivateHandToClient(clientId, seat);
         }
 
-        private void BeginAiSitIn(SeatId seat, string reason)
+        public bool IsSeatReady(SeatId seat) => readyForMatch.Contains(seat);
+
+        public int ReadyCount => readyForMatch.Count;
+
+        public int OccupiedCount => humanOwnedSeats.Count;
+
+        [ServerRpc(RequireOwnership = false)]
+        public void SetLobbyReadyServerRpc(bool ready, ServerRpcParams rpcParams = default)
+        {
+            if (matchStarted)
+            {
+                return;
+            }
+
+            var clientId = rpcParams.Receive.SenderClientId;
+            if (!seatByClient.TryGetValue(clientId, out var seat))
+            {
+                Reject(clientId, "Seat not assigned yet.");
+                return;
+            }
+
+            if (ready)
+            {
+                readyForMatch.Add(seat);
+            }
+            else
+            {
+                readyForMatch.Remove(seat);
+            }
+
+            var session = SpadesNetworkSession.GetOrCreate();
+            if (!string.IsNullOrEmpty(session.TableId))
+            {
+                _ = TableSessionService.SetSeatReadyAsync(session.TableId, seat, ready);
+            }
+
+            var payload = new SpadesNetworkEventPayload
+            {
+                Kind = (byte)SpadesNetworkEventKind.LobbyReadyChanged,
+                Seat = (byte)seat,
+                Message = ready ? "ready" : "unready"
+            };
+            SendEventClientRpc(payload);
+            BroadcastLobbyRoster();
+            LobbyStateChanged?.Invoke();
+            TryAutoStartWhenLobbyReady();
+        }
+
+        public void HostRequestStartMatch()
+        {
+            if (!IsServer || matchStarted)
+            {
+                return;
+            }
+
+            if (!CanStartFullLobby(out var reason))
+            {
+                SpadesNetworkSession.GetOrCreate().SetStatus(reason);
+                return;
+            }
+
+            StartMatchFromLobby();
+        }
+
+        public void LocalSetLobbyReady(bool ready)
+        {
+            if (matchStarted)
+            {
+                return;
+            }
+
+            SetLobbyReadyServerRpc(ready);
+        }
+
+        public void LocalLeaveTable()
+        {
+            LeaveTableServerRpc();
+        }
+
+        [ServerRpc(RequireOwnership = false)]
+        public void LeaveTableServerRpc(ServerRpcParams rpcParams = default)
+        {
+            var clientId = rpcParams.Receive.SenderClientId;
+            var session = SpadesNetworkSession.GetOrCreate();
+            var isHostClient = IsServer && clientId == NetworkManager.LocalClientId;
+
+            if (seatByClient.TryGetValue(clientId, out var seat))
+            {
+                if (!string.IsNullOrEmpty(session.TableId))
+                {
+                    _ = TableSessionService.LeaveOrAbandonAsync(
+                        session.TableId,
+                        uidByClient.TryGetValue(clientId, out var uid) ? uid : session.LocalPlayerId,
+                        isHostClient,
+                        seat);
+                }
+
+                if (!matchStarted)
+                {
+                    seatByClient.Remove(clientId);
+                    clientBySeat.Remove(seat);
+                    connectedHumanSeats.Remove(seat);
+                    humanOwnedSeats.Remove(seat);
+                    readyForMatch.Remove(seat);
+                    if (uidBySeat.TryGetValue(seat, out var leaveUid))
+                    {
+                        seatByUid.Remove(leaveUid);
+                        uidBySeat.Remove(seat);
+                    }
+
+                    displayNameBySeat.Remove(seat);
+                    BroadcastLobbyRoster();
+                }
+            }
+            else if (isHostClient && !string.IsNullOrEmpty(session.TableId))
+            {
+                _ = TableSessionService.MarkAbandonedAsync(session.TableId, "host_left");
+            }
+
+            if (isHostClient)
+            {
+                BroadcastTableEvent(SpadesNetworkEventKind.ActionRejected, "Host left — room closed");
+                StartCoroutine(ShutdownAfterHostLeaveRoutine());
+                return;
+            }
+
+            if (NetworkManager != null)
+            {
+                NetworkManager.DisconnectClient(clientId);
+            }
+        }
+
+        private IEnumerator ShutdownAfterHostLeaveRoutine()
+        {
+            yield return new WaitForSecondsRealtime(0.35f);
+            SpadesNetworkManagerHost.GetOrCreate().Shutdown();
+            BackyardLegendsSession.GetOrCreateRuntimeInstance().LoadLobbyScene();
+        }
+
+        private bool CanStartFullLobby(out string reason)
+        {
+            reason = string.Empty;
+            if (pendingRegistration.Count > 0)
+            {
+                reason = "Waiting for players to finish joining…";
+                return false;
+            }
+
+            if (humanOwnedSeats.Count < 4 || connectedHumanSeats.Count < 4)
+            {
+                reason = $"Need 4 players ({connectedHumanSeats.Count}/4 seated).";
+                return false;
+            }
+
+            foreach (var seat in humanOwnedSeats)
+            {
+                if (!readyForMatch.Contains(seat))
+                {
+                    reason = $"All players must ready ({readyForMatch.Count}/4).";
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private void TryAutoStartWhenLobbyReady()
+        {
+            if (!requireFullHumanLobby || matchStarted)
+            {
+                return;
+            }
+
+            if (CanStartFullLobby(out _))
+            {
+                StartMatchFromLobby();
+            }
+            else
+            {
+                SpadesNetworkSession.GetOrCreate().SetStatus(
+                    $"Lobby {connectedHumanSeats.Count}/4 · ready {readyForMatch.Count}/4");
+            }
+        }
+
+        private void StartMatchFromLobby()
+        {
+            if (matchStarted)
+            {
+                return;
+            }
+
+            autoStartAt = -1f;
+            var session = SpadesNetworkSession.GetOrCreate();
+            var rules = session.PendingRules ?? BackyardLegendsSession.GetOrCreateRuntimeInstance().SelectedRule;
+            ruleEngine = new SpadesRuleEngine();
+            hostController = new SpadesMatchController(rules, ruleEngine, new Dictionary<SeatId, IAiAgent>());
+            foreach (var seat in humanOwnedSeats)
+            {
+                hostController.State.SeatNames[seat] = displayNameBySeat.TryGetValue(seat, out var name)
+                    ? name
+                    : $"Player {(int)seat + 1}";
+            }
+
+            hostController.EventRaised += HandleHostMatchEvent;
+            matchStarted = true;
+            readyForMatch.Clear();
+
+            if (!string.IsNullOrEmpty(session.TableId))
+            {
+                _ = TableSessionService.MarkInPlayAsync(session.TableId);
+            }
+
+            session.MarkMatchLive();
+            MatchBound?.Invoke();
+            LobbyStateChanged?.Invoke();
+
+            var readyPayload = new SpadesNetworkEventPayload
+            {
+                Kind = (byte)SpadesNetworkEventKind.TableReady,
+                Message = "All ready. Dealing…",
+                PublicState = SpadesNetworkPublicState.FromMatchState(hostController.State)
+            };
+            SendEventClientRpc(readyPayload);
+
+            hostController.StartMatch();
+            AdvanceAiUntilHumanOrIdle();
+            PersistAuthoritySnapshot();
+            session.SetStatus("Match live");
+        }
+
+        private void BroadcastLobbyRoster()
+        {
+            if (!IsServer || matchStarted)
+            {
+                return;
+            }
+
+            var parts = new List<string>();
+            foreach (var seat in new[] { SeatId.Bottom, SeatId.Top, SeatId.Left, SeatId.Right })
+            {
+                var name = displayNameBySeat.TryGetValue(seat, out var n) ? n : "—";
+                var ready = readyForMatch.Contains(seat) ? "R" : "-";
+                var team = seat == SeatId.Bottom || seat == SeatId.Top ? "Home" : "Away";
+                parts.Add($"{seat}:{name}:{ready}:{team}");
+            }
+
+            var payload = new SpadesNetworkEventPayload
+            {
+                Kind = (byte)SpadesNetworkEventKind.LobbyRoster,
+                Message = string.Join("|", parts)
+            };
+            SendEventClientRpc(payload);
+            LobbyStateChanged?.Invoke();
+        }
+
+        private void BeginGracePeriod(SeatId seat, string reason)
+        {
+            if (hostController == null || hostController.State.Phase == MatchPhase.MatchEnded)
+            {
+                return;
+            }
+
+            graceEndsAtBySeat[seat] = Time.time + ReconnectGraceSeconds;
+            gracePendingSeats.Add(seat);
+            var originalName = displayNameBySeat.TryGetValue(seat, out var name) && !string.IsNullOrWhiteSpace(name)
+                ? name
+                : seat.ToString();
+
+            var session = SpadesNetworkSession.GetOrCreate();
+            if (!string.IsNullOrEmpty(session.TableId) && uidBySeat.TryGetValue(seat, out var awayUid))
+            {
+                _ = TableSessionService.UpsertSeatAsync(session.TableId, seat, awayUid, originalName, "grace");
+                _ = TableSessionService.SetStatusAsync(session.TableId, "paused");
+            }
+
+            var awayPayload = new SpadesNetworkEventPayload
+            {
+                Kind = (byte)SpadesNetworkEventKind.PlayerAway,
+                Seat = (byte)seat,
+                Message = $"{originalName} disconnected — 90s to reconnect ({reason})",
+                PublicState = SpadesNetworkPublicState.FromMatchState(hostController.State)
+            };
+            SendEventClientRpc(awayPayload);
+            BroadcastTableEvent(SpadesNetworkEventKind.TablePaused, $"Waiting for {originalName} (90s)");
+            session.SetStatus($"Paused — waiting for {originalName}");
+        }
+
+        private void ActivateAiSitInAfterGrace(SeatId seat)
         {
             if (hostController == null || hostController.State.Phase == MatchPhase.MatchEnded)
             {
@@ -497,7 +907,6 @@ namespace BackyardLegends.Runtime.Network
                 aiSitInSeats.Add(seat);
             }
 
-            graceEndsAtBySeat[seat] = Time.time + ReconnectGraceSeconds;
             var originalName = displayNameBySeat.TryGetValue(seat, out var name) && !string.IsNullOrWhiteSpace(name)
                 ? name
                 : seat.ToString();
@@ -513,11 +922,31 @@ namespace BackyardLegends.Runtime.Network
             {
                 Kind = (byte)SpadesNetworkEventKind.PlayerAway,
                 Seat = (byte)seat,
-                Message = $"{originalName} away — AI playing ({reason})",
+                Message = $"{originalName} away — AI sitting in",
                 PublicState = SpadesNetworkPublicState.FromMatchState(hostController.State)
             };
             SendEventClientRpc(awayPayload);
-            AdvanceAiUntilHumanOrIdle();
+        }
+
+        private void BeginAiSitIn(SeatId seat, string reason)
+        {
+            // Immediate AI path retained for restore / host-failover edge cases.
+            BeginGracePeriod(seat, reason);
+            graceEndsAtBySeat[seat] = Time.time;
+            gracePendingSeats.Add(seat);
+        }
+
+        private void BroadcastTableEvent(SpadesNetworkEventKind kind, string message)
+        {
+            var payload = new SpadesNetworkEventPayload
+            {
+                Kind = (byte)kind,
+                Message = message ?? string.Empty,
+                PublicState = hostController != null
+                    ? SpadesNetworkPublicState.FromMatchState(hostController.State)
+                    : null
+            };
+            SendEventClientRpc(payload);
         }
 
         private void SeedSeatsFromPendingRoster(SpadesNetworkSession session)
@@ -1068,6 +1497,13 @@ namespace BackyardLegends.Runtime.Network
             if (payload.Kind == (byte)SpadesNetworkEventKind.TableReady)
             {
                 SpadesNetworkSession.GetOrCreate().MarkMatchLive();
+                LobbyStateChanged?.Invoke();
+            }
+
+            if (payload.Kind == (byte)SpadesNetworkEventKind.LobbyRoster ||
+                payload.Kind == (byte)SpadesNetworkEventKind.LobbyReadyChanged)
+            {
+                LobbyStateChanged?.Invoke();
             }
 
             NetworkEventReceived?.Invoke(payload);
@@ -1251,7 +1687,7 @@ namespace BackyardLegends.Runtime.Network
 
         private void AdvanceAiUntilHumanOrIdle()
         {
-            if (hostController == null)
+            if (hostController == null || gracePendingSeats.Count > 0)
             {
                 return;
             }

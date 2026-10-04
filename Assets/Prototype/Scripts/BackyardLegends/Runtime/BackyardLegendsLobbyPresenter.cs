@@ -126,6 +126,9 @@ namespace BackyardLegends.Runtime
             PrepareButtonForRuntime(sceneRefs.StartMatchButton, false);
             PrepareButtonForRuntime(sceneRefs.HostTableButton, false);
             PrepareButtonForRuntime(sceneRefs.JoinTableButton, false);
+            PrepareButtonForRuntime(sceneRefs.QuickMatchButton, false);
+            PrepareButtonForRuntime(sceneRefs.CancelQueueButton, false);
+            PrepareButtonForRuntime(sceneRefs.CopyInviteButton, false);
             PrepareButtonForRuntime(sceneRefs.SignInGoogleButton, false);
             PrepareButtonForRuntime(sceneRefs.SignInAppleButton, false);
             PrepareButtonForRuntime(sceneRefs.EmailRegisterButton, false);
@@ -182,8 +185,42 @@ namespace BackyardLegends.Runtime
 
                 PlayFeedback(FeedbackCue.Confirm, 0.95f);
                 KickButton(sceneRefs.JoinTableButton, 0.7f);
-                var code = sceneRefs.JoinCodeInput != null ? sceneRefs.JoinCodeInput.text : SpadesRelayService.LocalJoinCode;
+                var code = sceneRefs.JoinCodeInput != null ? sceneRefs.JoinCodeInput.text : string.Empty;
                 StartCoroutine(RunJoinOnline(code));
+            });
+
+            BindButtonFamily(sceneRefs.QuickMatchButton, () =>
+            {
+                if (onlineActionInFlight)
+                {
+                    return;
+                }
+
+                PlayFeedback(FeedbackCue.Confirm, 0.95f);
+                KickButton(sceneRefs.QuickMatchButton, 0.7f);
+                StartCoroutine(RunQuickMatch());
+            });
+
+            BindButtonFamily(sceneRefs.CancelQueueButton, () =>
+            {
+                PlayFeedback(FeedbackCue.Select, 0.85f);
+                StartCoroutine(RunCancelQueue());
+            });
+
+            BindButtonFamily(sceneRefs.CopyInviteButton, () =>
+            {
+                PlayFeedback(FeedbackCue.Select, 0.75f);
+                var code = SpadesNetworkSession.Instance != null
+                    ? SpadesNetworkSession.Instance.JoinCode
+                    : (sceneRefs.JoinCodeInput != null ? sceneRefs.JoinCodeInput.text : string.Empty);
+                if (string.IsNullOrWhiteSpace(code))
+                {
+                    SetOnlineStatus("No invite code yet — Host a private room first.");
+                    return;
+                }
+
+                GUIUtility.systemCopyBuffer = code.Trim().ToUpperInvariant();
+                SetOnlineStatus($"Copied invite code {code.Trim().ToUpperInvariant()}");
             });
 
             for (var i = 0; i < modeButtons.Count; i++)
@@ -319,6 +356,35 @@ namespace BackyardLegends.Runtime
             }
         }
 
+        private IEnumerator RunQuickMatch()
+        {
+            onlineActionInFlight = true;
+            SetOnlineStatus("Quick Match — searching…");
+            var task = session.QuickMatchAsync();
+            while (!task.IsCompleted)
+            {
+                yield return null;
+            }
+
+            onlineActionInFlight = false;
+            if (task.IsFaulted)
+            {
+                SetOnlineStatus(task.Exception?.GetBaseException().Message ?? "Quick Match failed.");
+            }
+        }
+
+        private IEnumerator RunCancelQueue()
+        {
+            var task = session.CancelQuickMatchAsync();
+            while (!task.IsCompleted)
+            {
+                yield return null;
+            }
+
+            SetOnlineStatus("Quick Match cancelled.");
+            onlineActionInFlight = false;
+        }
+
         private void SetOnlineStatus(string message)
         {
             if (sceneRefs.OnlineStatusText != null)
@@ -336,7 +402,6 @@ namespace BackyardLegends.Runtime
         private void EnsureOnlineUi()
         {
             // Online Row + status are authored in LobbyScene under Lobby Sheet.
-            // Do not spawn them at runtime — design them in the scene.
             if (sceneRefs.OnlineRow == null && sceneRefs.SheetImage != null)
             {
                 sceneRefs.OnlineRow = sceneRefs.SheetImage.transform.Find("Online Row") as RectTransform;
@@ -352,15 +417,82 @@ namespace BackyardLegends.Runtime
                     "(Host Table, Join Code Input, Join Table) and Lobby Sheet/Online Status.");
             }
 
+            EnsureExtraOnlineButtons();
+
             if (sceneRefs.JoinCodeInput != null && string.IsNullOrWhiteSpace(sceneRefs.JoinCodeInput.text))
             {
-                sceneRefs.JoinCodeInput.text = SpadesRelayService.LocalJoinCode;
+                sceneRefs.JoinCodeInput.text = string.Empty;
+                if (sceneRefs.JoinCodeInput.placeholder is Text placeholder)
+                {
+                    placeholder.text = "Invite code";
+                }
             }
 
             if (sceneRefs.OnlineStatusText != null && string.IsNullOrWhiteSpace(sceneRefs.OnlineStatusText.text))
             {
-                sceneRefs.OnlineStatusText.text = "Online: Host / Join (Relay or LOCAL)";
+                sceneRefs.OnlineStatusText.text = "Online: Host private room · Join by code · Quick Match";
             }
+        }
+
+        private void EnsureExtraOnlineButtons()
+        {
+            if (sceneRefs.OnlineRow == null)
+            {
+                return;
+            }
+
+            if (sceneRefs.QuickMatchButton == null)
+            {
+                sceneRefs.QuickMatchButton = CreateOnlineButton("Quick Match", sceneRefs.OnlineRow, "QUICK MATCH", 0.02f, 0.34f);
+            }
+
+            if (sceneRefs.CancelQueueButton == null)
+            {
+                sceneRefs.CancelQueueButton = CreateOnlineButton("Cancel Queue", sceneRefs.OnlineRow, "CANCEL", 0.36f, 0.56f);
+            }
+
+            if (sceneRefs.CopyInviteButton == null)
+            {
+                sceneRefs.CopyInviteButton = CreateOnlineButton("Copy Invite", sceneRefs.OnlineRow, "COPY CODE", 0.58f, 0.92f);
+            }
+        }
+
+        private Button CreateOnlineButton(string name, RectTransform parent, string label, float anchorMinX, float anchorMaxX)
+        {
+            var existing = parent.Find(name);
+            if (existing != null && existing.TryGetComponent<Button>(out var found))
+            {
+                return found;
+            }
+
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(anchorMinX, 0f);
+            rect.anchorMax = new Vector2(anchorMaxX, 0f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.offsetMin = new Vector2(4f, -56f);
+            rect.offsetMax = new Vector2(-4f, -8f);
+            go.GetComponent<Image>().color = theme != null
+                ? Color.Lerp(theme.panelColor, theme.gold, 0.2f)
+                : new Color(0.2f, 0.35f, 0.25f, 1f);
+            var button = go.GetComponent<Button>();
+            var textGo = new GameObject("Label", typeof(RectTransform), typeof(Text));
+            textGo.transform.SetParent(go.transform, false);
+            var textRect = textGo.GetComponent<RectTransform>();
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.offsetMin = Vector2.zero;
+            textRect.offsetMax = Vector2.zero;
+            var text = textGo.GetComponent<Text>();
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")
+                        ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
+            text.text = label;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.fontSize = 15;
+            text.fontStyle = FontStyle.Bold;
+            text.color = Color.white;
+            return button;
         }
 
         private void HandleAuthStateChanged(AuthUserSnapshot snapshot)

@@ -20,13 +20,23 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Casual/friends tables for host failover (M2/M3). Tighten with seat membership checks later.
+    // Casual/friends tables for private rooms, matchmaking, reconnect (M2).
     match /tables/{tableId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null
         && request.resource.data.hostUid == request.auth.uid;
       allow update: if request.auth != null;
       allow delete: if false;
+    }
+
+    // Quick Match queue tickets (one doc per uid).
+    match /matchQueue/{uid} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null
+        && (request.auth.uid == uid
+            || request.resource.data.status == 'matched'
+            || resource.data.status == 'queued');
+      allow delete: if request.auth != null && request.auth.uid == uid;
     }
   }
 }

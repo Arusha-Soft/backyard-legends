@@ -250,8 +250,18 @@ namespace BackyardLegends.Runtime.Network
             var session = SpadesNetworkSession.GetOrCreate();
             session.SetStatus("Allocating connection…");
 
-            var (useDirect, joinCode, error) = await relayService.HostAsync(Transport);
+            var requireRelay = session.RequireRelay;
+            var (useDirect, joinCode, error) = await relayService.HostAsync(Transport, maxPlayers: 4, requireRelay);
             session.SetConnectionInfo(joinCode, useDirect, "127.0.0.1", SpadesRelayService.DefaultDirectPort);
+            if (requireRelay && (useDirect || !string.IsNullOrEmpty(error) &&
+                string.Equals(joinCode, SpadesRelayService.LocalJoinCode, StringComparison.OrdinalIgnoreCase)))
+            {
+                session.SetStatus(string.IsNullOrEmpty(error)
+                    ? "Relay required — link Team UGS and retry."
+                    : error);
+                return false;
+            }
+
             if (!string.IsNullOrEmpty(error) && useDirect)
             {
                 session.SetStatus($"Direct host ({joinCode}) — Relay unavailable");
@@ -308,9 +318,21 @@ namespace BackyardLegends.Runtime.Network
 
             session.SetLocalPlayerIdentity(authUid, session.LocalDisplayName);
 
-            if (!string.IsNullOrEmpty(session.TableId) && session.PendingRestoreState != null)
+            if (!string.IsNullOrEmpty(session.TableId))
             {
                 await TableSessionService.WriteRelayAsync(session.TableId, session.JoinCode, authUid);
+                SpadesHostFailover.GetOrCreate().BeginWatchingTable(session.TableId);
+                var existing = await TableSessionService.GetTableAsync(session.TableId);
+                if (SpadesTableNetwork.Instance != null && SpadesTableNetwork.Instance.IsServer)
+                {
+                    if (existing != null)
+                    {
+                        SpadesTableNetwork.Instance.LoadPreferredSeatsFromTable(existing);
+                    }
+
+                    SpadesTableNetwork.Instance.SyncTableSessionToClients();
+                }
+
                 return;
             }
 
@@ -336,6 +358,7 @@ namespace BackyardLegends.Runtime.Network
                     // If gameplay table already spawned, push tableId to connected clients now.
                     if (SpadesTableNetwork.Instance != null && SpadesTableNetwork.Instance.IsServer)
                     {
+                        SpadesTableNetwork.Instance.LoadPreferredSeatsFromTable(table);
                         SpadesTableNetwork.Instance.SyncTableSessionToClients();
                     }
                 }
@@ -364,9 +387,19 @@ namespace BackyardLegends.Runtime.Network
                 session.SetStatus($"Joining {joinCode}…");
             }
 
-            var (useDirect, error) = await relayService.JoinAsync(Transport, joinCode);
+            var requireRelay = session.RequireRelay &&
+                               !string.Equals(joinCode?.Trim(), SpadesRelayService.LocalJoinCode, StringComparison.OrdinalIgnoreCase);
+            var (useDirect, error) = await relayService.JoinAsync(Transport, joinCode, requireRelay);
             session.SetConnectionInfo(joinCode, useDirect, "127.0.0.1", SpadesRelayService.DefaultDirectPort);
-            if (!string.IsNullOrEmpty(error) && useDirect)
+            if (requireRelay && (useDirect || !string.IsNullOrEmpty(error)))
+            {
+                session.SetStatus(string.IsNullOrEmpty(error)
+                    ? "Relay join required — check invite code and UGS link."
+                    : error);
+                return false;
+            }
+
+            if (!string.IsNullOrEmpty(error) && useDirect && !requireRelay)
             {
                 session.SetStatus($"Direct join fallback — {error}");
             }

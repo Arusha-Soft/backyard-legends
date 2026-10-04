@@ -2773,18 +2773,19 @@ namespace BackyardLegends.Runtime
             }
 
             AddFeedMessage($"Online table: {selectedRule.DisplayName} to {selectedRule.TargetScore}.");
+            MultiplayerLobbyHud.Ensure();
             if (sceneRefs.StatusText != null)
             {
                 sceneRefs.StatusText.text = networkSession.Role == SpadesNetworkRole.Client
                     ? "Connecting to host…"
-                    : "Waiting for players…";
+                    : "Private room lobby — waiting for players…";
             }
 
             if (sceneRefs.CenterHintText != null)
             {
                 sceneRefs.CenterHintText.text = networkSession.Role == SpadesNetworkRole.Client
                     ? "Joining online table…"
-                    : "Online lobby — AI fills empty seats after the wait.";
+                    : "Lobby — 4 humans must Ready to deal (no AI fill).";
             }
 
             StartCoroutine(ConnectOnlineAndWatchTable());
@@ -9187,6 +9188,13 @@ namespace BackyardLegends.Runtime
 
         private void ReturnToLobby()
         {
+            networkSession = SpadesNetworkSession.GetOrCreate();
+            if (networkSession != null && networkSession.IsOnline)
+            {
+                StartCoroutine(ReturnToLobbyOnlineRoutine());
+                return;
+            }
+
             if (session != null)
             {
                 session.LoadLobbyScene();
@@ -9194,6 +9202,15 @@ namespace BackyardLegends.Runtime
             }
 
             SceneManager.LoadScene("LobbyScene");
+        }
+
+        private System.Collections.IEnumerator ReturnToLobbyOnlineRoutine()
+        {
+            var task = BackyardLegends.Runtime.Firebase.MultiplayerSessionCleanup.LeaveAndReturnToLobbyAsync("player_left");
+            while (!task.IsCompleted)
+            {
+                yield return null;
+            }
         }
 
         private SeatId GetCurrentTurnSeat()
