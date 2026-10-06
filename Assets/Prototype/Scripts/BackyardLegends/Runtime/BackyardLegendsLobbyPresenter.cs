@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -363,6 +364,15 @@ namespace BackyardLegends.Runtime
             var task = session.QuickMatchAsync();
             while (!task.IsCompleted)
             {
+                var networkStatus = SpadesNetworkSession.Instance != null
+                    ? SpadesNetworkSession.Instance.StatusMessage
+                    : null;
+                if (!string.IsNullOrWhiteSpace(networkStatus) &&
+                    networkStatus.IndexOf("Matched", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    SetOnlineStatus(networkStatus);
+                }
+
                 yield return null;
             }
 
@@ -417,8 +427,6 @@ namespace BackyardLegends.Runtime
                     "(Host Table, Join Code Input, Join Table) and Lobby Sheet/Online Status.");
             }
 
-            EnsureExtraOnlineButtons();
-
             if (sceneRefs.JoinCodeInput != null && string.IsNullOrWhiteSpace(sceneRefs.JoinCodeInput.text))
             {
                 sceneRefs.JoinCodeInput.text = string.Empty;
@@ -432,67 +440,6 @@ namespace BackyardLegends.Runtime
             {
                 sceneRefs.OnlineStatusText.text = "Online: Host private room · Join by code · Quick Match";
             }
-        }
-
-        private void EnsureExtraOnlineButtons()
-        {
-            if (sceneRefs.OnlineRow == null)
-            {
-                return;
-            }
-
-            if (sceneRefs.QuickMatchButton == null)
-            {
-                sceneRefs.QuickMatchButton = CreateOnlineButton("Quick Match", sceneRefs.OnlineRow, "QUICK MATCH", 0.02f, 0.34f);
-            }
-
-            if (sceneRefs.CancelQueueButton == null)
-            {
-                sceneRefs.CancelQueueButton = CreateOnlineButton("Cancel Queue", sceneRefs.OnlineRow, "CANCEL", 0.36f, 0.56f);
-            }
-
-            if (sceneRefs.CopyInviteButton == null)
-            {
-                sceneRefs.CopyInviteButton = CreateOnlineButton("Copy Invite", sceneRefs.OnlineRow, "COPY CODE", 0.58f, 0.92f);
-            }
-        }
-
-        private Button CreateOnlineButton(string name, RectTransform parent, string label, float anchorMinX, float anchorMaxX)
-        {
-            var existing = parent.Find(name);
-            if (existing != null && existing.TryGetComponent<Button>(out var found))
-            {
-                return found;
-            }
-
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
-            go.transform.SetParent(parent, false);
-            var rect = go.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(anchorMinX, 0f);
-            rect.anchorMax = new Vector2(anchorMaxX, 0f);
-            rect.pivot = new Vector2(0.5f, 1f);
-            rect.offsetMin = new Vector2(4f, -56f);
-            rect.offsetMax = new Vector2(-4f, -8f);
-            go.GetComponent<Image>().color = theme != null
-                ? Color.Lerp(theme.panelColor, theme.gold, 0.2f)
-                : new Color(0.2f, 0.35f, 0.25f, 1f);
-            var button = go.GetComponent<Button>();
-            var textGo = new GameObject("Label", typeof(RectTransform), typeof(Text));
-            textGo.transform.SetParent(go.transform, false);
-            var textRect = textGo.GetComponent<RectTransform>();
-            textRect.anchorMin = Vector2.zero;
-            textRect.anchorMax = Vector2.one;
-            textRect.offsetMin = Vector2.zero;
-            textRect.offsetMax = Vector2.zero;
-            var text = textGo.GetComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")
-                        ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
-            text.text = label;
-            text.alignment = TextAnchor.MiddleCenter;
-            text.fontSize = 15;
-            text.fontStyle = FontStyle.Bold;
-            text.color = Color.white;
-            return button;
         }
 
         private void HandleAuthStateChanged(AuthUserSnapshot snapshot)

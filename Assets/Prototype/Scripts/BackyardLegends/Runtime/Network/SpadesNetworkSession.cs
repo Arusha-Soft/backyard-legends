@@ -344,6 +344,21 @@ namespace BackyardLegends.Runtime.Network
             PlayerPrefs.Save();
         }
 
+        /// <summary>
+        /// Matchmade Firestore seats store Auth uids; NGO registration may append #clone-*.
+        /// </summary>
+        public static string StripEditorCloneUidSuffix(string uid)
+        {
+            if (string.IsNullOrWhiteSpace(uid))
+            {
+                return uid ?? string.Empty;
+            }
+
+            var marker = "#clone-";
+            var idx = uid.IndexOf(marker, StringComparison.Ordinal);
+            return idx >= 0 ? uid.Substring(0, idx) : uid;
+        }
+
 #if UNITY_EDITOR
         public static string ApplyEditorCloneUidSuffix(string uid)
         {

@@ -203,6 +203,15 @@ namespace BackyardLegends.Runtime.Firebase
                 }
 
                 hostUid = matchedUids[0];
+                // Tables may only be created when hostUid == request.auth.uid.
+                // Non-host clients poll until the host forms the match.
+                var authUid = FirebaseBootstrap.GetAuth()?.CurrentUser?.UserId;
+                if (string.IsNullOrWhiteSpace(authUid) ||
+                    !string.Equals(authUid, hostUid, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
                 var tableRef = db.Collection(TableSessionService.CollectionName).Document();
                 tableId = tableRef.Id;
                 var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();

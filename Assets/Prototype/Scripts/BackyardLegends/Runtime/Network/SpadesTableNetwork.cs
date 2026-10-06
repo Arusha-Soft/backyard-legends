@@ -431,7 +431,7 @@ namespace BackyardLegends.Runtime.Network
             }
 
             SeatId? seat = null;
-            if (preferredSeatByUid.TryGetValue(uid, out var preferred) &&
+            if (TryGetPreferredSeat(uid, out var preferred) &&
                 !clientBySeat.ContainsKey(preferred) &&
                 !humanOwnedSeats.Contains(preferred))
             {
@@ -476,9 +476,33 @@ namespace BackyardLegends.Runtime.Network
                 }
 
                 preferredSeatByUid[seatUid] = seat;
+                var baseUid = SpadesNetworkSession.StripEditorCloneUidSuffix(seatUid);
+                if (!string.IsNullOrWhiteSpace(baseUid))
+                {
+                    preferredSeatByUid[baseUid] = seat;
+                }
             }
 
             preferredSeatsLoaded = preferredSeatByUid.Count > 0;
+        }
+
+        private bool TryGetPreferredSeat(string uid, out SeatId seat)
+        {
+            if (!string.IsNullOrWhiteSpace(uid) && preferredSeatByUid.TryGetValue(uid, out seat))
+            {
+                return true;
+            }
+
+            var baseUid = SpadesNetworkSession.StripEditorCloneUidSuffix(uid);
+            if (!string.IsNullOrWhiteSpace(baseUid) &&
+                !string.Equals(baseUid, uid, StringComparison.Ordinal) &&
+                preferredSeatByUid.TryGetValue(baseUid, out seat))
+            {
+                return true;
+            }
+
+            seat = default;
+            return false;
         }
 
         /// <summary>

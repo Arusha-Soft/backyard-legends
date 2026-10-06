@@ -72,9 +72,9 @@ namespace BackyardLegends.Runtime
             OnlineRow = OnlineRow != null ? OnlineRow : FindByPath<RectTransform>("Lobby Sheet/Online Row");
             HostTableButton = HostTableButton != null ? HostTableButton : FindByPath<Button>("Lobby Sheet/Online Row/Host Table");
             JoinTableButton = JoinTableButton != null ? JoinTableButton : FindByPath<Button>("Lobby Sheet/Online Row/Join Table");
-            QuickMatchButton = QuickMatchButton != null ? QuickMatchButton : FindByPath<Button>("Lobby Sheet/Online Row/Quick Match");
-            CancelQueueButton = CancelQueueButton != null ? CancelQueueButton : FindByPath<Button>("Lobby Sheet/Online Row/Cancel Queue");
-            CopyInviteButton = CopyInviteButton != null ? CopyInviteButton : FindByPath<Button>("Lobby Sheet/Online Row/Copy Invite");
+            QuickMatchButton = QuickMatchButton != null ? QuickMatchButton : FindByPath<Button>("Lobby Sheet/Quick Match");
+            CancelQueueButton = CancelQueueButton != null ? CancelQueueButton : FindByPath<Button>("Lobby Sheet/Cancel Queue");
+            CopyInviteButton = CopyInviteButton != null ? CopyInviteButton : FindByPath<Button>("Lobby Sheet/Copy Invite");
             OnlineStatusText = OnlineStatusText != null ? OnlineStatusText : FindByPath<Text>("Lobby Sheet/Online Status");
             JoinCodeInput = JoinCodeInput != null ? JoinCodeInput : FindByPath<InputField>("Lobby Sheet/Online Row/Join Code Input");
             SignInGoogleButton = SignInGoogleButton != null ? SignInGoogleButton : FindByPath<Button>("Lobby Sheet/Account Row/Sign In Google");

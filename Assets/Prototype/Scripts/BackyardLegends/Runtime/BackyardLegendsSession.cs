@@ -171,14 +171,16 @@ namespace BackyardLegends.Runtime
             await EnsureAuthReadyForOnlineAsync();
             ApplyLocalNetworkIdentity(SpadesNetworkSession.GetOrCreate());
             var networkSession = SpadesNetworkSession.GetOrCreate();
-            var uid = networkSession.LocalPlayerId;
-            if (string.IsNullOrWhiteSpace(uid))
+            // Firestore rules key matchQueue/{uid} by Firebase Auth uid.
+            // Editor clone suffixes are for NGO seats only and must not be used here.
+            var authUid = ResolveFirebaseAuthUid();
+            if (string.IsNullOrWhiteSpace(authUid))
             {
                 throw new InvalidOperationException("Sign in required for Quick Match.");
             }
 
             networkSession.SetStatus("Queuing for Quick Match…");
-            await MatchmakingService.QueueForMatchAsync(uid, networkSession.LocalDisplayName, SelectedRule);
+            await MatchmakingService.QueueForMatchAsync(authUid, networkSession.LocalDisplayName, SelectedRule);
             var mode = SelectedRule?.DisplayName ?? "Classic";
             var target = SelectedRule?.TargetScore ?? 100;
             var bucketId = $"{mode}_{target}_auto".Replace(" ", string.Empty);
@@ -188,7 +190,7 @@ namespace BackyardLegends.Runtime
             MatchmakingService.QueueTicket ticket = null;
             while (Time.realtimeSinceStartup < timeoutAt)
             {
-                ticket = await MatchmakingService.GetTicketAsync(uid);
+                ticket = await MatchmakingService.GetTicketAsync(authUid);
                 if (ticket != null && string.Equals(ticket.Status, "matched", StringComparison.OrdinalIgnoreCase))
                 {
                     break;
@@ -199,14 +201,16 @@ namespace BackyardLegends.Runtime
                     throw new InvalidOperationException("Quick Match cancelled.");
                 }
 
+                // Only the eventual host can create the table under current rules
+                // (hostUid must equal request.auth.uid). Non-hosts keep polling.
                 await MatchmakingService.TryFormMatchForBucketAsync(bucketId, mode, target, SelectedRule);
                 await Task.Delay(750);
             }
 
-            ticket = ticket ?? await MatchmakingService.GetTicketAsync(uid);
+            ticket = ticket ?? await MatchmakingService.GetTicketAsync(authUid);
             if (ticket == null || !string.Equals(ticket.Status, "matched", StringComparison.OrdinalIgnoreCase))
             {
-                await MatchmakingService.CancelQueueAsync(uid);
+                await MatchmakingService.CancelQueueAsync(authUid);
                 throw new InvalidOperationException("Quick Match timed out — try again or create a private room.");
             }
 
@@ -220,23 +224,34 @@ namespace BackyardLegends.Runtime
             {
                 networkSession.BeginHost(SelectedRule, privateRoom: false, matchmade: true);
                 ApplyLocalNetworkIdentity(networkSession);
-                networkSession.SetTableSession(table.TableId, table.SessionKey, uid);
+                networkSession.SetTableSession(table.TableId, table.SessionKey, authUid);
+                networkSession.SetStatus("Matched — starting host…");
                 var host = SpadesNetworkManagerHost.GetOrCreate();
                 var started = await host.StartHostAsync();
                 if (!started)
                 {
-                    await MatchmakingService.CancelQueueAsync(uid);
+                    await MatchmakingService.CancelQueueAsync(authUid);
                     throw new InvalidOperationException(networkSession.StatusMessage);
                 }
 
-                // Publish Relay join code onto the matchmade table + tickets.
-                await TableSessionService.WriteRelayAsync(table.TableId, networkSession.JoinCode, uid);
-                await PublishMatchJoinCodeAsync(ticket.TableId, networkSession.JoinCode);
+                // StartHostAsync already wrote joinCode onto the matchmade table.
+                // Leave LobbyScene immediately so the host is not stuck on "searching"
+                // while clients join and ready. Ticket joinCode copies are best-effort.
                 LoadSceneOrThrow(gameplaySceneName);
+                try
+                {
+                    await PublishMatchJoinCodeAsync(ticket.TableId, networkSession.JoinCode);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"Quick Match ticket joinCode publish skipped: {ex.Message}");
+                }
+
                 return;
             }
 
-            // Non-host: wait briefly for host to publish join code.
+            // Non-host: wait briefly for host to publish join code on the table.
+            networkSession.SetStatus("Matched — waiting for host…");
             var code = table.JoinCode;
             var waitUntil = Time.realtimeSinceStartup + 25f;
             while (string.IsNullOrWhiteSpace(code) && Time.realtimeSinceStartup < waitUntil)
@@ -244,7 +259,7 @@ namespace BackyardLegends.Runtime
                 await Task.Delay(500);
                 table = await TableSessionService.GetTableAsync(ticket.TableId);
                 code = table?.JoinCode;
-                var refreshed = await MatchmakingService.GetTicketAsync(uid);
+                var refreshed = await MatchmakingService.GetTicketAsync(authUid);
                 if (refreshed != null && !string.IsNullOrWhiteSpace(refreshed.JoinCode))
                 {
                     code = refreshed.JoinCode;
@@ -264,7 +279,11 @@ namespace BackyardLegends.Runtime
 
         public async Task CancelQuickMatchAsync()
         {
-            var uid = SpadesNetworkSession.GetOrCreate().LocalPlayerId;
+            var uid = ResolveFirebaseAuthUid();
+            if (string.IsNullOrWhiteSpace(uid))
+            {
+                uid = SpadesNetworkSession.GetOrCreate().LocalPlayerId;
+            }
             if (string.IsNullOrWhiteSpace(uid) && CurrentUser != null)
             {
                 uid = CurrentUser.Uid;
@@ -315,16 +334,14 @@ namespace BackyardLegends.Runtime
             ApplyAuthUser(user, auth.LastError);
         }
 
-        private void ApplyLocalNetworkIdentity(SpadesNetworkSession networkSession)
+        private string ResolveFirebaseAuthUid()
         {
-            networkSession.EnsureLocalPlayerId();
-            var firebaseUid = string.Empty;
             try
             {
                 var authUser = FirebaseBootstrap.GetAuth()?.CurrentUser;
                 if (authUser != null && !string.IsNullOrWhiteSpace(authUser.UserId))
                 {
-                    firebaseUid = authUser.UserId;
+                    return authUser.UserId;
                 }
             }
             catch
@@ -332,11 +349,22 @@ namespace BackyardLegends.Runtime
                 // Firebase may be unavailable in editor without config.
             }
 
+            if (CurrentUser != null && CurrentUser.IsSignedIn && !string.IsNullOrWhiteSpace(CurrentUser.Uid))
+            {
+                return CurrentUser.Uid;
+            }
+
+            return string.Empty;
+        }
+
+        private void ApplyLocalNetworkIdentity(SpadesNetworkSession networkSession)
+        {
+            networkSession.EnsureLocalPlayerId();
+            var firebaseUid = ResolveFirebaseAuthUid();
+
             var uid = !string.IsNullOrWhiteSpace(firebaseUid)
                 ? firebaseUid
-                : CurrentUser != null && CurrentUser.IsSignedIn && !string.IsNullOrWhiteSpace(CurrentUser.Uid)
-                    ? CurrentUser.Uid
-                    : networkSession.LocalPlayerId;
+                : networkSession.LocalPlayerId;
 #if UNITY_EDITOR
             uid = SpadesNetworkSession.ApplyEditorCloneUidSuffix(uid);
 #endif
