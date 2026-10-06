@@ -98,7 +98,7 @@ namespace BackyardLegends.Runtime
         public void LoadGameplayScene()
         {
             SpadesNetworkSession.GetOrCreate().ConfigureOffline();
-            SceneManager.LoadScene(gameplaySceneName);
+            LoadSceneOrThrow(gameplaySceneName);
         }
 
         public async Task HostOnlineTableAsync()
@@ -118,7 +118,7 @@ namespace BackyardLegends.Runtime
                 throw new InvalidOperationException(message);
             }
 
-            SceneManager.LoadScene(gameplaySceneName);
+            LoadSceneOrThrow(gameplaySceneName);
         }
 
         public async Task JoinOnlineTableAsync(string joinCode)
@@ -163,7 +163,7 @@ namespace BackyardLegends.Runtime
 
             networkSession.SetStatus($"Joining {code}…");
             Debug.Log($"Join → load gameplay then connect code={code} role={networkSession.Role}");
-            SceneManager.LoadScene(gameplaySceneName);
+            LoadSceneOrThrow(gameplaySceneName);
         }
 
         public async Task QuickMatchAsync()
@@ -232,7 +232,7 @@ namespace BackyardLegends.Runtime
                 // Publish Relay join code onto the matchmade table + tickets.
                 await TableSessionService.WriteRelayAsync(table.TableId, networkSession.JoinCode, uid);
                 await PublishMatchJoinCodeAsync(ticket.TableId, networkSession.JoinCode);
-                SceneManager.LoadScene(gameplaySceneName);
+                LoadSceneOrThrow(gameplaySceneName);
                 return;
             }
 
@@ -259,7 +259,7 @@ namespace BackyardLegends.Runtime
             networkSession.BeginClient(code, SelectedRule, matchmade: true);
             ApplyLocalNetworkIdentity(networkSession);
             networkSession.SetTableSession(table.TableId, table.SessionKey, table.HostUid);
-            SceneManager.LoadScene(gameplaySceneName);
+            LoadSceneOrThrow(gameplaySceneName);
         }
 
         public async Task CancelQuickMatchAsync()
@@ -357,7 +357,47 @@ namespace BackyardLegends.Runtime
                 SpadesNetworkSession.GetOrCreate().ConfigureOffline();
             }
 
-            SceneManager.LoadScene(lobbySceneName);
+            LoadSceneOrThrow(lobbySceneName);
+        }
+
+        /// <summary>
+        /// Unity 6 + Multiplayer Play Mode can fail LoadScene(name) if the virtual player's
+        /// build-profile scene list is stale. Prefer name, then fall back to build index.
+        /// </summary>
+        private static void LoadSceneOrThrow(string sceneName)
+        {
+            if (string.IsNullOrWhiteSpace(sceneName))
+            {
+                throw new InvalidOperationException("Scene name is empty.");
+            }
+
+            if (Application.CanStreamedLevelBeLoaded(sceneName))
+            {
+                SceneManager.LoadScene(sceneName);
+                return;
+            }
+
+            var count = SceneManager.sceneCountInBuildSettings;
+            for (var i = 0; i < count; i++)
+            {
+                var path = SceneUtility.GetScenePathByBuildIndex(i);
+                if (string.IsNullOrEmpty(path))
+                {
+                    continue;
+                }
+
+                var file = System.IO.Path.GetFileNameWithoutExtension(path);
+                if (string.Equals(file, sceneName, StringComparison.OrdinalIgnoreCase))
+                {
+                    SceneManager.LoadScene(i);
+                    return;
+                }
+            }
+
+            throw new InvalidOperationException(
+                $"Scene '{sceneName}' is not in the active Build Profile / shared scene list " +
+                $"(build scenes={count}). Open File → Build Profiles, add LobbyScene + GameplayScene, " +
+                "then disable and re-enable Multiplayer Play Mode virtual players.");
         }
 
         public Task WaitForAuthAsync()

@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using BackyardLegends.Core;
 using BackyardLegends.Runtime.Network;
 using Unity.Netcode;
@@ -245,6 +246,8 @@ namespace BackyardLegends.Runtime
         private SpadesSeatMapper seatMapper;
         private bool onlineMatch;
         private bool onlinePresentationReady;
+        private int lastLoggedOnlineHandCount = -1;
+        private int lastDiagnosedOnlineHandCount = -1;
         private AudioSource feedbackAudioSource;
         private Image openingStackEffectImage;
         private AudioClip bidClip;
@@ -524,6 +527,16 @@ namespace BackyardLegends.Runtime
 
         private void Awake()
         {
+            // Unity invokes Awake on disabled MonoBehaviours when their GameObject is
+            // active. GameplayScene intentionally contains a disabled fallback UI
+            // bootstrap; letting it initialize creates a second controller that can
+            // race the live bootstrap and render hands into its zero-scale canvas.
+            if (!enabled)
+            {
+                Debug.Log($"[GAMEPLAY_BOOTSTRAP] Skipping disabled bootstrap path={BuildTransformPath(transform)}");
+                return;
+            }
+
             Screen.orientation = ScreenOrientation.Portrait;
             Application.targetFrameRate = 60;
             CaptureGameplayCameraDefaults();
@@ -637,25 +650,276 @@ namespace BackyardLegends.Runtime
         {
             seatMapper = new SpadesSeatMapper(seat);
             FlashStatus($"Seated {seat}", theme != null ? theme.gold : Color.yellow);
-            if (tableNetwork != null && tableNetwork.IsClient && !tableNetwork.IsServer)
-            {
-                tableNetwork.RequestPresentationSyncServerRpc();
-            }
+            // Do not request presentation sync here. That RPC responds with SeatAssigned,
+            // which invokes this callback again and creates an endless RPC/hand refresh loop.
         }
 
         private void HandleOnlinePrivateHandUpdated()
         {
-            if (!IsOnlineMatch || controller?.State?.RoundState == null || networkSession == null || !networkSession.SeatAssigned)
+            if (!IsOnlineMatch || networkSession == null || !networkSession.SeatAssigned)
+            {
+                return;
+            }
+
+            EnsureOnlineClientController();
+            ApplyLocalPrivateHandToController();
+        }
+
+        private void ApplyLocalPrivateHandToController()
+        {
+            if (!IsOnlineMatch ||
+                controller == null ||
+                tableNetwork == null ||
+                networkSession == null ||
+                !networkSession.SeatAssigned)
+            {
+                return;
+            }
+
+            if (controller.State.RoundState == null)
             {
                 return;
             }
 
             var localSeat = networkSession.LocalLogicalSeat;
             var visualSeat = seatMapper != null ? seatMapper.ToVisual(localSeat) : SeatId.Bottom;
-            controller.State.RoundState.HandsBySeat[visualSeat] = tableNetwork != null
-                ? tableNetwork.LocalPrivateHand.ToList()
+            var hand = tableNetwork.LocalPrivateHand;
+            controller.State.RoundState.HandsBySeat[visualSeat] = hand != null
+                ? hand.ToList()
                 : new List<Card>();
+            onlinePresentationReady = true;
+            suppressNextHandEntryAnimation = true;
+            ForceOnlineHandContainerVisible();
+            if (hand != null && hand.Count > 0 && hand.Count != lastLoggedOnlineHandCount)
+            {
+                Debug.Log($"Applied private hand count={hand.Count} logical={localSeat} visual={visualSeat}");
+                lastLoggedOnlineHandCount = hand.Count;
+            }
+
             RenderAll();
+            ForceOnlineRenderedHandVisible();
+        }
+
+        private void ForceOnlineHandContainerVisible()
+        {
+            if (sceneRefs?.HandContent == null)
+            {
+                return;
+            }
+
+            sceneRefs.HandContent.gameObject.SetActive(true);
+            if (sceneRefs.HandPanel != null)
+            {
+                sceneRefs.HandPanel.gameObject.SetActive(true);
+            }
+
+            // The imported gameplay canvas keeps the runtime hand inside the
+            // "Bottom Player Cards" wrapper. That wrapper is early in the canvas
+            // sibling order, so later HUD graphics can cover an otherwise valid
+            // hand. Bring the whole wrapper forward, not only its Content child.
+            var handLayer = sceneRefs.HandContent.parent;
+            if (handLayer != null && handLayer.parent != null)
+            {
+                handLayer.SetAsLastSibling();
+            }
+
+            var current = sceneRefs.HandContent.transform;
+            while (current != null)
+            {
+                current.gameObject.SetActive(true);
+                var group = current.GetComponent<CanvasGroup>();
+                if (group != null)
+                {
+                    group.alpha = 1f;
+                    group.interactable = true;
+                    group.blocksRaycasts = true;
+                }
+
+                if (sceneRefs.HandPanel != null && current == sceneRefs.HandPanel.transform)
+                {
+                    break;
+                }
+
+                current = current.parent;
+            }
+
+            SetStartupCardGroupsVisible(true);
+        }
+
+        private void ForceOnlineRenderedHandVisible()
+        {
+            if (!IsOnlineMatch ||
+                controller?.State?.RoundState == null ||
+                sceneRefs?.HandContent == null)
+            {
+                return;
+            }
+
+            var hand = controller.GetHand(SeatId.Bottom).ToList();
+            if (hand.Count == 0)
+            {
+                return;
+            }
+
+            ForceOnlineHandContainerVisible();
+            EnsureCardPoolSize(hand.Count);
+            for (var index = 0; index < hand.Count; index++)
+            {
+                var card = hand[index];
+                var view = handPool[index];
+                var targetPosition = GetFanTargetPosition(index, hand.Count, false, -1);
+                var targetRotation = GetFanTargetRotation(index, hand.Count);
+                ConfigureCardView(view, card, false, false);
+                view.gameObject.SetActive(true);
+                view.Root.SetSiblingIndex(index);
+                ApplyFanLayout(view, targetPosition, targetRotation, 1f);
+                ForceCardGraphicsVisible(view);
+                if (view.CanvasGroup != null)
+                {
+                    view.CanvasGroup.alpha = 1f;
+                    view.CanvasGroup.interactable = true;
+                    view.CanvasGroup.blocksRaycasts = true;
+                }
+            }
+
+            for (var index = hand.Count; index < handPool.Count; index++)
+            {
+                handPool[index].gameObject.SetActive(false);
+            }
+
+            if (lastDiagnosedOnlineHandCount != hand.Count && handPool.Count > 0)
+            {
+                LogOnlineHandDiagnostics("immediate", hand.Count);
+                StartCoroutine(LogOnlineHandDiagnosticsDelayed(hand.Count));
+                lastDiagnosedOnlineHandCount = hand.Count;
+            }
+        }
+
+        private IEnumerator LogOnlineHandDiagnosticsDelayed(int expectedCount)
+        {
+            yield return null;
+            LogOnlineHandDiagnostics("next-frame", expectedCount);
+            yield return new WaitForSecondsRealtime(1f);
+            LogOnlineHandDiagnostics("after-1-second", expectedCount);
+        }
+
+        private void LogOnlineHandDiagnostics(string stage, int expectedCount)
+        {
+            if (sceneRefs?.HandContent == null || handPool.Count == 0)
+            {
+                Debug.LogWarning($"[ONLINE_HAND_DIAG] stage={stage} unavailable contentOrPoolMissing=true");
+                return;
+            }
+
+            var first = handPool[0];
+            var builder = new StringBuilder(1536);
+            builder.Append("[ONLINE_HAND_DIAG] ")
+                .Append("stage=").Append(stage)
+                .Append(" expected=").Append(expectedCount)
+                .Append(" pool=").Append(handPool.Count)
+                .Append(" activeCards=").Append(handPool.Count(view => view != null && view.gameObject.activeInHierarchy))
+                .Append(" clientId=").Append(NetworkManager.Singleton != null ? NetworkManager.Singleton.LocalClientId : ulong.MaxValue)
+                .Append(" logicalSeat=").Append(networkSession != null && networkSession.SeatAssigned
+                    ? networkSession.LocalLogicalSeat.ToString()
+                    : "unassigned")
+                .Append(" screen=").Append(Screen.width).Append('x').Append(Screen.height)
+                .AppendLine();
+
+            AppendRectDiagnostics(builder, "content", sceneRefs.HandContent);
+            AppendRectDiagnostics(builder, "firstCard", first.Root);
+            builder.Append("firstCard canvasGroup=")
+                .Append(first.CanvasGroup != null ? first.CanvasGroup.alpha.ToString("0.###") : "none")
+                .Append(" panelEnabled=").Append(first.Panel != null && first.Panel.enabled)
+                .Append(" panelAlpha=").Append(first.Panel != null ? first.Panel.color.a.ToString("0.###") : "none")
+                .Append(" panelSprite=").Append(first.Panel != null && first.Panel.sprite != null ? first.Panel.sprite.name : "none")
+                .Append(" panelMaterial=").Append(first.Panel != null && first.Panel.material != null ? first.Panel.material.name : "none")
+                .Append(" rendererCull=").Append(first.Panel != null && first.Panel.canvasRenderer.cull)
+                .Append(" rendererDepth=").Append(first.Panel != null ? first.Panel.canvasRenderer.absoluteDepth : -1)
+                .AppendLine();
+
+            var current = sceneRefs.HandContent.transform;
+            var depth = 0;
+            while (current != null)
+            {
+                var group = current.GetComponent<CanvasGroup>();
+                var canvas = current.GetComponent<Canvas>();
+                builder.Append("ancestor[").Append(depth).Append("] name=").Append(current.name)
+                    .Append(" activeSelf=").Append(current.gameObject.activeSelf)
+                    .Append(" activeHierarchy=").Append(current.gameObject.activeInHierarchy)
+                    .Append(" sibling=").Append(current.GetSiblingIndex()).Append('/').Append(current.parent != null ? current.parent.childCount : 1)
+                    .Append(" scale=").Append(current.localScale)
+                    .Append(" canvasGroup=").Append(group != null ? group.alpha.ToString("0.###") : "none")
+                    .Append(" mask=").Append(current.GetComponent<Mask>() != null)
+                    .Append(" rectMask=").Append(current.GetComponent<RectMask2D>() != null);
+                if (canvas != null)
+                {
+                    builder.Append(" canvasEnabled=").Append(canvas.enabled)
+                        .Append(" renderMode=").Append(canvas.renderMode)
+                        .Append(" overrideSorting=").Append(canvas.overrideSorting)
+                        .Append(" sortingOrder=").Append(canvas.sortingOrder);
+                }
+
+                builder.AppendLine();
+                current = current.parent;
+                depth++;
+            }
+
+            Debug.Log(builder.ToString());
+        }
+
+        private static void AppendRectDiagnostics(StringBuilder builder, string label, RectTransform rect)
+        {
+            if (rect == null)
+            {
+                builder.Append(label).AppendLine("=null");
+                return;
+            }
+
+            var corners = new Vector3[4];
+            rect.GetWorldCorners(corners);
+            builder.Append(label)
+                .Append(" path=").Append(BuildTransformPath(rect))
+                .Append(" active=").Append(rect.gameObject.activeInHierarchy)
+                .Append(" anchored=").Append(rect.anchoredPosition)
+                .Append(" size=").Append(rect.rect.size)
+                .Append(" worldBL=").Append(corners[0])
+                .Append(" worldTR=").Append(corners[2])
+                .AppendLine();
+        }
+
+        private static string BuildTransformPath(Transform target)
+        {
+            var names = new Stack<string>();
+            var current = target;
+            while (current != null)
+            {
+                names.Push(current.name);
+                current = current.parent;
+            }
+
+            return string.Join("/", names);
+        }
+
+        private static void ForceCardGraphicsVisible(CardButtonView view)
+        {
+            if (view == null)
+            {
+                return;
+            }
+
+            var graphics = view.GetComponentsInChildren<Graphic>(true);
+            foreach (var graphic in graphics)
+            {
+                if (graphic is MaskableGraphic maskableGraphic)
+                {
+                    maskableGraphic.maskable = false;
+                }
+            }
+
+            if (view.Panel != null)
+            {
+                view.Panel.enabled = true;
+            }
         }
 
         private void HandleOnlineMatchBound()
@@ -745,6 +1009,7 @@ namespace BackyardLegends.Runtime
                     theme != null ? theme.gold : Color.yellow);
                 EnsureOnlineClientController();
                 ApplyOnlinePublicPayload(payload);
+                ApplyLocalPrivateHandToController();
                 onlinePresentationReady = true;
                 RenderAll();
                 return;
@@ -763,15 +1028,27 @@ namespace BackyardLegends.Runtime
 
             EnsureOnlineClientController();
             ApplyOnlinePublicPayload(payload);
+            ApplyLocalPrivateHandToController();
 
             var matchEvent = SpadesNetworkStateApplier.ToMatchEvent(payload, controller.State, seatMapper);
             if (payload.Kind != (byte)SpadesNetworkEventKind.TableReady && matchEvent != null)
             {
                 OnMatchEvent(matchEvent);
+                ApplyLocalPrivateHandToController();
             }
             else
             {
                 RenderAll();
+            }
+
+            // If deal already happened but this client missed the private-hand RPC, ask host again.
+            if ((payload.Kind == (byte)SpadesNetworkEventKind.TableReady ||
+                 payload.Kind == (byte)SpadesNetworkEventKind.MatchStarted ||
+                 payload.Kind == (byte)SpadesNetworkEventKind.RoundStarted) &&
+                tableNetwork != null &&
+                (tableNetwork.LocalPrivateHand == null || tableNetwork.LocalPrivateHand.Count == 0))
+            {
+                tableNetwork.RequestPresentationSyncServerRpc();
             }
         }
 
@@ -919,6 +1196,33 @@ namespace BackyardLegends.Runtime
                 Debug.Log(
                     $"Post-bind role={networkSession.Role} seatAssigned={networkSession.SeatAssigned} " +
                     $"seat={networkSession.LocalLogicalSeat}");
+            }
+
+            // Clients can miss the first private-hand RPC if it arrived before RoundState existed.
+            if (networkSession != null &&
+                networkSession.Role == SpadesNetworkRole.Client &&
+                networkSession.SeatAssigned)
+            {
+                var handWaitUntil = Time.time + 6f;
+                while (Time.time < handWaitUntil && IsOnlineMatch)
+                {
+                    ApplyLocalPrivateHandToController();
+                    var hasHand = tableNetwork != null &&
+                                  tableNetwork.LocalPrivateHand != null &&
+                                  tableNetwork.LocalPrivateHand.Count > 0;
+                    if (hasHand)
+                    {
+                        ApplyLocalPrivateHandToController();
+                        break;
+                    }
+
+                    if (tableNetwork != null && tableNetwork.IsClient && !tableNetwork.IsServer)
+                    {
+                        tableNetwork.RequestPresentationSyncServerRpc();
+                    }
+
+                    yield return new WaitForSecondsRealtime(0.5f);
+                }
             }
 
             if (sceneRefs.CenterHintText != null && (controller == null || !onlinePresentationReady))
@@ -3256,7 +3560,7 @@ namespace BackyardLegends.Runtime
                 view.TricksText.text = $"Books: {tricks}";
                 view.StatusText.text = isCurrentTurn
                     ? controller.State.Phase == MatchPhase.Bidding ? "BIDDING NOW" : "TURN NOW"
-                    : seat == controller.HumanSeat ? "Player" : "AI";
+                    : IsOnlineMatch ? "ONLINE" : seat == controller.HumanSeat ? "Player" : "AI";
                 if (view.Panel != null && !ShouldPreserveSeatPanelVisual(view.Panel))
                 {
                     view.Panel.color = isCurrentTurn ? theme.gold : GetSeatPanelTint(seat);
@@ -3371,7 +3675,10 @@ namespace BackyardLegends.Runtime
 
                 if (!previousHand.Contains(card))
                 {
-                    if (suppressNextHandEntryAnimation)
+                    // Network hands can be delivered/re-applied while MPPM is paused or while
+                    // catch-up messages are still arriving. Showing them immediately avoids
+                    // repeatedly restarting an alpha-zero entry animation.
+                    if (suppressNextHandEntryAnimation || IsOnlineMatch)
                     {
                         ApplyFanLayout(view, targetPosition, targetRotation, targetScale);
                     }

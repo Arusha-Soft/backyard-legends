@@ -20,6 +20,36 @@ namespace BackyardLegends.Tests
         }
 
         [Test]
+        public void BidSubmittedSnapshotPointsAtNextBidder()
+        {
+            var controller = CreateController();
+            controller.StartMatch();
+            var bidder = controller.State.RoundState.BidState.CurrentBidder;
+            BidSubmittedEvent submitted = null;
+            controller.EventRaised += matchEvent => submitted = matchEvent as BidSubmittedEvent ?? submitted;
+
+            Assert.That(controller.TrySubmitBid(bidder, 4, out var error), Is.True, error);
+            Assert.That(submitted, Is.Not.Null);
+            Assert.That(submitted.Snapshot.RoundState.BidState.CurrentBidder, Is.EqualTo(bidder.NextClockwise()));
+        }
+
+        [Test]
+        public void CardPlayedSnapshotPointsAtNextPlayer()
+        {
+            var controller = CreateController();
+            controller.StartMatch();
+            ForceBids(controller, 4, 4, 4, 4);
+            var player = controller.State.RoundState.TrickState.CurrentTurn;
+            var card = controller.GetLegalCardsForSeat(player).First();
+            CardPlayedEvent played = null;
+            controller.EventRaised += matchEvent => played = matchEvent as CardPlayedEvent ?? played;
+
+            Assert.That(controller.TryPlayCard(player, card, out var error), Is.True, error);
+            Assert.That(played, Is.Not.Null);
+            Assert.That(played.Snapshot.RoundState.TrickState.CurrentTurn, Is.EqualTo(player.NextClockwise()));
+        }
+
+        [Test]
         public void LegalCardsFollowSuitWhenPossible()
         {
             var controller = CreateController();

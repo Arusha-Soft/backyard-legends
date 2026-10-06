@@ -22,13 +22,17 @@ namespace BackyardLegends.Runtime
         private Button leaveButton;
         private Button startButton;
         private bool localReady;
+        private bool pendingReadyRequest;
+        private bool lobbyClosed;
         private string lastRosterMessage = string.Empty;
+        private SpadesTableNetwork boundTable;
 
         public static MultiplayerLobbyHud Ensure()
         {
             var existing = FindFirstObjectByType<MultiplayerLobbyHud>();
             if (existing != null)
             {
+                existing.EnsureBoundToTable();
                 return existing;
             }
 
@@ -44,29 +48,16 @@ namespace BackyardLegends.Runtime
 
         private void OnEnable()
         {
-            var table = SpadesTableNetwork.Instance;
-            if (table != null)
-            {
-                table.LobbyStateChanged += Refresh;
-                table.NetworkEventReceived += HandleNetworkEvent;
-                table.MatchBound += Hide;
-            }
-
             var session = SpadesNetworkSession.GetOrCreate();
+            session.StateChanged -= Refresh;
             session.StateChanged += Refresh;
+            EnsureBoundToTable();
             Refresh();
         }
 
         private void OnDisable()
         {
-            var table = SpadesTableNetwork.Instance;
-            if (table != null)
-            {
-                table.LobbyStateChanged -= Refresh;
-                table.NetworkEventReceived -= HandleNetworkEvent;
-                table.MatchBound -= Hide;
-            }
-
+            UnbindTable();
             if (SpadesNetworkSession.Instance != null)
             {
                 SpadesNetworkSession.Instance.StateChanged -= Refresh;
@@ -75,11 +66,51 @@ namespace BackyardLegends.Runtime
 
         private void Update()
         {
-            // Table may spawn after this HUD — rebind once.
-            if (SpadesTableNetwork.Instance != null && root != null && root.gameObject.activeSelf)
+            EnsureBoundToTable();
+            if (root != null && root.gameObject.activeSelf)
             {
                 Refresh();
             }
+        }
+
+        private void EnsureBoundToTable()
+        {
+            var table = SpadesTableNetwork.Instance;
+            if (table == boundTable)
+            {
+                return;
+            }
+
+            UnbindTable();
+            boundTable = table;
+            if (boundTable == null)
+            {
+                return;
+            }
+
+            boundTable.LobbyStateChanged += Refresh;
+            boundTable.NetworkEventReceived += HandleNetworkEvent;
+            boundTable.MatchBound += HandleMatchBound;
+            Debug.Log("MultiplayerLobbyHud bound to SpadesTableNetwork");
+        }
+
+        private void UnbindTable()
+        {
+            if (boundTable == null)
+            {
+                return;
+            }
+
+            boundTable.LobbyStateChanged -= Refresh;
+            boundTable.NetworkEventReceived -= HandleNetworkEvent;
+            boundTable.MatchBound -= HandleMatchBound;
+            boundTable = null;
+        }
+
+        private void HandleMatchBound()
+        {
+            lobbyClosed = true;
+            Hide();
         }
 
         private void HandleNetworkEvent(SpadesNetworkEventPayload payload)
@@ -89,9 +120,37 @@ namespace BackyardLegends.Runtime
                 lastRosterMessage = payload.Message ?? string.Empty;
             }
 
-            if (payload.Kind == (byte)SpadesNetworkEventKind.TableReady ||
-                payload.Kind == (byte)SpadesNetworkEventKind.MatchStarted)
+            if (payload.Kind == (byte)SpadesNetworkEventKind.SeatAssigned)
             {
+                if (pendingReadyRequest || localReady)
+                {
+                    pendingReadyRequest = false;
+                    localReady = true;
+                    SpadesTableNetwork.Instance?.LocalSetLobbyReady(true);
+                }
+
+                Refresh();
+                return;
+            }
+
+            if (payload.Kind == (byte)SpadesNetworkEventKind.ActionRejected)
+            {
+                var message = payload.Message ?? string.Empty;
+                if (message.IndexOf("Seat not assigned", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    pendingReadyRequest = localReady;
+                }
+
+                Refresh();
+                return;
+            }
+
+            if (payload.Kind == (byte)SpadesNetworkEventKind.TableReady ||
+                payload.Kind == (byte)SpadesNetworkEventKind.MatchStarted ||
+                payload.Kind == (byte)SpadesNetworkEventKind.CatchUpState)
+            {
+                lobbyClosed = true;
+                pendingReadyRequest = false;
                 Hide();
                 return;
             }
@@ -103,7 +162,8 @@ namespace BackyardLegends.Runtime
         {
             var session = SpadesNetworkSession.GetOrCreate();
             var table = SpadesTableNetwork.Instance;
-            var show = session.IsOnline && (table == null || !table.MatchStarted);
+            var matchLive = lobbyClosed || (table != null && table.MatchStarted);
+            var show = session.IsOnline && !matchLive;
             if (root != null)
             {
                 root.gameObject.SetActive(show);
@@ -123,9 +183,18 @@ namespace BackyardLegends.Runtime
 
             if (statusText != null)
             {
-                statusText.text = string.IsNullOrEmpty(session.StatusMessage)
-                    ? "Waiting in lobby…"
-                    : session.StatusMessage;
+                var status = session.StatusMessage;
+                if (table != null && table.IsServer)
+                {
+                    status = $"Lobby {table.OccupiedCount}/4 · ready {table.ReadyCount}/4";
+                    if (!string.IsNullOrEmpty(session.StatusMessage) &&
+                        session.StatusMessage.IndexOf("Lobby", System.StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        status = $"{status}\n{session.StatusMessage}";
+                    }
+                }
+
+                statusText.text = string.IsNullOrEmpty(status) ? "Waiting in lobby…" : status;
             }
 
             if (rosterText != null)
@@ -152,6 +221,22 @@ namespace BackyardLegends.Runtime
 
         private string BuildRosterLabel(SpadesTableNetwork table)
         {
+            // Prefer live server seat map on host; roster message on clients.
+            if (table != null && table.IsServer)
+            {
+                var builder = new StringBuilder();
+                builder.AppendLine("SEATS  (Home = Bottom+Top · Away = Left+Right)");
+                foreach (var seat in new[] { SeatId.Bottom, SeatId.Top, SeatId.Left, SeatId.Right })
+                {
+                    var name = table.DisplayNames.TryGetValue(seat, out var n) ? n : "— empty —";
+                    var ready = table.IsSeatReady(seat) ? "[READY]" : "[----]";
+                    var team = seat == SeatId.Bottom || seat == SeatId.Top ? "Home" : "Away";
+                    builder.AppendLine($"{seat,-6} {ready}  {name}  ({team})");
+                }
+
+                return builder.ToString();
+            }
+
             if (!string.IsNullOrEmpty(lastRosterMessage))
             {
                 var sb = new StringBuilder();
@@ -171,22 +256,7 @@ namespace BackyardLegends.Runtime
                 return sb.ToString();
             }
 
-            if (table == null)
-            {
-                return "Connecting to table…";
-            }
-
-            var builder = new StringBuilder();
-            builder.AppendLine("SEATS  (Home = Bottom+Top · Away = Left+Right)");
-            foreach (var seat in new[] { SeatId.Bottom, SeatId.Top, SeatId.Left, SeatId.Right })
-            {
-                var name = table.DisplayNames.TryGetValue(seat, out var n) ? n : "— empty —";
-                var ready = table.IsSeatReady(seat) ? "[READY]" : "[----]";
-                var team = seat == SeatId.Bottom || seat == SeatId.Top ? "Home" : "Away";
-                builder.AppendLine($"{seat,-6} {ready}  {name}  ({team})");
-            }
-
-            return builder.ToString();
+            return table == null ? "Connecting to table…" : "Waiting for lobby roster…";
         }
 
         private void Hide()
@@ -200,6 +270,16 @@ namespace BackyardLegends.Runtime
         private void ToggleReady()
         {
             localReady = !localReady;
+            var session = SpadesNetworkSession.GetOrCreate();
+            if (!session.SeatAssigned)
+            {
+                pendingReadyRequest = localReady;
+                session.SetStatus(localReady ? "Ready queued — waiting for seat…" : "Unready");
+                Refresh();
+                return;
+            }
+
+            pendingReadyRequest = false;
             SpadesTableNetwork.Instance?.LocalSetLobbyReady(localReady);
             Refresh();
         }

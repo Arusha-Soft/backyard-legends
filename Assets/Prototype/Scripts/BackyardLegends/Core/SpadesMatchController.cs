@@ -137,7 +137,6 @@ namespace BackyardLegends.Core
 
             State.RoundState.BidState.BidsBySeat[seat] = bid;
             State.RoundState.LastStatusMessage = $"{State.SeatNames[seat]} bid {BidLabel(bid)}.";
-            Raise(new BidSubmittedEvent(CreateSnapshot(), seat, bid));
 
             if (AllBidsSubmitted())
             {
@@ -145,11 +144,13 @@ namespace BackyardLegends.Core
                 var openingLeader = State.RoundState.Dealer.NextClockwise();
                 State.RoundState.TrickState.Leader = openingLeader;
                 State.RoundState.TrickState.CurrentTurn = openingLeader;
+                Raise(new BidSubmittedEvent(CreateSnapshot(), seat, bid));
                 State.RoundState.LastStatusMessage = $"{State.SeatNames[openingLeader]} leads the first trick.";
                 return true;
             }
 
             State.RoundState.BidState.CurrentBidder = seat.NextClockwise();
+            Raise(new BidSubmittedEvent(CreateSnapshot(), seat, bid));
             return true;
         }
 
@@ -191,14 +192,15 @@ namespace BackyardLegends.Core
 
             trickState.Plays.Add(new TrickPlay { Seat = seat, Card = card });
             State.RoundState.LastStatusMessage = $"{State.SeatNames[seat]} played {card.ShortLabel}.";
-            Raise(new CardPlayedEvent(CreateSnapshot(), seat, card));
 
             if (trickState.Plays.Count < 4)
             {
                 trickState.CurrentTurn = seat.NextClockwise();
+                Raise(new CardPlayedEvent(CreateSnapshot(), seat, card));
                 return true;
             }
 
+            Raise(new CardPlayedEvent(CreateSnapshot(), seat, card));
             ResolveCurrentTrick();
             return true;
         }

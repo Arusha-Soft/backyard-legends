@@ -349,11 +349,8 @@ namespace BackyardLegends.Runtime.Network
 
             if (matchStarted)
             {
-                if (seatByUid.TryGetValue(uid, out var reclaimSeat) &&
-                    humanOwnedSeats.Contains(reclaimSeat) &&
-                    aiSitInSeats.Contains(reclaimSeat))
+                if (TryReclaimHumanSeat(clientId, uid, displayName))
                 {
-                    ReclaimSeat(clientId, reclaimSeat, displayName);
                     return;
                 }
 
@@ -484,6 +481,42 @@ namespace BackyardLegends.Runtime.Network
             preferredSeatsLoaded = preferredSeatByUid.Count > 0;
         }
 
+        /// <summary>
+        /// Reclaim during 90s grace OR after AI sit-in. Previously required aiSitInSeats only,
+        /// so stop/play reconnect during grace was rejected as "match already in progress".
+        /// </summary>
+        private bool TryReclaimHumanSeat(ulong clientId, string uid, string displayName)
+        {
+            if (!seatByUid.TryGetValue(uid, out var reclaimSeat) || !humanOwnedSeats.Contains(reclaimSeat))
+            {
+                return false;
+            }
+
+            var occupiedByOther =
+                clientBySeat.TryGetValue(reclaimSeat, out var currentClient) &&
+                currentClient != clientId &&
+                NetworkManager != null &&
+                NetworkManager.ConnectedClientsIds.Contains(currentClient);
+
+            if (occupiedByOther)
+            {
+                return false;
+            }
+
+            var reclaimable = gracePendingSeats.Contains(reclaimSeat) ||
+                              aiSitInSeats.Contains(reclaimSeat) ||
+                              !clientBySeat.ContainsKey(reclaimSeat);
+
+            if (!reclaimable)
+            {
+                return false;
+            }
+
+            Debug.Log($"Reclaiming seat {reclaimSeat} for uid={uid} client={clientId} (grace/ai/empty)");
+            ReclaimSeat(clientId, reclaimSeat, displayName);
+            return true;
+        }
+
         private void ReclaimSeat(ulong clientId, SeatId seat, string displayName)
         {
             if (hostController != null)
@@ -584,6 +617,8 @@ namespace BackyardLegends.Runtime.Network
             if (!matchStarted)
             {
                 LobbyStateChanged?.Invoke();
+                // Push current ready roster to the joiner (and everyone) so late Ready taps sync.
+                BroadcastLobbyRoster();
             }
         }
 
@@ -624,6 +659,7 @@ namespace BackyardLegends.Runtime.Network
             var clientId = rpcParams.Receive.SenderClientId;
             if (!seatByClient.TryGetValue(clientId, out var seat))
             {
+                Debug.LogWarning($"SetLobbyReady ignored — client {clientId} has no seat yet (ready={ready}).");
                 Reject(clientId, "Seat not assigned yet.");
                 return;
             }
@@ -636,6 +672,11 @@ namespace BackyardLegends.Runtime.Network
             {
                 readyForMatch.Remove(seat);
             }
+
+            Debug.Log(
+                $"Lobby ready seat={seat} ready={ready} " +
+                $"humans={connectedHumanSeats.Count}/4 readyCount={readyForMatch.Count}/4 " +
+                $"readySeats=[{string.Join(",", readyForMatch)}]");
 
             var session = SpadesNetworkSession.GetOrCreate();
             if (!string.IsNullOrEmpty(session.TableId))
@@ -675,6 +716,13 @@ namespace BackyardLegends.Runtime.Network
         {
             if (matchStarted)
             {
+                return;
+            }
+
+            var session = SpadesNetworkSession.GetOrCreate();
+            if (!session.SeatAssigned)
+            {
+                Debug.LogWarning("LocalSetLobbyReady skipped — local seat not assigned yet.");
                 return;
             }
 
@@ -798,6 +846,10 @@ namespace BackyardLegends.Runtime.Network
                 return;
             }
 
+            Debug.Log(
+                $"Starting match from lobby humans=[{string.Join(",", humanOwnedSeats)}] " +
+                $"ready=[{string.Join(",", readyForMatch)}] connected={connectedHumanSeats.Count}");
+
             autoStartAt = -1f;
             var session = SpadesNetworkSession.GetOrCreate();
             var rules = session.PendingRules ?? BackyardLegendsSession.GetOrCreateRuntimeInstance().SelectedRule;
@@ -835,6 +887,7 @@ namespace BackyardLegends.Runtime.Network
             AdvanceAiUntilHumanOrIdle();
             PersistAuthoritySnapshot();
             session.SetStatus("Match live");
+            Debug.Log("Lobby match started — dealing.");
         }
 
         private void BroadcastLobbyRoster()
@@ -1446,6 +1499,7 @@ namespace BackyardLegends.Runtime.Network
             };
             SendPrivateHandClientRpc(cards, target);
 
+            // Host-as-listen-server also needs the local invoke; ClientRpc may not echo to host.
             if (clientId == NetworkManager.LocalClientId)
             {
                 localPrivateHand = hand.ToList();
@@ -1459,23 +1513,29 @@ namespace BackyardLegends.Runtime.Network
             localPrivateHand = cards != null
                 ? cards.Select(card => card.ToCard()).ToList()
                 : new List<Card>();
+            Debug.Log($"Private hand RPC received count={localPrivateHand.Count} isHost={IsHost}");
             PrivateHandUpdated?.Invoke();
         }
 
         [ClientRpc]
         private void SendEventClientRpc(SpadesNetworkEventPayload payload, ClientRpcParams rpcParams = default)
         {
+            // Host already applies live match events via HandleHostMatchEvent → ApplyLocalEvent.
+            // Do NOT skip lobby roster/ready — host UI depends on those ClientRpcs (and ParrelSync
+            // clones only update from NetworkEventReceived).
             if (IsHost &&
                 payload.Kind != (byte)SpadesNetworkEventKind.SeatAssigned &&
-                payload.Kind != (byte)SpadesNetworkEventKind.CatchUpState)
+                payload.Kind != (byte)SpadesNetworkEventKind.CatchUpState &&
+                payload.Kind != (byte)SpadesNetworkEventKind.TableReady &&
+                payload.Kind != (byte)SpadesNetworkEventKind.ActionRejected &&
+                payload.Kind != (byte)SpadesNetworkEventKind.PlayerAway &&
+                payload.Kind != (byte)SpadesNetworkEventKind.PlayerReturned &&
+                payload.Kind != (byte)SpadesNetworkEventKind.LobbyRoster &&
+                payload.Kind != (byte)SpadesNetworkEventKind.LobbyReadyChanged &&
+                payload.Kind != (byte)SpadesNetworkEventKind.TablePaused &&
+                payload.Kind != (byte)SpadesNetworkEventKind.TableResumed)
             {
-                if (payload.Kind != (byte)SpadesNetworkEventKind.TableReady &&
-                    payload.Kind != (byte)SpadesNetworkEventKind.ActionRejected &&
-                    payload.Kind != (byte)SpadesNetworkEventKind.PlayerAway &&
-                    payload.Kind != (byte)SpadesNetworkEventKind.PlayerReturned)
-                {
-                    return;
-                }
+                return;
             }
 
             ApplyLocalEvent(payload);
@@ -1494,8 +1554,15 @@ namespace BackyardLegends.Runtime.Network
                 SpadesNetworkSession.GetOrCreate().DisableAutoReconnect();
             }
 
-            if (payload.Kind == (byte)SpadesNetworkEventKind.TableReady)
+            if (payload.Kind == (byte)SpadesNetworkEventKind.TableReady ||
+                payload.Kind == (byte)SpadesNetworkEventKind.MatchStarted ||
+                payload.Kind == (byte)SpadesNetworkEventKind.CatchUpState)
             {
+                // matchStarted is authoritative on the server but is not a
+                // NetworkVariable. Mirror it from live-state events so a client
+                // that reconnects after the original start event does not remain
+                // in the pre-match lobby presentation.
+                matchStarted = true;
                 SpadesNetworkSession.GetOrCreate().MarkMatchLive();
                 LobbyStateChanged?.Invoke();
             }

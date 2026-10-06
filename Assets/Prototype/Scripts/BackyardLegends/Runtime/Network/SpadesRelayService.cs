@@ -173,16 +173,69 @@ namespace BackyardLegends.Runtime.Network
                 : throw new InvalidOperationException("Relay allocation has no endpoints.");
         }
 
+        private static Task ensureServicesTask;
+
         private static async Task EnsureUnityServicesAsync()
+        {
+            // ParrelSync / rapid Host+Join can overlap SignInAnonymously → "already signing in".
+            if (ensureServicesTask != null)
+            {
+                await ensureServicesTask;
+                return;
+            }
+
+            ensureServicesTask = EnsureUnityServicesInternalAsync();
+            try
+            {
+                await ensureServicesTask;
+            }
+            finally
+            {
+                ensureServicesTask = null;
+            }
+        }
+
+        private static async Task EnsureUnityServicesInternalAsync()
         {
             if (UnityServices.State != ServicesInitializationState.Initialized)
             {
                 await UnityServices.InitializeAsync();
             }
 
-            if (!AuthenticationService.Instance.IsSignedIn)
+            if (AuthenticationService.Instance.IsSignedIn)
+            {
+                return;
+            }
+
+            try
             {
                 await AuthenticationService.Instance.SignInAnonymouslyAsync();
+            }
+            catch (Exception ex)
+            {
+                // Another concurrent call may have finished signing in.
+                if (AuthenticationService.Instance.IsSignedIn)
+                {
+                    return;
+                }
+
+                var message = ex.Message ?? string.Empty;
+                if (message.IndexOf("already signing in", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    message.IndexOf("already signed in", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    var timeoutAt = Time.realtimeSinceStartup + 8f;
+                    while (!AuthenticationService.Instance.IsSignedIn && Time.realtimeSinceStartup < timeoutAt)
+                    {
+                        await Task.Yield();
+                    }
+
+                    if (AuthenticationService.Instance.IsSignedIn)
+                    {
+                        return;
+                    }
+                }
+
+                throw;
             }
         }
 
