@@ -177,6 +177,9 @@ namespace BackyardLegends.Runtime
         [SerializeField] private GameObject spadesBrokenSmokeFxPrefab;
         [SerializeField] private GameObject spadesBrokenLightningFxPrefab;
 
+        [Header("Multiplayer Lobby")]
+        [SerializeField] private MultiplayerLobbyHud multiplayerLobbyHudPrefab;
+
         private readonly Dictionary<SeatId, SeatPanelView> seatViews = new();
         private readonly Dictionary<SeatId, TrickSlotView> trickSlots = new();
         private readonly List<CardButtonView> handPool = new();
@@ -3077,7 +3080,7 @@ namespace BackyardLegends.Runtime
             }
 
             AddFeedMessage($"Online table: {selectedRule.DisplayName} to {selectedRule.TargetScore}.");
-            MultiplayerLobbyHud.Ensure();
+            MultiplayerLobbyHud.Ensure(multiplayerLobbyHudPrefab);
             if (sceneRefs.StatusText != null)
             {
                 sceneRefs.StatusText.text = networkSession.Role == SpadesNetworkRole.Client

@@ -6,7 +6,8 @@
     "Unity.Services.Core",
     "Unity.Services.Authentication",
     "Unity.Services.Multiplayer",
-    "Unity.Networking.Transport"
+    "Unity.Networking.Transport",
+    "Unity.TextMeshPro"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

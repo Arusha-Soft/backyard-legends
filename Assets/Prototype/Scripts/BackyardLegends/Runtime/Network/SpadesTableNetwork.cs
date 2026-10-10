@@ -720,22 +720,6 @@ namespace BackyardLegends.Runtime.Network
             TryAutoStartWhenLobbyReady();
         }
 
-        public void HostRequestStartMatch()
-        {
-            if (!IsServer || matchStarted)
-            {
-                return;
-            }
-
-            if (!CanStartFullLobby(out var reason))
-            {
-                SpadesNetworkSession.GetOrCreate().SetStatus(reason);
-                return;
-            }
-
-            StartMatchFromLobby();
-        }
-
         public void LocalSetLobbyReady(bool ready)
         {
             if (matchStarted)

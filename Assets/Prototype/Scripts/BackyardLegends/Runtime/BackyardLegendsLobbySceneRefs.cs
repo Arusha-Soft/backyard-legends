@@ -1,3 +1,4 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -17,9 +18,9 @@ namespace BackyardLegends.Runtime
         public Text FlavorText;
         public Text RuleSummaryText;
         public Text SelectionSummaryText;
-        public Text AccountStatusText;
-        public InputField EmailInput;
-        public InputField PasswordInput;
+        public TextMeshProUGUI AccountStatusText;
+        public TMP_InputField EmailInput;
+        public TMP_InputField PasswordInput;
 
         [Header("Online Table")]
         public RectTransform OnlineRow;
@@ -28,8 +29,9 @@ namespace BackyardLegends.Runtime
         public Button QuickMatchButton;
         public Button CancelQueueButton;
         public Button CopyInviteButton;
-        public Text OnlineStatusText;
-        public InputField JoinCodeInput;
+        public Button ImportInviteButton;
+        public TextMeshProUGUI OnlineStatusText;
+        public TMP_InputField JoinCodeInput;
 
         [Header("Buttons")]
         public Button StartMatchButton;
@@ -40,7 +42,7 @@ namespace BackyardLegends.Runtime
         public Button EmailRegisterButton;
         public Button EmailSignInButton;
         public Button SignOutButton;
-        public Text SessionAccountLabel;
+        public TextMeshProUGUI SessionAccountLabel;
 
         [Header("Auth Prefab")]
         public BackyardLegendsLoginAuthView LoginAuthPanelPrefab;
@@ -65,24 +67,51 @@ namespace BackyardLegends.Runtime
             FlavorText = FlavorText != null ? FlavorText : FindByPath<Text>("Lobby Sheet/Preview Panel/Flavor");
             RuleSummaryText = RuleSummaryText != null ? RuleSummaryText : FindByPath<Text>("Lobby Sheet/Preview Panel/Rule Summary");
             SelectionSummaryText = SelectionSummaryText != null ? SelectionSummaryText : FindByPath<Text>("Lobby Sheet/Selection Summary");
-            AccountStatusText = AccountStatusText != null ? AccountStatusText : FindByPath<Text>("Lobby Sheet/Account Status");
-            EmailInput = EmailInput != null ? EmailInput : FindByPath<InputField>("Lobby Sheet/Email Panel/Email Input");
-            PasswordInput = PasswordInput != null ? PasswordInput : FindByPath<InputField>("Lobby Sheet/Email Panel/Password Input");
+            AccountStatusText = AccountStatusText != null
+                ? AccountStatusText
+                : FindByPath<TextMeshProUGUI>("Lobby Sheet/Account Status")
+                  ?? FindByPath<TextMeshProUGUI>("LoginAuthPanel/Account Status");
+            EmailInput = EmailInput != null
+                ? EmailInput
+                : FindByPath<TMP_InputField>("Lobby Sheet/Email Panel/Email Input")
+                  ?? FindByPath<TMP_InputField>("LoginAuthPanel/Email Input");
+            PasswordInput = PasswordInput != null
+                ? PasswordInput
+                : FindByPath<TMP_InputField>("Lobby Sheet/Email Panel/Password Input")
+                  ?? FindByPath<TMP_InputField>("LoginAuthPanel/Password Input");
             StartMatchButton = StartMatchButton != null ? StartMatchButton : FindByPath<Button>("Lobby Sheet/Start Match");
             OnlineRow = OnlineRow != null ? OnlineRow : FindByPath<RectTransform>("Lobby Sheet/Online Row");
             HostTableButton = HostTableButton != null ? HostTableButton : FindByPath<Button>("Lobby Sheet/Online Row/Host Table");
             JoinTableButton = JoinTableButton != null ? JoinTableButton : FindByPath<Button>("Lobby Sheet/Online Row/Join Table");
-            QuickMatchButton = QuickMatchButton != null ? QuickMatchButton : FindByPath<Button>("Lobby Sheet/Quick Match");
-            CancelQueueButton = CancelQueueButton != null ? CancelQueueButton : FindByPath<Button>("Lobby Sheet/Cancel Queue");
-            CopyInviteButton = CopyInviteButton != null ? CopyInviteButton : FindByPath<Button>("Lobby Sheet/Copy Invite");
-            OnlineStatusText = OnlineStatusText != null ? OnlineStatusText : FindByPath<Text>("Lobby Sheet/Online Status");
-            JoinCodeInput = JoinCodeInput != null ? JoinCodeInput : FindByPath<InputField>("Lobby Sheet/Online Row/Join Code Input");
+            QuickMatchButton = QuickMatchButton != null
+                ? QuickMatchButton
+                : FindByPath<Button>("Lobby Sheet/Matchmaking/Quick Match")
+                  ?? FindByPath<Button>("Lobby Sheet/Quick Match");
+            CancelQueueButton = CancelQueueButton != null
+                ? CancelQueueButton
+                : FindByPath<Button>("Lobby Sheet/Matchmaking/Cancel Queue")
+                  ?? FindByPath<Button>("Lobby Sheet/Cancel Queue");
+            CopyInviteButton = CopyInviteButton != null
+                ? CopyInviteButton
+                : FindByPath<Button>("Lobby Sheet/Copy Invite");
+            ImportInviteButton = ImportInviteButton != null
+                ? ImportInviteButton
+                : FindByPath<Button>("Lobby Sheet/Online Row/Import Invite")
+                  ?? FindByPath<Button>("Lobby Sheet/Import Invite");
+            OnlineStatusText = OnlineStatusText != null
+                ? OnlineStatusText
+                : FindByPath<TextMeshProUGUI>("Lobby Sheet/Online Status");
+            JoinCodeInput = JoinCodeInput != null
+                ? JoinCodeInput
+                : FindByPath<TMP_InputField>("Lobby Sheet/Online Row/Join Code Input");
             SignInGoogleButton = SignInGoogleButton != null ? SignInGoogleButton : FindByPath<Button>("Lobby Sheet/Account Row/Sign In Google");
             SignInAppleButton = SignInAppleButton != null ? SignInAppleButton : FindByPath<Button>("Lobby Sheet/Account Row/Sign In Apple");
             EmailRegisterButton = EmailRegisterButton != null ? EmailRegisterButton : FindByPath<Button>("Lobby Sheet/Email Panel/Email Register");
             EmailSignInButton = EmailSignInButton != null ? EmailSignInButton : FindByPath<Button>("Lobby Sheet/Email Panel/Email Sign In");
             SignOutButton = SignOutButton != null ? SignOutButton : FindByPath<Button>("Lobby Sheet/Sign Out");
-            SessionAccountLabel = SessionAccountLabel != null ? SessionAccountLabel : FindByPath<Text>("Lobby Sheet/Session Account");
+            SessionAccountLabel = SessionAccountLabel != null
+                ? SessionAccountLabel
+                : FindByPath<TextMeshProUGUI>("Lobby Sheet/Session Account");
             ModeButtons = ResolveButtons(
                 ModeButtons,
                 "Lobby Sheet/Mode Row/Classic Mode",

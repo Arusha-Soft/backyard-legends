@@ -6,6 +6,7 @@ using System.Reflection;
 using BackyardLegends.Core;
 using BackyardLegends.Runtime.Firebase;
 using BackyardLegends.Runtime.Network;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -96,6 +97,8 @@ namespace BackyardLegends.Runtime
             ConfigureButtonFeedback();
             RefreshContent();
             RefreshAccountUi();
+            // BindButtonFamily/PrepareButtonForRuntime force buttons active; re-apply matchmaking visibility last.
+            SetQuickMatchSearchingUi(false);
             if (authRefreshRoutine != null)
             {
                 StopCoroutine(authRefreshRoutine);
@@ -128,8 +131,8 @@ namespace BackyardLegends.Runtime
             PrepareButtonForRuntime(sceneRefs.HostTableButton, false);
             PrepareButtonForRuntime(sceneRefs.JoinTableButton, false);
             PrepareButtonForRuntime(sceneRefs.QuickMatchButton, false);
-            PrepareButtonForRuntime(sceneRefs.CancelQueueButton, false);
-            PrepareButtonForRuntime(sceneRefs.CopyInviteButton, false);
+            PrepareButtonForRuntime(sceneRefs.CancelQueueButton, false, forceActive: false);
+            PrepareButtonForRuntime(sceneRefs.ImportInviteButton, false);
             PrepareButtonForRuntime(sceneRefs.SignInGoogleButton, false);
             PrepareButtonForRuntime(sceneRefs.SignInAppleButton, false);
             PrepareButtonForRuntime(sceneRefs.EmailRegisterButton, false);
@@ -204,24 +207,19 @@ namespace BackyardLegends.Runtime
 
             BindButtonFamily(sceneRefs.CancelQueueButton, () =>
             {
+                if (!onlineActionInFlight)
+                {
+                    return;
+                }
+
                 PlayFeedback(FeedbackCue.Select, 0.85f);
                 StartCoroutine(RunCancelQueue());
             });
 
-            BindButtonFamily(sceneRefs.CopyInviteButton, () =>
+            BindButtonFamily(sceneRefs.ImportInviteButton, () =>
             {
                 PlayFeedback(FeedbackCue.Select, 0.75f);
-                var code = SpadesNetworkSession.Instance != null
-                    ? SpadesNetworkSession.Instance.JoinCode
-                    : (sceneRefs.JoinCodeInput != null ? sceneRefs.JoinCodeInput.text : string.Empty);
-                if (string.IsNullOrWhiteSpace(code))
-                {
-                    SetOnlineStatus("No invite code yet — Host a private room first.");
-                    return;
-                }
-
-                GUIUtility.systemCopyBuffer = code.Trim().ToUpperInvariant();
-                SetOnlineStatus($"Copied invite code {code.Trim().ToUpperInvariant()}");
+                ImportInviteFromClipboard();
             });
 
             for (var i = 0; i < modeButtons.Count; i++)
@@ -360,6 +358,7 @@ namespace BackyardLegends.Runtime
         private IEnumerator RunQuickMatch()
         {
             onlineActionInFlight = true;
+            SetQuickMatchSearchingUi(true);
             SetOnlineStatus("Quick Match — searching…");
             var task = session.QuickMatchAsync();
             while (!task.IsCompleted)
@@ -377,6 +376,7 @@ namespace BackyardLegends.Runtime
             }
 
             onlineActionInFlight = false;
+            SetQuickMatchSearchingUi(false);
             if (task.IsFaulted)
             {
                 SetOnlineStatus(task.Exception?.GetBaseException().Message ?? "Quick Match failed.");
@@ -393,6 +393,21 @@ namespace BackyardLegends.Runtime
 
             SetOnlineStatus("Quick Match cancelled.");
             onlineActionInFlight = false;
+            SetQuickMatchSearchingUi(false);
+        }
+
+        private void SetQuickMatchSearchingUi(bool searching)
+        {
+            if (sceneRefs.CancelQueueButton != null)
+            {
+                sceneRefs.CancelQueueButton.gameObject.SetActive(searching);
+            }
+
+            if (sceneRefs.QuickMatchButton != null)
+            {
+                sceneRefs.QuickMatchButton.gameObject.SetActive(!searching);
+                sceneRefs.QuickMatchButton.interactable = !searching;
+            }
         }
 
         private void SetOnlineStatus(string message)
@@ -427,10 +442,18 @@ namespace BackyardLegends.Runtime
                     "(Host Table, Join Code Input, Join Table) and Lobby Sheet/Online Status.");
             }
 
-            if (sceneRefs.JoinCodeInput != null && string.IsNullOrWhiteSpace(sceneRefs.JoinCodeInput.text))
+            EnsureImportInviteButton();
+
+            if (sceneRefs.JoinCodeInput != null)
             {
-                sceneRefs.JoinCodeInput.text = string.Empty;
-                if (sceneRefs.JoinCodeInput.placeholder is Text placeholder)
+                var text = sceneRefs.JoinCodeInput.text != null ? sceneRefs.JoinCodeInput.text.Trim() : string.Empty;
+                if (string.IsNullOrWhiteSpace(text) ||
+                    string.Equals(text, "LOCAL", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    sceneRefs.JoinCodeInput.text = string.Empty;
+                }
+
+                if (sceneRefs.JoinCodeInput.placeholder is TMP_Text placeholder)
                 {
                     placeholder.text = "Invite code";
                 }
@@ -440,6 +463,68 @@ namespace BackyardLegends.Runtime
             {
                 sceneRefs.OnlineStatusText.text = "Online: Host private room · Join by code · Quick Match";
             }
+
+            // Copy Invite lives on the private-table HUD, not the lobby sheet.
+            if (sceneRefs.CopyInviteButton != null)
+            {
+                sceneRefs.CopyInviteButton.gameObject.SetActive(false);
+            }
+
+            SetQuickMatchSearchingUi(false);
+        }
+
+        private void EnsureImportInviteButton()
+        {
+            if (sceneRefs.ImportInviteButton != null)
+            {
+                return;
+            }
+
+            var parent = sceneRefs.OnlineRow != null
+                ? sceneRefs.OnlineRow
+                : sceneRefs.SheetImage != null ? sceneRefs.SheetImage.rectTransform : null;
+            if (parent == null)
+            {
+                return;
+            }
+
+            var existing = parent.Find("Import Invite");
+            if (existing != null && existing.TryGetComponent<Button>(out var existingButton))
+            {
+                sceneRefs.ImportInviteButton = existingButton;
+                return;
+            }
+
+            Debug.LogWarning(
+                "Lobby Import Invite button is missing from the scene. " +
+                "Add Lobby Sheet/Online Row/Import Invite in LobbyScene (do not create it at runtime).");
+        }
+
+        private void ImportInviteFromClipboard()
+        {
+            var pasted = GUIUtility.systemCopyBuffer != null ? GUIUtility.systemCopyBuffer.Trim() : string.Empty;
+            if (string.IsNullOrWhiteSpace(pasted))
+            {
+                SetOnlineStatus("Clipboard is empty — copy an invite code first.");
+                return;
+            }
+
+            // Prefer last whitespace-separated token in case clipboard has share text.
+            var parts = pasted.Split((char[])null, System.StringSplitOptions.RemoveEmptyEntries);
+            var code = parts.Length > 0 ? parts[parts.Length - 1] : pasted;
+            code = code.Trim().Trim(':', '.', ',', '"', '\'').ToUpperInvariant();
+            if (code.Length < 4)
+            {
+                SetOnlineStatus("Clipboard does not look like an invite code.");
+                return;
+            }
+
+            if (sceneRefs.JoinCodeInput != null)
+            {
+                sceneRefs.JoinCodeInput.text = code;
+            }
+
+            SetOnlineStatus($"Imported invite code {code}");
         }
 
         private void HandleAuthStateChanged(AuthUserSnapshot snapshot)
@@ -544,9 +629,9 @@ namespace BackyardLegends.Runtime
                     sheet,
                     "Signing in…",
                     18,
-                    FontStyle.Bold,
+                    FontStyles.Bold,
                     theme != null ? theme.mutedText : new Color(0.75f, 0.75f, 0.78f),
-                    TextAnchor.MiddleCenter,
+                    TextAlignmentOptions.Center,
                     new Vector2(0.10f, 0.705f),
                     new Vector2(0.90f, 0.745f));
             }
@@ -611,7 +696,7 @@ namespace BackyardLegends.Runtime
                     "Email Input",
                     emailPanel,
                     "Email",
-                    InputField.ContentType.EmailAddress,
+                    TMP_InputField.ContentType.EmailAddress,
                     new Vector2(0.00f, 0.05f),
                     new Vector2(0.38f, 0.95f));
             }
@@ -622,7 +707,7 @@ namespace BackyardLegends.Runtime
                     "Password Input",
                     emailPanel,
                     "Password",
-                    InputField.ContentType.Password,
+                    TMP_InputField.ContentType.Password,
                     new Vector2(0.40f, 0.05f),
                     new Vector2(0.72f, 0.95f));
             }
@@ -731,9 +816,9 @@ namespace BackyardLegends.Runtime
                     sheet,
                     string.Empty,
                     18,
-                    FontStyle.Bold,
+                    FontStyles.Bold,
                     theme != null ? theme.mutedText : new Color(0.75f, 0.75f, 0.78f),
-                    TextAnchor.MiddleLeft,
+                    TextAlignmentOptions.Left,
                     new Vector2(0.06f, 0.925f),
                     new Vector2(0.62f, 0.985f));
             }
@@ -852,29 +937,29 @@ namespace BackyardLegends.Runtime
             button.interactable = visible && interactable;
         }
 
-        private Text CreateRuntimeText(
+        private TextMeshProUGUI CreateRuntimeText(
             string name,
             Transform parent,
             string value,
             int size,
-            FontStyle style,
+            FontStyles style,
             Color color,
-            TextAnchor alignment,
+            TextAlignmentOptions alignment,
             Vector2 anchorMin,
             Vector2 anchorMax)
         {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Text));
+            var go = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI));
             go.transform.SetParent(parent, false);
-            var text = go.GetComponent<Text>();
+            var text = go.GetComponent<TextMeshProUGUI>();
             text.text = value;
             text.fontSize = size;
             text.fontStyle = style;
             text.color = color;
             text.alignment = alignment;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.textWrappingMode = TextWrappingModes.Normal;
+            text.overflowMode = TextOverflowModes.Overflow;
             text.raycastTarget = false;
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = TMP_Settings.defaultFontAsset;
             var rect = text.rectTransform;
             rect.anchorMin = anchorMin;
             rect.anchorMax = anchorMax;
@@ -903,16 +988,16 @@ namespace BackyardLegends.Runtime
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = Vector2.zero;
 
-            var labelGo = new GameObject("Label", typeof(RectTransform), typeof(Text));
+            var labelGo = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
             labelGo.transform.SetParent(go.transform, false);
-            var text = labelGo.GetComponent<Text>();
+            var text = labelGo.GetComponent<TextMeshProUGUI>();
             text.text = label;
             text.fontSize = 18;
-            text.fontStyle = FontStyle.Bold;
+            text.fontStyle = FontStyles.Bold;
             text.color = Color.black;
-            text.alignment = TextAnchor.MiddleCenter;
+            text.alignment = TextAlignmentOptions.Center;
             text.raycastTarget = false;
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = TMP_Settings.defaultFontAsset;
             var labelRect = text.rectTransform;
             labelRect.anchorMin = Vector2.zero;
             labelRect.anchorMax = Vector2.one;
@@ -921,15 +1006,15 @@ namespace BackyardLegends.Runtime
             return button;
         }
 
-        private InputField CreateRuntimeInputField(
+        private TMP_InputField CreateRuntimeInputField(
             string name,
             Transform parent,
             string placeholder,
-            InputField.ContentType contentType,
+            TMP_InputField.ContentType contentType,
             Vector2 anchorMin,
             Vector2 anchorMax)
         {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(InputField));
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(TMP_InputField));
             go.transform.SetParent(parent, false);
             var image = go.GetComponent<Image>();
             image.color = new Color(0.12f, 0.13f, 0.15f, 0.95f);
@@ -939,41 +1024,45 @@ namespace BackyardLegends.Runtime
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = Vector2.zero;
 
-            var textGo = new GameObject("Text", typeof(RectTransform), typeof(Text));
+            var textGo = new GameObject("Text", typeof(RectTransform), typeof(TextMeshProUGUI));
             textGo.transform.SetParent(go.transform, false);
-            var text = textGo.GetComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            var text = textGo.GetComponent<TextMeshProUGUI>();
+            text.font = TMP_Settings.defaultFontAsset;
             text.fontSize = 16;
             text.color = Color.white;
-            text.alignment = TextAnchor.MiddleLeft;
-            text.supportRichText = false;
+            text.alignment = TextAlignmentOptions.Left;
+            text.textWrappingMode = TextWrappingModes.NoWrap;
+            text.overflowMode = TextOverflowModes.Overflow;
             var textRect = text.rectTransform;
             textRect.anchorMin = Vector2.zero;
             textRect.anchorMax = Vector2.one;
             textRect.offsetMin = new Vector2(10f, 4f);
             textRect.offsetMax = new Vector2(-10f, -4f);
 
-            var placeholderGo = new GameObject("Placeholder", typeof(RectTransform), typeof(Text));
+            var placeholderGo = new GameObject("Placeholder", typeof(RectTransform), typeof(TextMeshProUGUI));
             placeholderGo.transform.SetParent(go.transform, false);
-            var placeholderText = placeholderGo.GetComponent<Text>();
-            placeholderText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            var placeholderText = placeholderGo.GetComponent<TextMeshProUGUI>();
+            placeholderText.font = TMP_Settings.defaultFontAsset;
             placeholderText.fontSize = 16;
-            placeholderText.fontStyle = FontStyle.Italic;
+            placeholderText.fontStyle = FontStyles.Italic;
             placeholderText.color = new Color(1f, 1f, 1f, 0.35f);
-            placeholderText.alignment = TextAnchor.MiddleLeft;
+            placeholderText.alignment = TextAlignmentOptions.Left;
             placeholderText.text = placeholder;
+            placeholderText.raycastTarget = false;
             var placeholderRect = placeholderText.rectTransform;
             placeholderRect.anchorMin = Vector2.zero;
             placeholderRect.anchorMax = Vector2.one;
             placeholderRect.offsetMin = new Vector2(10f, 4f);
             placeholderRect.offsetMax = new Vector2(-10f, -4f);
 
-            var input = go.GetComponent<InputField>();
+            var input = go.GetComponent<TMP_InputField>();
             input.targetGraphic = image;
+            input.textViewport = rect;
             input.textComponent = text;
             input.placeholder = placeholderText;
+            input.fontAsset = TMP_Settings.defaultFontAsset;
             input.contentType = contentType;
-            input.lineType = InputField.LineType.SingleLine;
+            input.lineType = TMP_InputField.LineType.SingleLine;
             return input;
         }
 
@@ -1005,6 +1094,7 @@ namespace BackyardLegends.Runtime
             EnsureFallbackImage(sceneRefs.SheetImage, ResolveSheetSprite());
             EnsureFallbackImage(sceneRefs.PreviewPanelImage, ResolveSoftPanelSprite());
             EnsureFallbackImage(sceneRefs.HeroCardImage, ResolveCardBackSprite());
+            // Online button/input sprites are authored in LobbyScene — do not override at runtime.
 
             EnsureFont(sceneRefs.TitleText);
             EnsureFont(sceneRefs.SubtitleText);
@@ -1012,7 +1102,13 @@ namespace BackyardLegends.Runtime
             EnsureFont(sceneRefs.RuleSummaryText);
             EnsureFont(sceneRefs.SelectionSummaryText);
             EnsureFont(sceneRefs.AccountStatusText);
+            EnsureFont(sceneRefs.OnlineStatusText);
             EnsureButtonFont(sceneRefs.StartMatchButton);
+            EnsureButtonFont(sceneRefs.HostTableButton);
+            EnsureButtonFont(sceneRefs.JoinTableButton);
+            EnsureButtonFont(sceneRefs.QuickMatchButton);
+            EnsureButtonFont(sceneRefs.CancelQueueButton);
+            EnsureButtonFont(sceneRefs.ImportInviteButton);
             EnsureButtonFont(sceneRefs.SignInGoogleButton);
             EnsureButtonFont(sceneRefs.SignInAppleButton);
             EnsureButtonFont(sceneRefs.EmailRegisterButton);
@@ -1035,6 +1131,11 @@ namespace BackyardLegends.Runtime
             buttonFeedback.Clear();
 
             ConfigureButtonFeedback(sceneRefs.StartMatchButton, true);
+            ConfigureButtonFeedback(sceneRefs.HostTableButton);
+            ConfigureButtonFeedback(sceneRefs.JoinTableButton);
+            ConfigureButtonFeedback(sceneRefs.QuickMatchButton);
+            ConfigureButtonFeedback(sceneRefs.CancelQueueButton);
+            ConfigureButtonFeedback(sceneRefs.ImportInviteButton);
             ConfigureButtonFeedback(sceneRefs.SignInGoogleButton);
             ConfigureButtonFeedback(sceneRefs.SignInAppleButton);
             ConfigureButtonFeedback(sceneRefs.EmailRegisterButton);
@@ -1137,6 +1238,19 @@ namespace BackyardLegends.Runtime
             }
         }
 
+        private void EnsureFont(TextMeshProUGUI label)
+        {
+            if (label == null)
+            {
+                return;
+            }
+
+            if (label.font == null)
+            {
+                label.font = TMP_Settings.defaultFontAsset;
+            }
+        }
+
         private void EnsureButtonFont(Button button)
         {
             if (button == null)
@@ -1211,7 +1325,7 @@ namespace BackyardLegends.Runtime
             modeSelectionMarkers[index].gameObject.SetActive(isSelected);
         }
 
-        private static Text GetButtonLabel(Button button)
+        private static TextMeshProUGUI GetButtonLabel(Button button)
         {
             if (button == null)
             {
@@ -1219,9 +1333,17 @@ namespace BackyardLegends.Runtime
             }
 
             var label = button.transform.Find("Label");
-            return label != null
-                ? label.GetComponent<Text>()
-                : button.GetComponentsInChildren<Text>(true).FirstOrDefault(text => text.name != "Selected Checkmark");
+            if (label != null)
+            {
+                var tmp = label.GetComponent<TextMeshProUGUI>();
+                if (tmp != null)
+                {
+                    return tmp;
+                }
+            }
+
+            return button.GetComponentsInChildren<TextMeshProUGUI>(true)
+                .FirstOrDefault(text => text.name != "Selected Checkmark");
         }
 
         private void CacheConfiguredButtons(Button[] source, List<Button> destination, bool transparentWhenInactive)
@@ -1238,7 +1360,7 @@ namespace BackyardLegends.Runtime
             }
         }
 
-        private void PrepareButtonForRuntime(Button button, bool transparentWhenInactive)
+        private void PrepareButtonForRuntime(Button button, bool transparentWhenInactive, bool forceActive = true)
         {
             if (button == null)
             {
@@ -1246,7 +1368,11 @@ namespace BackyardLegends.Runtime
             }
 
             var wasInactive = !button.gameObject.activeSelf;
-            button.gameObject.SetActive(true);
+            if (forceActive)
+            {
+                button.gameObject.SetActive(true);
+            }
+
             button.interactable = true;
 
             var image = button.GetComponent<Image>();
@@ -1310,7 +1436,12 @@ namespace BackyardLegends.Runtime
                 return;
             }
 
-            button.gameObject.SetActive(true);
+            // Keep Cancel Queue (and any nested buttons under it) inactive until Quick Match starts.
+            if (!IsCancelQueueFamily(button))
+            {
+                button.gameObject.SetActive(true);
+            }
+
             button.interactable = true;
 
             var image = button.GetComponent<Image>();
@@ -1329,6 +1460,23 @@ namespace BackyardLegends.Runtime
                 canvasGroup.interactable = true;
                 canvasGroup.blocksRaycasts = true;
             }
+        }
+
+        private bool IsCancelQueueFamily(Button button)
+        {
+            if (button == null)
+            {
+                return false;
+            }
+
+            var cancel = sceneRefs != null ? sceneRefs.CancelQueueButton : null;
+            if (cancel == null)
+            {
+                return button.name == "Cancel Queue";
+            }
+
+            return button == cancel
+                   || button.transform.IsChildOf(cancel.transform);
         }
 
         private static void MakeTransparentHitArea(Button button)

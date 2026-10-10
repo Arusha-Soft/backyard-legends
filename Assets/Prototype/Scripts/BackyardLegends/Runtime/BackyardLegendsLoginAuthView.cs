@@ -1,3 +1,4 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -9,12 +10,12 @@ namespace BackyardLegends.Runtime
     public sealed class BackyardLegendsLoginAuthView : MonoBehaviour
     {
         [Header("Status")]
-        public Text AccountStatusText;
-        public Text TitleText;
+        public TextMeshProUGUI AccountStatusText;
+        public TextMeshProUGUI TitleText;
 
         [Header("Email / Password")]
-        public InputField EmailInput;
-        public InputField PasswordInput;
+        public TMP_InputField EmailInput;
+        public TMP_InputField PasswordInput;
         public Button EmailRegisterButton;
         public Button EmailSignInButton;
 

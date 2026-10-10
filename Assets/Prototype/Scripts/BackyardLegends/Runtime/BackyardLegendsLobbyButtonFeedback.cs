@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using BackyardLegends.Core;
+using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -18,10 +19,10 @@ namespace BackyardLegends.Runtime
     {
         private Button button;
         private Image image;
-        private Text label;
+        private TextMeshProUGUI label;
         private CanvasGroup selectedIndicatorGroup;
         private Image selectedFrameImage;
-        private Text selectedCheckmarkText;
+        private TextMeshProUGUI selectedCheckmarkText;
         private ThemeConfig theme;
         private Action hoverCallback;
         private Action selectCallback;
@@ -29,7 +30,7 @@ namespace BackyardLegends.Runtime
         private Color baseLabelColor;
         private Color selectedImageColor;
         private Color selectedLabelColor;
-        private FontStyle baseLabelStyle;
+        private FontStyles baseLabelStyle;
         private bool initialized;
         private bool selected;
         private bool hovered;
@@ -46,7 +47,7 @@ namespace BackyardLegends.Runtime
             {
                 baseImageColor = image != null ? image.color : Color.white;
                 baseLabelColor = label != null ? label.color : Color.black;
-                baseLabelStyle = label != null ? label.fontStyle : FontStyle.Bold;
+                baseLabelStyle = label != null ? label.fontStyle : FontStyles.Bold;
                 initialized = true;
             }
 
@@ -147,7 +148,7 @@ namespace BackyardLegends.Runtime
             if (label != null)
             {
                 label.color = selected ? selectedLabelColor : baseLabelColor;
-                label.fontStyle = selected || hovered ? FontStyle.Bold : baseLabelStyle;
+                label.fontStyle = selected || hovered ? FontStyles.Bold : baseLabelStyle;
             }
 
             if (selectedIndicatorGroup != null)
@@ -244,22 +245,22 @@ namespace BackyardLegends.Runtime
 
             selectedCheckmarkText = selectedCheckmarkText != null
                 ? selectedCheckmarkText
-                : transform.Find("Selected Checkmark")?.GetComponent<Text>();
+                : transform.Find("Selected Checkmark")?.GetComponent<TextMeshProUGUI>();
             if (selectedCheckmarkText == null)
             {
-                var checkmarkObject = new GameObject("Selected Checkmark", typeof(RectTransform), typeof(Text));
+                var checkmarkObject = new GameObject("Selected Checkmark", typeof(RectTransform), typeof(TextMeshProUGUI));
                 checkmarkObject.transform.SetParent(transform, false);
-                selectedCheckmarkText = checkmarkObject.GetComponent<Text>();
+                selectedCheckmarkText = checkmarkObject.GetComponent<TextMeshProUGUI>();
             }
 
             selectedCheckmarkText.raycastTarget = false;
             selectedCheckmarkText.text = "\u2713";
-            selectedCheckmarkText.alignment = TextAnchor.MiddleCenter;
-            selectedCheckmarkText.fontStyle = FontStyle.Bold;
+            selectedCheckmarkText.alignment = TextAlignmentOptions.Center;
+            selectedCheckmarkText.fontStyle = FontStyles.Bold;
             selectedCheckmarkText.fontSize = 24;
             selectedCheckmarkText.font = label != null && label.font != null
                 ? label.font
-                : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                : TMP_Settings.defaultFontAsset;
             selectedCheckmarkText.color = theme != null ? theme.backgroundColor : new Color(0.05f, 0.05f, 0.05f, 1f);
             selectedCheckmarkText.transform.SetAsLastSibling();
             SetAnchors(selectedCheckmarkText.rectTransform, new Vector2(0.76f, 0.54f), new Vector2(0.98f, 0.96f));
@@ -267,20 +268,8 @@ namespace BackyardLegends.Runtime
 
         private void EnsureButtonSprite()
         {
-            if (image == null || image.sprite != null)
-            {
-                return;
-            }
-
-            image.sprite = theme != null && theme.buttonSprite != null
-                ? theme.buttonSprite
-                : ThemeSpriteFactory.CreateRoundedRectSprite(
-                    baseImageColor,
-                    theme != null ? theme.panelStroke : new Color(0.68f, 0.61f, 0.52f, 1f),
-                    256,
-                    96,
-                    22);
-            image.type = Image.Type.Sliced;
+            // Button sprites must be authored on the scene/prefab Image.
+            // Do not invent or swap sprites at runtime.
         }
 
         private Sprite ResolveSelectedFrameSprite()
@@ -293,12 +282,20 @@ namespace BackyardLegends.Runtime
                 20);
         }
 
-        private Text ResolveLabel()
+        private TextMeshProUGUI ResolveLabel()
         {
             var labelTransform = transform.Find("Label");
-            return labelTransform != null
-                ? labelTransform.GetComponent<Text>()
-                : GetComponentsInChildren<Text>(true).FirstOrDefault(text => text.name != "Selected Checkmark");
+            if (labelTransform != null)
+            {
+                var tmp = labelTransform.GetComponent<TextMeshProUGUI>();
+                if (tmp != null)
+                {
+                    return tmp;
+                }
+            }
+
+            return GetComponentsInChildren<TextMeshProUGUI>(true)
+                .FirstOrDefault(text => text.name != "Selected Checkmark");
         }
 
         private Color ResolveSelectedImageColor()

@@ -25736,6 +25736,7 @@ MonoBehaviour:
   tableSlamFxPrefab: {fileID: 187952, guid: c05e92eaee7a00844867e5edc8e0dde1, type: 3}
   spadesBrokenSmokeFxPrefab: {fileID: 125726, guid: 28237332098b6a54a92d770e23648a92, type: 3}
   spadesBrokenLightningFxPrefab: {fileID: 123722, guid: 0e953c794d5f3f74da4bc1bc07249ea6, type: 3}
+  multiplayerLobbyHudPrefab: {fileID: 415418430411751599, guid: 049cb8a576cdd404dada253813a30dfe, type: 3}
 --- !u!114 &1418046895
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -33845,6 +33846,7 @@ MonoBehaviour:
   tableSlamFxPrefab: {fileID: 187952, guid: c05e92eaee7a00844867e5edc8e0dde1, type: 3}
   spadesBrokenSmokeFxPrefab: {fileID: 125726, guid: 28237332098b6a54a92d770e23648a92, type: 3}
   spadesBrokenLightningFxPrefab: {fileID: 123722, guid: 0e953c794d5f3f74da4bc1bc07249ea6, type: 3}
+  multiplayerLobbyHudPrefab: {fileID: 415418430411751599, guid: 049cb8a576cdd404dada253813a30dfe, type: 3}
 --- !u!225 &1675496612
 CanvasGroup:
   m_ObjectHideFlags: 0

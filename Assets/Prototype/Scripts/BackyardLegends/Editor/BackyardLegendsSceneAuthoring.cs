@@ -456,6 +456,17 @@ namespace BackyardLegends.Editor
             var serialized = new SerializedObject(bootstrap);
             serialized.FindProperty("sceneRefs").objectReferenceValue = refs;
             serialized.FindProperty("themeOverride").objectReferenceValue = theme;
+            var lobbyHudProperty = serialized.FindProperty("multiplayerLobbyHudPrefab");
+            if (lobbyHudProperty != null)
+            {
+                var lobbyHud = AssetDatabase.LoadAssetAtPath<MultiplayerLobbyHud>(
+                    BackyardLegendsMultiplayerLobbyHudAuthoring.PrefabPath);
+                if (lobbyHud != null)
+                {
+                    lobbyHudProperty.objectReferenceValue = lobbyHud;
+                }
+            }
+
             serialized.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(bootstrap);
         }
